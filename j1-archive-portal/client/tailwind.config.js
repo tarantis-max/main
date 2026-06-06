@@ -4,7 +4,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        brand: { DEFAULT: '#002147', light: '#003366', gold: '#B5A268' },
+        brand: { DEFAULT: '#024D36', light: '#035940', gold: '#FBBF16' },
       },
     },
   },
