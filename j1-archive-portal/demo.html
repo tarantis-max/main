@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>J1 Archive Portal — UI Demo</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: { colors: { brand: { DEFAULT:'#002147', light:'#003366', gold:'#B5A268' } } } }
+  };
+</script>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; }
+  .btn-primary { display:inline-flex; align-items:center; padding:0.5rem 1rem; background:#002147; color:#fff; font-size:.875rem; font-weight:500; border-radius:.25rem; cursor:pointer; border:none; transition:background .15s; }
+  .btn-primary:hover { background:#003366; }
+  .input { display:block; width:100%; border:1px solid #d1d5db; border-radius:.25rem; padding:.5rem .75rem; font-size:.875rem; outline:none; }
+  .input:focus { border-color:#002147; box-shadow:0 0 0 1px #002147; }
+  .card { background:#fff; border-radius:.5rem; border:1px solid #e5e7eb; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .th { padding:.5rem .75rem; text-align:left; font-size:.7rem; font-weight:600; color:#4b5563; text-transform:uppercase; letter-spacing:.05em; background:#f9fafb; }
+  .td { padding:.5rem .75rem; font-size:.875rem; color:#1f2937; border-top:1px solid #f3f4f6; }
+  .tab-active { border-bottom:2px solid #002147; color:#002147; }
+  .tab-inactive { border-bottom:2px solid transparent; color:#6b7280; }
+  .tab-inactive:hover { color:#374151; border-color:#d1d5db; }
+  .screen { display:none; }
+  .screen.active { display:block; }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- ── DEMO NAV ───────────────────────────────────────────────── -->
+<div class="fixed top-0 left-0 right-0 z-50 bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center gap-3 text-xs text-amber-800">
+  <span class="font-semibold">UI Demo — click a screen:</span>
+  <button onclick="show('login')"   class="px-2 py-1 rounded bg-amber-200 hover:bg-amber-300 font-medium">Login</button>
+  <button onclick="show('search')"  class="px-2 py-1 rounded bg-amber-200 hover:bg-amber-300 font-medium">Student Search</button>
+  <button onclick="show('detail')"  class="px-2 py-1 rounded bg-amber-200 hover:bg-amber-300 font-medium">Student Detail</button>
+  <button onclick="show('query')"   class="px-2 py-1 rounded bg-amber-200 hover:bg-amber-300 font-medium">SQL Query (IT)</button>
+</div>
+<div class="pt-10">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN 1 — LOGIN
+════════════════════════════════════════════════════════════════ -->
+<div id="s-login" class="screen active min-h-screen flex flex-col items-center justify-center bg-brand px-4">
+  <div class="w-full max-w-sm">
+    <div class="text-center mb-8">
+      <div class="text-4xl mb-3">🎓</div>
+      <h1 class="text-2xl font-bold text-brand-gold">Methodist University</h1>
+      <p class="text-white/70 text-sm mt-1">J1 Archive Portal</p>
+    </div>
+    <div class="card p-6 space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+        <input class="input" type="text" value="jgreene" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+        <input class="input" type="password" value="••••••••" />
+      </div>
+      <button onclick="show('search')" class="btn-primary w-full justify-center">Sign in</button>
+    </div>
+    <p class="text-center text-xs text-white/40 mt-6">Read-only archive — Jenzabar One EX data</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SHARED NAV (used by screens 2-4)
+════════════════════════════════════════════════════════════════ -->
+<template id="nav-tpl">
+  <nav class="bg-brand text-white shadow-md">
+    <div class="max-w-7xl mx-auto px-4 flex items-center justify-between h-14">
+      <div class="flex items-center gap-6">
+        <span class="font-bold text-brand-gold tracking-wide text-sm cursor-pointer" onclick="show('search')">MU J1 Archive</span>
+        <span class="text-sm text-white/80 hover:text-white cursor-pointer" onclick="show('search')">Student Search</span>
+        <span class="text-sm text-white/80 hover:text-white cursor-pointer" onclick="show('query')">SQL Query</span>
+      </div>
+      <div class="flex items-center gap-3 text-sm">
+        <span class="text-white/70">Jane Greene</span>
+        <span class="px-2 py-0.5 rounded text-xs font-medium bg-white/10 uppercase tracking-wide">it</span>
+        <button class="text-white/70 hover:text-white ml-2" onclick="show('login')">Sign out</button>
+      </div>
+    </div>
+  </nav>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN 2 — STUDENT SEARCH
+════════════════════════════════════════════════════════════════ -->
+<div id="s-search" class="screen">
+  <div id="nav-search"></div>
+  <div class="max-w-4xl mx-auto px-4 py-8">
+    <h1 class="text-xl font-semibold text-gray-900 mb-1">Student Search</h1>
+    <p class="text-sm text-gray-500 mb-6">Search by student ID (e.g. P000012345) or by last name, or "First Last"</p>
+    <div class="flex gap-2 mb-6">
+      <input class="input flex-1" type="text" value="Smith" />
+      <button class="btn-primary">Search</button>
+    </div>
+    <div class="card overflow-hidden">
+      <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 text-xs text-gray-500">
+        8 results (max 50 shown — narrow your search for more)
+      </div>
+      <table class="min-w-full">
+        <thead>
+          <tr>
+            <th class="th">ID</th><th class="th">Last Name</th><th class="th">First Name</th>
+            <th class="th">Middle</th><th class="th">Date of Birth</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="hover:bg-blue-50 cursor-pointer" onclick="show('detail')">
+            <td class="td font-mono"><span class="text-brand font-medium">P000018423</span></td>
+            <td class="td">Smith</td><td class="td">James</td><td class="td text-gray-400">R.</td>
+            <td class="td">03/14/1998</td>
+          </tr>
+          <tr class="hover:bg-blue-50 cursor-pointer">
+            <td class="td font-mono"><span class="text-brand font-medium">P000021104</span></td>
+            <td class="td">Smith</td><td class="td">Angela</td><td class="td text-gray-400">M.</td>
+            <td class="td">07/22/1995</td>
+          </tr>
+          <tr class="hover:bg-blue-50 cursor-pointer">
+            <td class="td font-mono"><span class="text-brand font-medium">P000031782</span></td>
+            <td class="td">Smith</td><td class="td">Carlos</td><td class="td text-gray-400">—</td>
+            <td class="td">11/05/2001</td>
+          </tr>
+          <tr class="hover:bg-blue-50 cursor-pointer">
+            <td class="td font-mono"><span class="text-brand font-medium">P000033901</span></td>
+            <td class="td">Smithfield</td><td class="td">Patricia</td><td class="td text-gray-400">L.</td>
+            <td class="td">02/28/1990</td>
+          </tr>
+          <tr class="hover:bg-blue-50 cursor-pointer">
+            <td class="td font-mono"><span class="text-brand font-medium">P000041256</span></td>
+            <td class="td">Smith-Jones</td><td class="td">Devon</td><td class="td text-gray-400">—</td>
+            <td class="td">08/16/2000</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN 3 — STUDENT DETAIL
+════════════════════════════════════════════════════════════════ -->
+<div id="s-detail" class="screen">
+  <div id="nav-detail"></div>
+  <div class="max-w-6xl mx-auto px-4 py-6">
+    <div class="mb-1">
+      <span class="text-xs text-brand hover:underline cursor-pointer" onclick="show('search')">← Back to search</span>
+    </div>
+    <div class="mb-5 mt-3">
+      <h1 class="text-2xl font-bold text-gray-900">Smith, James R.</h1>
+      <p class="text-sm text-gray-500 font-mono mt-0.5">P000018423</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="border-b border-gray-200 mb-6">
+      <nav class="-mb-px flex gap-6" id="detail-tabs">
+        <button onclick="showTab(0)" class="py-2 px-0.5 border-b-2 text-sm font-medium tab-active" data-tab="0">Profile</button>
+        <button onclick="showTab(1)" class="py-2 px-0.5 border-b-2 text-sm font-medium tab-inactive" data-tab="1">Academic History</button>
+        <button onclick="showTab(2)" class="py-2 px-0.5 border-b-2 text-sm font-medium tab-inactive" data-tab="2">Transcript</button>
+        <button onclick="showTab(3)" class="py-2 px-0.5 border-b-2 text-sm font-medium tab-inactive" data-tab="3">Degrees</button>
+      </nav>
+    </div>
+
+    <!-- TAB 0: PROFILE -->
+    <div id="tab-0" class="tab-panel">
+      <div class="card p-5 max-w-2xl">
+        <dl>
+          <div class="flex py-2.5 border-b border-gray-100"><dt class="w-48 text-sm text-gray-500">Student ID</dt><dd class="text-sm text-gray-900 font-mono">P000018423</dd></div>
+          <div class="flex py-2.5 border-b border-gray-100"><dt class="w-48 text-sm text-gray-500">Last Name</dt><dd class="text-sm text-gray-900">Smith</dd></div>
+          <div class="flex py-2.5 border-b border-gray-100"><dt class="w-48 text-sm text-gray-500">First Name</dt><dd class="text-sm text-gray-900">James</dd></div>
+          <div class="flex py-2.5 border-b border-gray-100"><dt class="w-48 text-sm text-gray-500">Middle Name</dt><dd class="text-sm text-gray-900">Robert</dd></div>
+          <div class="flex py-2.5 border-b border-gray-100"><dt class="w-48 text-sm text-gray-500">Preferred Name</dt><dd class="text-sm text-gray-400">—</dd></div>
+          <div class="flex py-2.5 border-b border-gray-100"><dt class="w-48 text-sm text-gray-500">Date of Birth</dt><dd class="text-sm text-gray-900">March 14, 1998</dd></div>
+          <div class="flex py-2.5 border-b border-gray-100"><dt class="w-48 text-sm text-gray-500">Gender</dt><dd class="text-sm text-gray-900">Male</dd></div>
+          <div class="flex py-2.5 border-b border-gray-100"><dt class="w-48 text-sm text-gray-500">Ethnicity</dt><dd class="text-sm text-gray-900">WH</dd></div>
+          <div class="flex py-2.5 border-b border-gray-100"><dt class="w-48 text-sm text-gray-500">Citizenship</dt><dd class="text-sm text-gray-900">US Citizen</dd></div>
+          <div class="flex py-2.5 border-b border-gray-100"><dt class="w-48 text-sm text-gray-500">Marital Status</dt><dd class="text-sm text-gray-400">—</dd></div>
+          <div class="flex py-2.5 border-b border-gray-100"><dt class="w-48 text-sm text-gray-500">Veteran Status</dt><dd class="text-sm text-gray-400">—</dd></div>
+          <div class="flex py-2.5"><dt class="w-48 text-sm text-gray-500">Disability</dt><dd class="text-sm text-gray-400">—</dd></div>
+        </dl>
+      </div>
+    </div>
+
+    <!-- TAB 1: ACADEMIC HISTORY -->
+    <div id="tab-1" class="tab-panel hidden">
+      <p class="text-xs text-gray-400 mb-3">8 records</p>
+      <div class="overflow-x-auto rounded border border-gray-200">
+        <table class="min-w-full text-sm">
+          <thead><tr>
+            <th class="th">Year</th><th class="th">Term</th><th class="th">Program</th>
+            <th class="th">Degree</th><th class="th">Curriculum</th><th class="th">Division</th>
+            <th class="th">Flag</th><th class="th">GPA</th><th class="th">Credits Earned</th>
+          </tr></thead>
+          <tbody>
+            <tr class="hover:bg-gray-50"><td class="td">2022</td><td class="td">FA</td><td class="td">BSBA</td><td class="td">BS</td><td class="td">BUSN</td><td class="td">UG</td><td class="td">M</td><td class="td">3.412</td><td class="td">122</td></tr>
+            <tr class="hover:bg-gray-50"><td class="td">2022</td><td class="td">SP</td><td class="td">BSBA</td><td class="td">BS</td><td class="td">BUSN</td><td class="td">UG</td><td class="td">M</td><td class="td">3.389</td><td class="td">107</td></tr>
+            <tr class="hover:bg-gray-50"><td class="td">2021</td><td class="td">FA</td><td class="td">BSBA</td><td class="td">BS</td><td class="td">BUSN</td><td class="td">UG</td><td class="td">M</td><td class="td">3.401</td><td class="td">92</td></tr>
+            <tr class="hover:bg-gray-50"><td class="td">2021</td><td class="td">SP</td><td class="td">BSBA</td><td class="td">BS</td><td class="td">BUSN</td><td class="td">UG</td><td class="td">M</td><td class="td">3.250</td><td class="td">77</td></tr>
+            <tr class="hover:bg-gray-50"><td class="td">2020</td><td class="td">FA</td><td class="td">BSBA</td><td class="td">BS</td><td class="td">BUSN</td><td class="td">UG</td><td class="td">M</td><td class="td">3.100</td><td class="td">62</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 2: TRANSCRIPT -->
+    <div id="tab-2" class="tab-panel hidden space-y-6">
+      <!-- Fall 2022 -->
+      <div class="card overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-2.5 bg-brand text-white text-sm">
+          <span class="font-semibold">Fall 2022</span>
+          <span class="text-white/70 text-xs">15.0 credits &nbsp; Term GPA: 3.600</span>
+        </div>
+        <table class="min-w-full">
+          <thead><tr>
+            <th class="th">Course</th><th class="th">Title</th><th class="th text-right">Credits</th>
+            <th class="th text-center">Grade</th><th class="th text-right">Pts</th><th class="th">Status</th><th class="th">Transfer</th>
+          </tr></thead>
+          <tbody>
+            <tr class="hover:bg-gray-50"><td class="td font-mono text-xs">ACCT 401</td><td class="td">Advanced Accounting</td><td class="td text-right">3</td><td class="td text-center font-semibold text-green-700">A</td><td class="td text-right text-gray-500">12</td><td class="td text-xs text-gray-400">H</td><td class="td text-xs text-gray-400"></td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono text-xs">BUSN 450</td><td class="td">Strategic Management</td><td class="td text-right">3</td><td class="td text-center font-semibold text-green-700">A-</td><td class="td text-right text-gray-500">11.1</td><td class="td text-xs text-gray-400">H</td><td class="td text-xs text-gray-400"></td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono text-xs">ECON 302</td><td class="td">Macroeconomics</td><td class="td text-right">3</td><td class="td text-center font-semibold">B+</td><td class="td text-right text-gray-500">9.9</td><td class="td text-xs text-gray-400">H</td><td class="td text-xs text-gray-400"></td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono text-xs">MGMT 410</td><td class="td">Organizational Behavior</td><td class="td text-right">3</td><td class="td text-center font-semibold text-green-700">A</td><td class="td text-right text-gray-500">12</td><td class="td text-xs text-gray-400">H</td><td class="td text-xs text-gray-400"></td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono text-xs">MKTG 315</td><td class="td">Consumer Behavior</td><td class="td text-right">3</td><td class="td text-center font-semibold">B+</td><td class="td text-right text-gray-500">9.9</td><td class="td text-xs text-gray-400">H</td><td class="td text-xs text-gray-400"></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- Spring 2022 -->
+      <div class="card overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-2.5 bg-brand text-white text-sm">
+          <span class="font-semibold">Spring 2022</span>
+          <span class="text-white/70 text-xs">15.0 credits &nbsp; Term GPA: 3.267</span>
+        </div>
+        <table class="min-w-full">
+          <thead><tr>
+            <th class="th">Course</th><th class="th">Title</th><th class="th text-right">Credits</th>
+            <th class="th text-center">Grade</th><th class="th text-right">Pts</th><th class="th">Status</th><th class="th">Transfer</th>
+          </tr></thead>
+          <tbody>
+            <tr class="hover:bg-gray-50"><td class="td font-mono text-xs">ACCT 302</td><td class="td">Cost Accounting</td><td class="td text-right">3</td><td class="td text-center font-semibold">B</td><td class="td text-right text-gray-500">9</td><td class="td text-xs text-gray-400">H</td><td class="td text-xs text-gray-400"></td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono text-xs">BUSN 330</td><td class="td">Business Law II</td><td class="td text-right">3</td><td class="td text-center font-semibold text-green-700">A-</td><td class="td text-right text-gray-500">11.1</td><td class="td text-xs text-gray-400">H</td><td class="td text-xs text-gray-400"></td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono text-xs">ENGL 201</td><td class="td">Technical Writing</td><td class="td text-right">3</td><td class="td text-center font-semibold">B+</td><td class="td text-right text-gray-500">9.9</td><td class="td text-xs text-gray-400">H</td><td class="td text-xs text-gray-400"></td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono text-xs">HIST 101</td><td class="td">Western Civilization I</td><td class="td text-right">3</td><td class="td text-center font-semibold">B</td><td class="td text-right text-gray-500">9</td><td class="td text-xs text-gray-400">H</td><td class="td text-xs text-gray-400"></td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono text-xs">MATH 201</td><td class="td">Calculus I</td><td class="td text-right">3</td><td class="td text-center font-semibold">C+</td><td class="td text-right text-gray-500">6.9</td><td class="td text-xs text-gray-400">H</td><td class="td text-xs text-gray-400"></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- Transfer credit block -->
+      <div class="card overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-2.5 bg-gray-600 text-white text-sm">
+          <span class="font-semibold">Transfer Credit</span>
+          <span class="text-white/70 text-xs">12.0 credits</span>
+        </div>
+        <table class="min-w-full">
+          <thead><tr>
+            <th class="th">Course</th><th class="th">Title</th><th class="th text-right">Credits</th>
+            <th class="th text-center">Grade</th><th class="th text-right">Pts</th><th class="th">Status</th><th class="th">Transfer</th>
+          </tr></thead>
+          <tbody>
+            <tr class="hover:bg-gray-50"><td class="td font-mono text-xs">ENGL 101</td><td class="td">English Composition</td><td class="td text-right">3</td><td class="td text-center font-semibold">TR</td><td class="td text-right text-gray-500">—</td><td class="td text-xs text-gray-400">T</td><td class="td text-xs text-gray-400">Transfer</td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono text-xs">MATH 101</td><td class="td">College Algebra</td><td class="td text-right">3</td><td class="td text-center font-semibold">TR</td><td class="td text-right text-gray-500">—</td><td class="td text-xs text-gray-400">T</td><td class="td text-xs text-gray-400">Transfer</td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono text-xs">PSYC 101</td><td class="td">Intro to Psychology</td><td class="td text-right">3</td><td class="td text-center font-semibold">TR</td><td class="td text-right text-gray-500">—</td><td class="td text-xs text-gray-400">T</td><td class="td text-xs text-gray-400">Transfer</td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono text-xs">SOCI 101</td><td class="td">Intro to Sociology</td><td class="td text-right">3</td><td class="td text-center font-semibold">TR</td><td class="td text-right text-gray-500">—</td><td class="td text-xs text-gray-400">T</td><td class="td text-xs text-gray-400">Transfer</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 3: DEGREES -->
+    <div id="tab-3" class="tab-panel hidden space-y-4">
+      <div class="card p-5">
+        <div class="flex items-start justify-between">
+          <div>
+            <h3 class="font-semibold text-gray-900 text-base">BS — Bachelor of Science</h3>
+            <p class="text-sm text-gray-500 mt-0.5">BUSN · Business Administration</p>
+          </div>
+          <span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">Conferred</span>
+        </div>
+        <dl class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div><dt class="text-xs text-gray-400">Conferred</dt><dd class="text-sm text-gray-800 mt-0.5">December 15, 2022</dd></div>
+          <div><dt class="text-xs text-gray-400">Term</dt><dd class="text-sm text-gray-800 mt-0.5">FA 2022</dd></div>
+          <div><dt class="text-xs text-gray-400">Credits Earned</dt><dd class="text-sm text-gray-800 mt-0.5">122</dd></div>
+          <div><dt class="text-xs text-gray-400">GPA</dt><dd class="text-sm text-gray-800 mt-0.5">3.412</dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN 4 — AD-HOC SQL QUERY (IT ONLY)
+════════════════════════════════════════════════════════════════ -->
+<div id="s-query" class="screen">
+  <div id="nav-query"></div>
+  <div class="max-w-7xl mx-auto px-4 py-6">
+    <h1 class="text-xl font-semibold text-gray-900 mb-1">SQL Query</h1>
+    <p class="text-sm text-gray-500 mb-4">SELECT-only — database is read-only. Results capped at 500 rows.</p>
+
+    <div class="card p-4 mb-4">
+      <textarea
+        class="w-full font-mono text-sm border border-gray-200 rounded p-3 h-36 resize-y focus:outline-none focus:ring-1 focus:ring-brand bg-gray-50"
+        spellcheck="false"
+      >SELECT TOP 20
+    p.PEOPLE_CODE_ID,
+    RTRIM(p.FIRST_NAME) + ' ' + RTRIM(p.LAST_NAME) AS full_name,
+    a.ACADEMIC_YEAR,
+    RTRIM(a.DEGREE)  AS degree,
+    a.GPA
+FROM PEOPLE p
+JOIN ACADEMIC a ON a.PEOPLE_CODE_ID = p.PEOPLE_CODE_ID
+WHERE a.DEGREE_STATUS = 'C'
+ORDER BY a.COMMENCEMENT_DATE DESC</textarea>
+      <div class="flex items-center justify-between mt-3">
+        <p class="text-xs text-gray-400">Query runs against the J1_Archive database as a read-only user.</p>
+        <button class="btn-primary" onclick="document.getElementById('qresult').classList.remove('hidden')">Run Query</button>
+      </div>
+    </div>
+
+    <div id="qresult" class="hidden">
+      <div class="flex items-center gap-3 mb-2 text-xs text-gray-500">
+        <span>20 rows</span>
+        <span>148ms</span>
+      </div>
+      <div class="overflow-x-auto rounded border border-gray-200">
+        <table class="min-w-full text-sm">
+          <thead><tr>
+            <th class="th">PEOPLE_CODE_ID</th><th class="th">full_name</th>
+            <th class="th">ACADEMIC_YEAR</th><th class="th">degree</th><th class="th">GPA</th>
+          </tr></thead>
+          <tbody>
+            <tr class="hover:bg-gray-50"><td class="td font-mono">P000018423</td><td class="td">James Smith</td><td class="td">2022</td><td class="td">BS</td><td class="td">3.412</td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono">P000021104</td><td class="td">Angela Smith</td><td class="td">2022</td><td class="td">BA</td><td class="td">3.750</td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono">P000025601</td><td class="td">Marcus Johnson</td><td class="td">2022</td><td class="td">BS</td><td class="td">3.120</td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono">P000027834</td><td class="td">Priya Patel</td><td class="td">2021</td><td class="td">BSN</td><td class="td">3.890</td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono">P000029100</td><td class="td">Thomas Williams</td><td class="td">2021</td><td class="td">BS</td><td class="td">2.980</td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono">P000031002</td><td class="td">Sarah Martinez</td><td class="td">2021</td><td class="td">BA</td><td class="td">3.667</td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono">P000033290</td><td class="td">Kevin Brown</td><td class="td">2020</td><td class="td">BBA</td><td class="td">3.210</td></tr>
+            <tr class="hover:bg-gray-50"><td class="td font-mono">P000035411</td><td class="td">Lisa Chen</td><td class="td">2020</td><td class="td">BSN</td><td class="td">4.000</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /pt-10 -->
+
+<script>
+// Inject the nav into each screen
+document.querySelectorAll('[id^="nav-"]').forEach(el => {
+  const tpl = document.getElementById('nav-tpl');
+  el.innerHTML = tpl.innerHTML;
+});
+
+function show(screen) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('s-' + screen).classList.add('active');
+}
+
+function showTab(idx) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+  document.getElementById('tab-' + idx).classList.remove('hidden');
+  document.querySelectorAll('[data-tab]').forEach(btn => {
+    btn.className = 'py-2 px-0.5 border-b-2 text-sm font-medium ' +
+      (parseInt(btn.dataset.tab) === idx ? 'tab-active' : 'tab-inactive');
+  });
+}
+</script>
+</body>
+</html>
