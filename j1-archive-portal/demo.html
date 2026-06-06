@@ -159,6 +159,7 @@
         <button onclick="showTab(1)" class="py-2 px-0.5 border-b-2 text-sm font-medium tab-inactive" data-tab="1">Academic History</button>
         <button onclick="showTab(2)" class="py-2 px-0.5 border-b-2 text-sm font-medium tab-inactive" data-tab="2">Transcript</button>
         <button onclick="showTab(3)" class="py-2 px-0.5 border-b-2 text-sm font-medium tab-inactive" data-tab="3">Degrees</button>
+        <button onclick="showTab(4)" class="py-2 px-0.5 border-b-2 text-sm font-medium tab-inactive" data-tab="4">Account</button>
       </nav>
     </div>
 
@@ -284,6 +285,68 @@
         </dl>
       </div>
     </div>
+
+    <!-- TAB 4: ACCOUNT -->
+    <div id="tab-4" class="tab-panel hidden">
+      <!-- Balance card -->
+      <div class="card p-5 mb-6 flex items-center justify-between border-red-200 bg-red-50">
+        <div>
+          <p class="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-0.5">Account Balance</p>
+          <p class="text-3xl font-bold text-red-700">$1,250.00</p>
+          <p class="text-xs text-gray-400 mt-1">As of Dec 15, 2022</p>
+        </div>
+        <div class="text-right text-xs">
+          <span class="text-red-600 font-medium">Amount Due</span>
+        </div>
+      </div>
+
+      <!-- Fall 2022 transactions -->
+      <div class="space-y-5">
+        <div class="card overflow-hidden">
+          <div class="flex items-center justify-between px-4 py-2.5 bg-gray-700 text-white text-sm">
+            <span class="font-semibold">Fall 2022</span>
+            <span class="text-red-300 text-xs font-medium">Term net: $3,250.00</span>
+          </div>
+          <table class="min-w-full">
+            <thead><tr>
+              <th class="th">Date</th><th class="th">Type</th><th class="th">Detail Code</th>
+              <th class="th">Description</th><th class="th text-right">Amount</th><th class="th">Ref #</th>
+            </tr></thead>
+            <tbody>
+              <tr class="hover:bg-gray-50"><td class="td">Aug 1, 2022</td><td class="td font-mono text-xs">CHARGE</td><td class="td text-xs text-gray-400">TUIT-UG</td><td class="td">Undergraduate Tuition</td><td class="td text-right font-medium text-red-600">$9,800.00</td><td class="td text-xs text-gray-400">INV-22FA-001</td></tr>
+              <tr class="hover:bg-gray-50"><td class="td">Aug 1, 2022</td><td class="td font-mono text-xs">CHARGE</td><td class="td text-xs text-gray-400">TECH-FEE</td><td class="td">Technology Fee</td><td class="td text-right font-medium text-red-600">$150.00</td><td class="td text-xs text-gray-400">INV-22FA-002</td></tr>
+              <tr class="hover:bg-gray-50"><td class="td">Aug 1, 2022</td><td class="td font-mono text-xs">CHARGE</td><td class="td text-xs text-gray-400">ACTV-FEE</td><td class="td">Student Activity Fee</td><td class="td text-right font-medium text-red-600">$75.00</td><td class="td text-xs text-gray-400">INV-22FA-003</td></tr>
+              <tr class="hover:bg-gray-50"><td class="td">Sep 1, 2022</td><td class="td font-mono text-xs">FINAID</td><td class="td text-xs text-gray-400">PELL</td><td class="td">Pell Grant Disbursement</td><td class="td text-right font-medium text-green-700">-$3,397.50</td><td class="td text-xs text-gray-400">FA-22FA-001</td></tr>
+              <tr class="hover:bg-gray-50"><td class="td">Sep 1, 2022</td><td class="td font-mono text-xs">FINAID</td><td class="td text-xs text-gray-400">INST-SCHOL</td><td class="td">Methodist University Merit Scholarship</td><td class="td text-right font-medium text-green-700">-$2,500.00</td><td class="td text-xs text-gray-400">FA-22FA-002</td></tr>
+              <tr class="hover:bg-gray-50"><td class="td">Sep 15, 2022</td><td class="td font-mono text-xs">PAYMENT</td><td class="td text-xs text-gray-400">CHECK</td><td class="td">Student Payment — Check</td><td class="td text-right font-medium text-green-700">-$877.50</td><td class="td text-xs text-gray-400">PMT-22FA-001</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Spring 2022 -->
+        <div class="card overflow-hidden">
+          <div class="flex items-center justify-between px-4 py-2.5 bg-gray-700 text-white text-sm">
+            <span class="font-semibold">Spring 2022</span>
+            <span class="text-green-300 text-xs font-medium">Term net: -$2,000.00</span>
+          </div>
+          <table class="min-w-full">
+            <thead><tr>
+              <th class="th">Date</th><th class="th">Type</th><th class="th">Detail Code</th>
+              <th class="th">Description</th><th class="th text-right">Amount</th><th class="th">Ref #</th>
+            </tr></thead>
+            <tbody>
+              <tr class="hover:bg-gray-50"><td class="td">Jan 3, 2022</td><td class="td font-mono text-xs">CHARGE</td><td class="td text-xs text-gray-400">TUIT-UG</td><td class="td">Undergraduate Tuition</td><td class="td text-right font-medium text-red-600">$9,800.00</td><td class="td text-xs text-gray-400">INV-22SP-001</td></tr>
+              <tr class="hover:bg-gray-50"><td class="td">Jan 3, 2022</td><td class="td font-mono text-xs">CHARGE</td><td class="td text-xs text-gray-400">TECH-FEE</td><td class="td">Technology Fee</td><td class="td text-right font-medium text-red-600">$150.00</td><td class="td text-xs text-gray-400">INV-22SP-002</td></tr>
+              <tr class="hover:bg-gray-50"><td class="td">Jan 15, 2022</td><td class="td font-mono text-xs">FINAID</td><td class="td text-xs text-gray-400">PELL</td><td class="td">Pell Grant Disbursement</td><td class="td text-right font-medium text-green-700">-$3,397.50</td><td class="td text-xs text-gray-400">FA-22SP-001</td></tr>
+              <tr class="hover:bg-gray-50"><td class="td">Jan 15, 2022</td><td class="td font-mono text-xs">FINAID</td><td class="td text-xs text-gray-400">INST-SCHOL</td><td class="td">Methodist University Merit Scholarship</td><td class="td text-right font-medium text-green-700">-$2,500.00</td><td class="td text-xs text-gray-400">FA-22SP-002</td></tr>
+              <tr class="hover:bg-gray-50"><td class="td">Jan 15, 2022</td><td class="td font-mono text-xs">FINAID</td><td class="td text-xs text-gray-400">SUB-LOAN</td><td class="td">Subsidized Stafford Loan</td><td class="td text-right font-medium text-green-700">-$1,750.00</td><td class="td text-xs text-gray-400">FA-22SP-003</td></tr>
+              <tr class="hover:bg-gray-50"><td class="td">Feb 1, 2022</td><td class="td font-mono text-xs">PAYMENT</td><td class="td text-xs text-gray-400">ONLINE</td><td class="td">Student Payment — Online Portal</td><td class="td text-right font-medium text-green-700">-$4,302.50</td><td class="td text-xs text-gray-400">PMT-22SP-001</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 

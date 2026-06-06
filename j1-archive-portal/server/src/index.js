@@ -9,6 +9,7 @@ const studentsRouter  = require('./routes/students');
 const academicRouter  = require('./routes/academic');
 const transcriptRouter = require('./routes/transcript');
 const degreesRouter  = require('./routes/degrees');
+const accountRouter  = require('./routes/account');
 const adhocRouter   = require('./routes/adhoc');
 
 const app = express();
@@ -25,6 +26,7 @@ app.use('/api/students', studentsRouter);
 app.use('/api/students', academicRouter);
 app.use('/api/students', transcriptRouter);
 app.use('/api/students', degreesRouter);
+app.use('/api/students', accountRouter);
 app.use('/api/adhoc',   adhocRouter);
 
 app.use((err, req, res, _next) => {

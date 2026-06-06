@@ -6,6 +6,7 @@ import ProfileTab from '../components/tabs/ProfileTab';
 import AcademicTab from '../components/tabs/AcademicTab';
 import TranscriptTab from '../components/tabs/TranscriptTab';
 import DegreesTab from '../components/tabs/DegreesTab';
+import AccountTab from '../components/tabs/AccountTab';
 import { useStudent } from '../hooks/useStudent';
 
 const TABS = [
@@ -13,6 +14,7 @@ const TABS = [
   { label: 'Academic History', Component: AcademicTab },
   { label: 'Transcript',       Component: TranscriptTab },
   { label: 'Degrees',          Component: DegreesTab },
+  { label: 'Account',          Component: AccountTab },
 ];
 
 export default function StudentDetail() {
