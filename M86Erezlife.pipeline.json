@@ -1,0 +1,128 @@
+{
+  "name": "M86-Erezlife",
+  "description": "Extracts enrolled MAIN-campus students and accepted housing-desiring applicants for the next upcoming Fall or Spring term and pushes residence_applicants.csv to eRezLife SFTP (sftp.us.erezlife.com:/studentlists/). Target term resolves dynamically.",
+  "parameters": [
+    {
+      "name": "sftpKey",
+      "type": "string",
+      "label": "eRezLife SFTP Private Key",
+      "required": true,
+      "multiline": true,
+      "sensitive": true,
+      "persistent": true,
+      "description": "OpenSSH RSA 2048 private key for sftp.us.erezlife.com authentication. Public counterpart is registered with eRezLife (sent to Kyra Gibson). Must include the header and footer verbiage."
+    },
+    {
+      "name": "sftpUsername",
+      "type": "string",
+      "label": "eRezLife SFTP Username",
+      "required": true,
+      "sensitive": true,
+      "description": "Production username assigned by eRezLife (TBD until they confirm). Use the *-testimport account for test runs."
+    },
+    {
+      "name": "sftpHost",
+      "type": "string",
+      "label": "eRezLife SFTP Host",
+      "default": "sftp.us.erezlife.com",
+      "required": true,
+      "description": "sftp.us.erezlife.com for US tenants."
+    },
+    {
+      "name": "fileName",
+      "type": "string",
+      "label": "File Name",
+      "default": "/studentlists/residence_applicants.csv",
+      "required": true,
+      "description": "Case-sensitive per spec. Must be /studentlists/residence_applicants.csv."
+    },
+    {
+      "name": "includeHeaders",
+      "type": "boolean",
+      "default": true,
+      "description": "eRezLife spec requires column titles matching field abbreviations. Must be true."
+    },
+    {
+      "name": "quoteStrings",
+      "type": "boolean",
+      "default": true,
+      "description": "Quote strings on CSV to handle commas in names and addresses safely."
+    },
+    {
+      "enum": [
+        {
+          "label": "Comma (,)",
+          "value": "comma"
+        },
+        {
+          "label": "Tab (\\t)",
+          "value": "tab"
+        },
+        {
+          "label": "Semi-colon (;)",
+          "value": "semicolon"
+        },
+        {
+          "label": "Pipe (|)",
+          "value": "pipe"
+        }
+      ],
+      "name": "delimiter",
+      "type": "string",
+      "default": "comma",
+      "required": true,
+      "description": "eRezLife spec requires CSV (comma-delimited)."
+    }
+  ],
+  "pipeline": [
+    "Extract Student Data",
+    "Construct delimited fields",
+    "Flatten payoad",
+    "Construct single array with linebreak",
+    "SFTP Put"
+  ],
+  "segments": {
+    "Extract Student Data": {
+      "class": "extractData",
+      "config": {
+        "selectQuery": "WITH\n  target_term AS (\n    SELECT\n      terms_id\n    FROM\n      dbo.ods_terms\n    WHERE\n      term_start_date > CURRENT_DATE\n      AND (\n        terms_id LIKE '%FA'\n        OR terms_id LIKE '%SP'\n      )\n    ORDER BY\n      term_start_date ASC\n    LIMIT\n      1\n  )\nSELECT\n  s.students_id AS student_id,\n  p.first_name,\n  p.last_name,\n  pe.person_email_addresses AS email,\n  s.students_id AS external_auth_id,\n  CASE p.gender\n    WHEN 'M' THEN 'M'\n    WHEN 'F' THEN 'F'\n    ELSE 'N'\n  END AS gender,\n  SUBSTRING(\n    (\n      SELECT\n        terms_id\n      FROM\n        target_term\n    )\n    FROM\n      5 FOR 2\n  ) || SUBSTRING(\n    (\n      SELECT\n        terms_id\n      FROM\n        target_term\n    )\n    FROM\n      1 FOR 4\n  ) AS admit_term,\n  TO_CHAR(p.birth_date, 'YYYY-MM-DD') AS birthdate\nFROM\n  dbo.ods_students s\n  JOIN dbo.ods_person p ON p.id = s.students_id\n  LEFT JOIN people_email pe ON pe.id = p.id and pe.pos = 1\nWHERE\n  s.stu_current_home_location = 'MAIN'\n  AND EXISTS (\n    SELECT\n      1\n    FROM\n      dbo.ods_student_programs sp\n    WHERE\n      sp.stpr_student = s.students_id\n      AND sp.stpr_current_status = 'A'\n  )\nUNION ALL\nSELECT\n  a.applicants_id AS student_id,\n  p.first_name,\n  p.last_name,\n  pe.person_email_addresses AS email,\n  a.applicants_id AS external_auth_id,\n  CASE p.gender\n    WHEN 'M' THEN 'M'\n    WHEN 'F' THEN 'F'\n    ELSE 'N'\n  END AS gender,\n  SUBSTRING(\n    ap.appl_start_term\n    FROM\n      5 FOR 2\n  ) || SUBSTRING(\n    ap.appl_start_term\n    FROM\n      1 FOR 4\n  ) AS admit_term,\n  TO_CHAR(p.birth_date, 'YYYY-MM-DD') AS birthdate\nFROM\n  dbo.applicants a\n  JOIN dbo.ods_applications ap ON ap.appl_applicant = a.applicants_id\n  JOIN dbo.ods_person p ON p.id = a.applicants_id\n  LEFT JOIN people_email pe ON pe.id = p.id and pos = 1\nWHERE\n  ap.appl_start_term = (\n    SELECT\n      terms_id\n    FROM\n      target_term\n  )\n  AND a.app_housing_desired_flag = 'Y'\n  AND ap.current_status_control = 'AC'",
+        "bulkLoadEnabled": true,
+        "ignoreErrors": false
+      }
+    },
+    "Construct delimited fields": {
+      "class": "JavaScriptTransform",
+      "config": {
+        "pushUndefined": true,
+        "stopOnError": false,
+        "draft": false,
+        "code": "function transform (message, context) {\n\n  var headers = Object.keys(message.payload);\n \n  var vals = Object.values(message.payload);\n  \nvals = vals.map(String);  // convert every value to String\nif (context.quoteStrings) {\n    headers = headers.map(v => v.replaceAll('\"', '\"\"')) \n                .map(v => `\"${v}\"`);  \n    vals = vals.map(v => v.replaceAll('\"', '\"\"')) \n                .map(v => `\"${v}\"`);  \n}\n// Delimiter selection\nswitch (context.delimiter) {\n  case \"tab\": \n    vals = vals.join(\"\\t\"); \n     context.headers = headers.join(\"\\t\");\n    break;\n  case \"comma\":\n     vals = vals.join(\",\");\n      context.headers = headers.join(\",\");\n     break;\n  case \"semicolon\":\n      vals = vals.join(\";\");\n      context.headers = headers.join(\";\");\n      break;\n  case \"pipe\":\n      vals = vals.join(\"|\");\n      context.headers = headers.join(\"|\");\n      break;\n}// delimiter-separated\nmessage.payload = vals;\nreturn message\n  \n}\n"
+      }
+    },
+    "Flatten payoad": {
+      "class": "reducer",
+      "config": {
+        "accumulator": "payload"
+      }
+    },
+    "Construct single array with linebreak": {
+      "class": "JavaScriptTransform",
+      "config": {
+        "pushUndefined": true,
+        "stopOnError": false,
+        "draft": false,
+        "code": "function transform (message, context) {\n  \nif (context.includeHeaders) {\n  message.payload = Array.prototype.concat(context.headers,message.payload);\n}\n\n message.payload =  message.payload.join(\"\\r\\n\")\n return message\n}\n"
+      }
+    },
+    "SFTP Put": {
+      "class": "sftpPut",
+      "config": {
+        "privateKey": "sftpKey",
+        "username": "sftpUsername",
+        "host": "sftpHost",
+        "fileName": "{{{context.fileName}}}",
+        "push": false
+      }
+    }
+  }
+}
