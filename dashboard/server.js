@@ -92,7 +92,6 @@ const PHASE_MAP = {
 };
 const CATEGORY_PHASE = { new: "Planning", indeterminate: "In-Flight", done: "Closed" };
 
-/* ---- helpers ---------------------------------------------------------- */
 function authHeader() {
   return "Basic " + Buffer.from(`${CONFIG.email}:${CONFIG.token}`).toString("base64");
 }
