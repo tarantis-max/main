@@ -1,2 +1,3 @@
 # Local Jira credentials for the dashboard launcher (never commit your token)
+dashboard/jira-token.dat
 dashboard/jira-credentials.bat

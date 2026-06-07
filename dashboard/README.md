@@ -54,8 +54,10 @@ never sees credentials and there are no CORS issues.
 ### Running it
 
 **Windows — easiest:** double-click **`start.bat`**. It checks for Node, asks
-for your Atlassian API token the first time (and can save it to a git-ignored
-`jira-credentials.bat`), starts the server, and opens your browser.
+for your Atlassian API token the first time, and offers to save it. The saved
+token is **encrypted with Windows DPAPI** (`jira-token.dat`) so only your
+Windows account on that PC can decrypt it — it is never stored in plaintext and
+is git-ignored. Then it starts the server and opens your browser.
 
 **Any platform — manual:**
 
