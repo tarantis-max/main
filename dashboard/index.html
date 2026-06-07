@@ -255,6 +255,22 @@
   .unsaved-dot.show { display: inline-block; }
   .saving-spin { animation: spin .7s linear infinite; display: inline-block; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Comments ---------- */
+  .comments-section { margin-top: 22px; border-top: 1px solid var(--border); padding-top: 16px; }
+  .comments-section .k { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); font-weight: 600; margin-bottom: 10px; }
+  .comments-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; max-height: 240px; overflow: auto; }
+  .comment { background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; }
+  .comment-meta { font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+  .comment-meta b { color: var(--text); font-weight: 600; }
+  .comment-text { font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+  .comment-add { display: flex; flex-direction: column; gap: 8px; }
+  .comment-add textarea {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 9px 11px; font-size: 13px; font-family: inherit; resize: vertical; min-height: 60px; outline: none;
+  }
+  .comment-add textarea:focus { border-color: var(--accent); }
+  .comment-add .btn-save { align-self: flex-start; }
 </style>
 </head>
 <body>
@@ -337,6 +353,7 @@ const $ = s => document.querySelector(s);
 const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function parseDate(s){ if(!s) return null; const d=new Date(s+"T00:00:00"); return isNaN(d)?null:d; }
 function fmtDate(s){ const d=parseDate(s); if(!d) return "—"; return d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); }
+function fmtDateTime(s){ const d=new Date(s); if(isNaN(d)) return ""; return d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})+" "+d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}); }
 function daysUntil(s){ const d=parseDate(s); if(!d) return null; return Math.round((d-today)/86400000); }
 function isOverdue(p){ const du=daysUntil(p.end); return du!=null && du<0 && p.phase!=="Closed"; }
 function isSoon(p){ const du=daysUntil(p.end); return du!=null && du>=0 && du<=SOON_DAYS && p.phase!=="Closed"; }
@@ -563,10 +580,10 @@ function openModal(id){
         ${p.url?`<button class="btn-edit" id="mEdit"><svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.929-.928l.929-3.251c.081-.286.235-.547.445-.756l8.612-8.61Z"/></svg>Edit</button>`:""}
       </div>
     </div>
-    <div class="modal-body" id="mBody">${modalViewBody(p, timing)}</div>`;
+    <div class="modal-body" id="mBody"></div>`;
   $("#overlay").classList.add("open");
   $("#mClose").addEventListener("click", closeModal);
-  if (p.url) $("#mEdit").addEventListener("click", ()=>openEditMode(id));
+  renderModalView(p);
 }
 
 function modalViewBody(p, timing){
@@ -584,7 +601,67 @@ function modalViewBody(p, timing){
       <div class="field"><div class="k">Dependencies</div><div class="v">${esc(p.dependencies||"—")}</div></div>
     </div>
     <div class="k" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;margin-bottom:8px">Notes / Next Milestone</div>
-    <div class="notes-box">${esc(p.notes||"—")}</div>`;
+    <div class="notes-box">${esc(p.notes||"—")}</div>
+    ${p.url?`
+    <div class="comments-section">
+      <div class="k">Comments</div>
+      <div id="cList" class="comments-list"><div class="read-val">Loading…</div></div>
+      <div class="comment-add">
+        <textarea id="cInput" placeholder="Add a comment to ${esc(p.id)}…"></textarea>
+        <button class="btn-save" id="cPost"><span id="cIcon">↑</span> Comment</button>
+      </div>
+    </div>`:""}`;
+}
+
+function renderModalView(p){
+  const du=daysUntil(p.end); let timing="";
+  if(du!=null && p.phase!=="Closed") timing=du<0?` · <span style="color:#ff7b72;font-weight:600">${Math.abs(du)} days overdue</span>`:` · ${du} days remaining`;
+  $("#mBody").innerHTML = modalViewBody(p, timing);
+  const editBtn = document.querySelector("#modal .btn-edit");
+  if (editBtn) editBtn.onclick = ()=>openEditMode(p.id);
+  if (p.url) loadComments(p.id);
+}
+
+async function loadComments(id){
+  const list = $("#cList"); if(!list) return;
+  try{
+    const res = await fetch(`/api/projects/${encodeURIComponent(id)}/comments`);
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error||("HTTP "+res.status));
+    const cs = data.comments||[];
+    list.innerHTML = cs.length ? cs.map(c=>`
+      <div class="comment">
+        <div class="comment-meta"><b>${esc(c.author)}</b> · ${esc(fmtDateTime(c.created))}</div>
+        <div class="comment-text">${esc(c.text)}</div>
+      </div>`).join("") : `<div class="read-val">No comments yet.</div>`;
+  }catch(e){
+    const hint=/Failed to fetch|NetworkError/i.test(String(e))?"start the server with start.bat":e.message;
+    list.innerHTML=`<div class="read-val">Couldn't load comments (${esc(hint)}).</div>`;
+  }
+  const post = $("#cPost");
+  if(post) post.onclick = ()=>submitComment(id);
+}
+
+async function submitComment(id){
+  const input=$("#cInput"); if(!input) return;
+  const text=input.value.trim();
+  if(!text){ showToast("Comment is empty."); return; }
+  const btn=$("#cPost"), icon=$("#cIcon");
+  btn.disabled=true; icon.className="saving-spin"; icon.textContent="↻";
+  try{
+    const res=await fetch(`/api/projects/${encodeURIComponent(id)}/comments`,{
+      method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({body:text}),
+    });
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.error||("HTTP "+res.status));
+    input.value="";
+    await loadComments(id);
+    showToast("Comment added to Jira", false, true);
+  }catch(e){
+    const hint=/Failed to fetch|NetworkError/i.test(String(e))?"Server not running — start it with start.bat first.":e.message;
+    showToast("Comment failed: "+hint, true);
+    const b=$("#cPost"), ic=$("#cIcon"); if(b){b.disabled=false;} if(ic){ic.className="";ic.textContent="↑";}
+  }
 }
 
 function openEditMode(id){
@@ -630,11 +707,7 @@ function openEditMode(id){
       <button class="btn-cancel-edit" id="eCancel">Cancel</button>
       <span id="eSaveStatus" style="font-size:12px;color:var(--muted);margin-left:4px"></span>
     </div>`;
-  $("#eCancel").addEventListener("click", ()=>{
-    const du=daysUntil(p.end); let timing="";
-    if(du!=null && p.phase!=="Closed") timing=du<0?` · <span style="color:#ff7b72;font-weight:600">${Math.abs(du)} days overdue</span>`:` · ${du} days remaining`;
-    $("#mBody").innerHTML=modalViewBody(p,timing);
-  });
+  $("#eCancel").addEventListener("click", ()=>renderModalView(p));
   $("#eSave").addEventListener("click", ()=>saveToJira(id));
 }
 
@@ -675,12 +748,7 @@ async function saveToJira(id){
     // Update local project data immediately (don't wait for Jira re-fetch)
     Object.assign(p, changes);
     if (!p.rag || changes.rag) p.rag = changes.rag || p.rag;
-    const du=daysUntil(p.end); let timing="";
-    if(du!=null && p.phase!=="Closed") timing=du<0?` · <span style="color:#ff7b72;font-weight:600">${Math.abs(du)} days overdue</span>`:` · ${du} days remaining`;
-    $("#mBody").innerHTML = modalViewBody(p, timing);
-    // Re-add Edit button listener
-    const editBtn = document.querySelector("#modal .btn-edit");
-    if (editBtn) editBtn.addEventListener("click", ()=>openEditMode(id));
+    renderModalView(p);
     render();
     showToast("Saved to Jira" + (data.transitionApplied?` — status → ${data.transitionApplied}`:""), false, true);
   } catch(e){

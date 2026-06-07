@@ -231,6 +231,31 @@ async function handlePatch(key, body) {
   return { transitionApplied };
 }
 
+/* ---- comments -------------------------------------------------------- */
+async function getComments(key) {
+  const r = await fetch(`${CONFIG.baseUrl}/rest/api/3/issue/${key}/comment?orderBy=created`, {
+    headers: { Authorization: authHeader(), Accept: "application/json" },
+  });
+  if (!r.ok) throw new Error(`Jira comments ${r.status}`);
+  const data = await r.json();
+  return (data.comments || []).map(c => ({
+    author: (c.author && c.author.displayName) || "Unknown",
+    created: c.created,
+    text: adfToText(c.body).trim(),
+  }));
+}
+async function postComment(key, text) {
+  if (!text || !text.trim()) throw new Error("Comment is empty.");
+  const r = await fetch(`${CONFIG.baseUrl}/rest/api/3/issue/${key}/comment`, {
+    method: "POST",
+    headers: { Authorization: authHeader(), "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ body: textToAdf(text) }),
+  });
+  if (!r.ok) { const e = await r.text(); throw new Error(`Jira comment ${r.status}: ${e.slice(0, 300)}`); }
+  const c = await r.json();
+  return { author: (c.author && c.author.displayName) || "You", created: c.created, text };
+}
+
 let cache = { at: 0, data: null };
 async function getProjects() {
   if (cache.data && Date.now() - cache.at < CONFIG.cacheMs) return cache.data;
@@ -249,6 +274,37 @@ const server = http.createServer(async (req, res) => {
     if (!CONFIG.email || !CONFIG.token) {
       res.writeHead(500, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ error: "Set JIRA_EMAIL and JIRA_TOKEN environment variables." }));
+    }
+    // /api/projects/:key/comments  — read & post Jira comments
+    const cm = req.url.match(/^\/api\/projects\/([^/?]+)\/comments/);
+    if (cm) {
+      const key = decodeURIComponent(cm[1]);
+      if (req.method === "GET") {
+        try {
+          const comments = await getComments(key);
+          res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ comments }));
+        } catch (e) {
+          res.writeHead(502, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: String(e.message || e) }));
+        }
+        return;
+      }
+      if (req.method === "POST") {
+        let raw = "";
+        req.on("data", d => raw += d);
+        req.on("end", async () => {
+          try {
+            const comment = await postComment(key, JSON.parse(raw).body);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ comment }));
+          } catch (e) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: String(e.message || e) }));
+          }
+        });
+        return;
+      }
     }
     // PATCH /api/projects/:key  — write changes back to Jira
     if (req.method === "PATCH") {
@@ -298,4 +354,4 @@ if (require.main === module) {
 }
 
 // Exported for testing without a live Jira connection.
-module.exports = { mapIssues, phaseFor, deriveRag, adfToText, textToAdf, labelValue, applyTransition, handlePatch };
+module.exports = { mapIssues, phaseFor, deriveRag, adfToText, textToAdf, labelValue, applyTransition, handlePatch, getComments, postComment };
