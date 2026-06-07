@@ -39,11 +39,45 @@ const CONFIG = {
    Adjust these to match your Jira configuration if it changes.          */
 const FIELDS = {
   startDate: "customfield_10015", // "Start date" picker in ITPM
-  // RAG / Portfolio / Compliance are read from labels if present:
-  //   rag:Red | rag:Yellow | rag:Green
-  //   portfolio:Infrastructure   (underscores become spaces)
-  //   compliance:GLBA;FERPA      (semicolon-separated)
 };
+
+/* ---- VPMO custom fields ----------------------------------------------
+   Created by setup-jira-fields.js, which writes vpmo-fields.json:
+     { "ids": { "rag": "customfield_XXXXX", ... },
+       "fieldTypes": { "rag": "select", "portfolio": "text", ... } }
+   If that file is absent we fall back to reading/writing VPMO data as
+   labels (rag:Yellow, portfolio:Infrastructure, compliance:GLBA;FERPA). */
+let VPMO = { ids: {}, fieldTypes: {} };
+try {
+  VPMO = JSON.parse(fs.readFileSync(path.join(__dirname, "vpmo-fields.json"), "utf8"));
+} catch { /* no custom fields yet — label fallback stays active */ }
+const hasField = k => Boolean(VPMO.ids && VPMO.ids[k]);
+// Spreadsheet columns mapped to VPMO custom fields (also written back as labels)
+const VPMO_KEYS = ["rag", "portfolio", "compliance", "sponsor", "projectId", "pctComplete"];
+// which keys can degrade to a label when no custom field exists
+const LABEL_KEYS = { rag: "rag", portfolio: "portfolio", compliance: "compliance", sponsor: "sponsor" };
+
+// Read a VPMO custom field off an issue's fields object (handles select/text/number)
+function readVpmo(f, key) {
+  const id = VPMO.ids && VPMO.ids[key];
+  if (!id) return undefined;
+  const v = f[id];
+  if (v == null || v === "") return undefined;
+  if (typeof v === "object") return v.value != null ? v.value : undefined; // select option
+  return v;
+}
+// Stage a VPMO custom-field write into a Jira `fields` payload; returns true if it wrote one
+function writeVpmo(fields, key, rawValue) {
+  if (!hasField(key)) return false;
+  const id = VPMO.ids[key];
+  const type = (VPMO.fieldTypes && VPMO.fieldTypes[key]) || "text";
+  let value = rawValue;
+  if (key === "compliance" && value === "N/A") value = "";
+  if (type === "select")      fields[id] = value ? { value: String(value) } : null;
+  else if (type === "number") fields[id] = (value === "" || value == null) ? null : Number(value);
+  else                        fields[id] = value ? String(value).trim() : null;
+  return true;
+}
 // status name (or category) -> dashboard phase
 const PHASE_MAP = {
   "to do": "Planning",
@@ -141,6 +175,8 @@ function mapIssues(issues) {
   function pct(issue) {
     const kids = childrenByParent[issue.key];
     if (kids && kids.length) return Math.round(kids.filter(isDone).length / kids.length * 100);
+    const manual = readVpmo(issue.fields, "pctComplete"); // VPMO % Complete field, if set
+    if (manual != null && manual !== "") return Math.max(0, Math.min(100, Math.round(Number(manual))));
     return isDone(issue) ? 100 : 0;
   }
   // "projects" = non-subtask issues that have no parent (epics + orphan stories/tasks)
@@ -148,21 +184,23 @@ function mapIssues(issues) {
   return tops.map(i => {
     const f = i.fields;
     const labels = f.labels || [];
+    // Each VPMO field: custom field value wins, else label, else a sensible default.
     const p = {
-      id: i.key,
+      id: i.key,                                   // Jira key — also the write-back handle
+      projectId: readVpmo(f, "projectId") || "",   // VPMO Project ID (e.g. P-001), display only
       name: f.summary || "",
       phase: phaseFor(f.status),
-      portfolio: labelValue(labels, "portfolio") || (f.issuetype && f.issuetype.name) || "Unassigned",
-      sponsor: labelValue(labels, "sponsor") || (f.reporter && f.reporter.displayName) || "",
+      portfolio: readVpmo(f, "portfolio") || labelValue(labels, "portfolio") || (f.issuetype && f.issuetype.name) || "Unassigned",
+      sponsor: readVpmo(f, "sponsor") || labelValue(labels, "sponsor") || (f.reporter && f.reporter.displayName) || "",
       itOwner: (f.assignee && f.assignee.displayName) || "",
       start: f[FIELDS.startDate] || "",
       end: f.duedate || "",
       pct: pct(i),
-      rag: labelValue(labels, "rag") || "",
+      rag: readVpmo(f, "rag") || labelValue(labels, "rag") || "",
       dependencies: (f.issuelinks || []).map(l => {
         const o = l.outwardIssue || l.inwardIssue; return o ? o.key : null;
       }).filter(Boolean).join("; "),
-      compliance: labelValue(labels, "compliance") || "N/A",
+      compliance: readVpmo(f, "compliance") || labelValue(labels, "compliance") || "N/A",
       notes: adfToText(f.description).trim().slice(0, 800),
       url: `${CONFIG.baseUrl}/browse/${i.key}`,
     };
