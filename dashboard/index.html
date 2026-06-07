@@ -232,6 +232,10 @@
       <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.75.75 0 0 1 .75.75v6.69l1.72-1.72a.75.75 0 1 1 1.06 1.06l-3 3a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 0 1 1.06-1.06l1.72 1.72V1.75A.75.75 0 0 1 8 1Z"/><path d="M2.75 12a.75.75 0 0 1 .75.75v1.5h9v-1.5a.75.75 0 0 1 1.5 0V14a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1v-1.25a.75.75 0 0 1 .75-.75Z"/></svg>
       Export CSV
     </button>
+    <button class="btn" id="jiraBtn" title="Pull live data from Jira (requires the proxy server running)">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm11.53-1.97a.75.75 0 0 1 0 1.06l-3.5 3.5a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 1 1 1.06-1.06l1.47 1.47 2.97-2.97a.75.75 0 0 1 1.06 0Z"/></svg>
+      Load from Jira
+    </button>
     <button class="btn primary" id="uploadBtn" title="Refresh dashboard from an updated spreadsheet">
       <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 15a.75.75 0 0 1-.75-.75V7.56L5.53 9.28a.75.75 0 0 1-1.06-1.06l3-3a.75.75 0 0 1 1.06 0l3 3a.75.75 0 1 1-1.06 1.06L8.75 7.56v6.69A.75.75 0 0 1 8 15Z"/><path d="M2.75 4a.75.75 0 0 0 .75-.75v-1.5h9v1.5a.75.75 0 0 0 1.5 0V1.75a1 1 0 0 0-1-1h-10a1 1 0 0 0-1 1v1.5A.75.75 0 0 0 2.75 4Z"/></svg>
       Update from spreadsheet
@@ -510,7 +514,7 @@ function openModal(id){
     <div class="modal-head">
       <div class="mh-top">
         <div>
-          <span class="m-id">${esc(p.id)}</span>
+          <span class="m-id">${esc(p.id)}</span>${p.url?` · <a href="${esc(p.url)}" target="_blank" rel="noopener">open in Jira ↗</a>`:""}
           <h2>${esc(p.name)}</h2>
         </div>
         <button class="modal-close" id="mClose">✕</button>
@@ -758,6 +762,26 @@ async function handleFile(file){
   }
 }
 
+/* ---------------- Load live from Jira (via proxy) ---------------- */
+async function loadFromJira(){
+  showToast("Loading from Jira…");
+  try{
+    const res = await fetch("/api/projects", { headers:{ "Accept":"application/json" } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || ("HTTP "+res.status));
+    if (!data.projects || !data.projects.length) throw new Error("Jira returned no projects.");
+    PROJECTS = data.projects;
+    META.asOf = (data.asOf || new Date().toISOString().slice(0,10)) + " (Jira live)";
+    populateFilters(); render();
+    showToast(`Loaded ${PROJECTS.length} projects live from Jira`);
+  } catch(e){
+    console.error(e);
+    const hint = /Failed to fetch|NetworkError|JSON/i.test(String(e)) ?
+      "Start the proxy first: node dashboard/server.js (with JIRA_* env vars set)." : e.message;
+    showToast("Jira load failed: "+hint, true);
+  }
+}
+
 /* ---------------- Wire up ---------------- */
 $("#search").addEventListener("input", e=>{ state.search=e.target.value; render(); });
 $("#fPortfolio").addEventListener("change", e=>{ state.portfolio=e.target.value; render(); });
@@ -773,6 +797,7 @@ $("#viewSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",(
   $("#viewSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("active",x===b));
   render();
 }));
+$("#jiraBtn").addEventListener("click", loadFromJira);
 $("#uploadBtn").addEventListener("click", ()=>$("#fileInput").click());
 $("#fileInput").addEventListener("change", e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); e.target.value=""; });
 $("#exportBtn").addEventListener("click", exportCSV);

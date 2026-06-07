@@ -45,11 +45,66 @@ The header row should contain (names are matched case-insensitively):
 - `Phase` values: Planning, In-Flight, Stabilization, Closed.
 - `RAG` values: Green, Yellow, Red.
 
+## Live data from Jira
+
+The dashboard can pull **live** from Jira via a tiny built-in proxy
+(`server.js`). The proxy holds your Jira API token server-side, so the browser
+never sees credentials and there are no CORS issues.
+
+### Running it
+
+```bash
+export JIRA_BASE_URL="https://methodist.atlassian.net"
+export JIRA_EMAIL="jgreene@methodist.edu"
+export JIRA_TOKEN="<Atlassian API token>"   # id.atlassian.com/manage-profile/security/api-tokens
+export JIRA_PROJECT="ITPM"                   # optional (default ITPM)
+# optional full override: export JIRA_JQL='project = ITPM ORDER BY created DESC'
+
+node dashboard/server.js
+# open http://localhost:8787  →  click "Load from Jira"
+```
+
+Node 18+ required (uses built-in `fetch`). Responses are cached for 60s
+(`CACHE_MS`). Each project links back to its Jira issue from the detail view.
+
+### How Jira fields map to the dashboard
+
+| Dashboard field | Jira source |
+|---|---|
+| Project / ID | issue `summary` / issue key |
+| Notes | `description` (ADF flattened to text) |
+| IT Owner | `assignee` |
+| Business Sponsor | label `sponsor:Name`, else `reporter` |
+| Start Date | `customfield_10015` ("Start date") |
+| Target End | `duedate` |
+| Phase | `status` → Planning / In-Flight / Stabilization / Closed |
+| % Complete | rolled up from child-issue completion (else status) |
+| Dependencies | linked issues (`issuelinks`) |
+| RAG | label `rag:Red\|Yellow\|Green`, else **derived** from schedule |
+| Portfolio | label `portfolio:Name`, else issue type |
+| Compliance | label `compliance:FERPA;GLBA`, else `N/A` |
+
+Jira has no native RAG / Portfolio / Compliance fields, so those are read from
+**labels** if you add them (e.g. `portfolio:Infrastructure`, `rag:Yellow`,
+`compliance:GLBA`). Until then, RAG is derived from schedule (overdue → Red;
+due within 30 days and < 50% complete → Yellow; otherwise Green) and Portfolio
+falls back to the issue type. "Projects" are top-level issues (Epics and any
+Story/Task without a parent); child issues roll up into their parent's
+percentage. Adjust the mapping in the `FIELDS` / `PHASE_MAP` blocks at the top
+of `server.js`.
+
 ## Export
 
 **Export CSV** downloads the currently filtered set of projects as a CSV with the
 original column headers — handy for sharing a slice (e.g. all Red projects).
 
-## Source data
+## Data sources
 
-Generated from `MU_VPMO_Program_Plan_v4.xlsx` (data as of 2026-05-21).
+- **Spreadsheet** (default, baked in): `MU_VPMO_Program_Plan_v4.xlsx`, data as of
+  2026-05-21 — the curated VPMO executive view (42 projects).
+- **Jira live** (`ITPM` via the proxy): the IT Project Management portfolio.
+
+Note these are *different sets*: the spreadsheet is the curated program plan,
+while ITPM holds IT infrastructure/security delivery work. The broader
+Colleague / Element451 / EAB program epics live in the **EPM** project — set
+`JIRA_PROJECT=EPM` (or a custom `JIRA_JQL`) to pull those instead.
