@@ -530,7 +530,6 @@ function openModal(id){
         </div>
         <div class="field"><div class="k">Business Sponsor</div><div class="v">${esc(p.sponsor||"—")}</div></div>
         <div class="field"><div class="k">IT Owner</div><div class="v">${esc(p.itOwner||"—")}</div></div>
-        <div class="field"><div class="k">Start Date</div><div class="v">${fmtDate(p.start)}</div></div>
         <div class="field"><div class="k">Target End</div><div class="v">${fmtDate(p.end)}${timing}</div></div>
         <div class="field"><div class="k">Compliance Driver</div><div class="v">${esc(p.compliance||"—")}</div></div>
         <div class="field"><div class="k">Dependencies</div><div class="v">${esc(p.dependencies||"—")}</div></div>
@@ -569,8 +568,8 @@ function render(){
 
 /* ---------------- Export ---------------- */
 function exportCSV(){
-  const cols = ["id","name","phase","portfolio","sponsor","itOwner","start","end","pct","rag","dependencies","compliance","notes"];
-  const headers = ["Project ID","Project Name","Phase","Portfolio","Business Sponsor","IT Owner","Start Date","Target End","% Complete","RAG","Dependencies","Compliance Driver","Notes / Next Milestone"];
+  const cols = ["id","name","phase","portfolio","sponsor","itOwner","end","pct","rag","dependencies","compliance","notes"];
+  const headers = ["Project ID","Project Name","Phase","Portfolio","Business Sponsor","IT Owner","Target End","% Complete","RAG","Dependencies","Compliance Driver","Notes / Next Milestone"];
   const q = v => { v=(v==null?"":String(v)); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
   const rows = filtered().map(p=>cols.map(c=> c==="pct" ? (p.pct==null?"":p.pct/100) : q(p[c])).join(","));
   const csv = headers.map(q).join(",")+"\n"+rows.join("\n");
