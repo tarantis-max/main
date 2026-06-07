@@ -62,6 +62,16 @@ const CATEGORY_PHASE = { new: "Planning", indeterminate: "In-Flight", done: "Clo
 function authHeader() {
   return "Basic " + Buffer.from(`${CONFIG.email}:${CONFIG.token}`).toString("base64");
 }
+function textToAdf(text) {
+  if (!text || !text.trim()) return null;
+  return {
+    type: "doc", version: 1,
+    content: text.split("\n").map(line => ({
+      type: "paragraph",
+      content: line.trim() ? [{ type: "text", text: line }] : [],
+    })),
+  };
+}
 function adfToText(node) {
   if (!node) return "";
   if (typeof node === "string") return node;
@@ -161,6 +171,66 @@ function mapIssues(issues) {
   });
 }
 
+/* ---- write-back: update Jira from dashboard edits ------------------- */
+async function applyTransition(key, targetPhase) {
+  const r = await fetch(`${CONFIG.baseUrl}/rest/api/3/issue/${key}/transitions`, {
+    headers: { Authorization: authHeader(), Accept: "application/json" },
+  });
+  if (!r.ok) return null;
+  const { transitions } = await r.json();
+  // Prefer a name-keyword match; fall back to status-category match.
+  const hints = {
+    Planning:      ["to do", "backlog", "open", "new"],
+    "In-Flight":   ["in progress"],
+    Stabilization: ["on hold", "stabiliz", "review"],
+    Closed:        ["done", "closed", "complete", "resolved"],
+  }[targetPhase] || [];
+  const catKey = { Planning: "new", "In-Flight": "indeterminate", Stabilization: "indeterminate", Closed: "done" }[targetPhase];
+  const match =
+    transitions.find(t => hints.some(h => t.name.toLowerCase().includes(h))) ||
+    transitions.find(t => t.to.statusCategory.key === catKey);
+  if (!match) return null;
+  await fetch(`${CONFIG.baseUrl}/rest/api/3/issue/${key}/transitions`, {
+    method: "POST",
+    headers: { Authorization: authHeader(), "Content-Type": "application/json" },
+    body: JSON.stringify({ transition: { id: match.id } }),
+  });
+  return match.name;
+}
+
+async function handlePatch(key, body) {
+  // Fetch current labels so we preserve any non-VPMO ones.
+  const r = await fetch(`${CONFIG.baseUrl}/rest/api/3/issue/${key}?fields=labels`, {
+    headers: { Authorization: authHeader(), Accept: "application/json" },
+  });
+  if (!r.ok) throw new Error(`Could not fetch issue ${key}: ${r.status}`);
+  const issue = await r.json();
+  const VPMO = ["rag:", "portfolio:", "compliance:", "sponsor:"];
+  let labels = (issue.fields.labels || []).filter(l => !VPMO.some(p => l.toLowerCase().startsWith(p)));
+  if (body.rag)        labels.push(`rag:${body.rag}`);
+  if (body.portfolio)  labels.push(`portfolio:${body.portfolio.trim().replace(/ /g, "_")}`);
+  if (body.compliance && body.compliance !== "N/A")
+    labels.push(`compliance:${body.compliance.trim().replace(/;\s*/g, ";")}`);
+
+  const fields = { labels };
+  if ("end"   in body) fields.duedate     = body.end   || null;
+  if ("notes" in body) fields.description = textToAdf(body.notes);
+
+  const pr = await fetch(`${CONFIG.baseUrl}/rest/api/3/issue/${key}`, {
+    method: "PUT",
+    headers: { Authorization: authHeader(), "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ fields }),
+  });
+  if (!pr.ok) {
+    const err = await pr.text();
+    throw new Error(`Jira field update ${pr.status}: ${err.slice(0, 300)}`);
+  }
+
+  const transitionApplied = "phase" in body ? await applyTransition(key, body.phase) : null;
+  cache = { at: 0, data: null }; // bust cache so next GET is fresh
+  return { transitionApplied };
+}
+
 let cache = { at: 0, data: null };
 async function getProjects() {
   if (cache.data && Date.now() - cache.at < CONFIG.cacheMs) return cache.data;
@@ -180,6 +250,24 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(500, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ error: "Set JIRA_EMAIL and JIRA_TOKEN environment variables." }));
     }
+    // PATCH /api/projects/:key  — write changes back to Jira
+    if (req.method === "PATCH") {
+      const key = req.url.replace(/^\/api\/projects\//, "").split("?")[0];
+      let raw = "";
+      req.on("data", d => raw += d);
+      req.on("end", async () => {
+        try {
+          const result = await handlePatch(key, JSON.parse(raw));
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(502, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: String(e.message || e) }));
+        }
+      });
+      return;
+    }
+    // GET /api/projects
     try {
       const data = await getProjects();
       res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -210,4 +298,4 @@ if (require.main === module) {
 }
 
 // Exported for testing without a live Jira connection.
-module.exports = { mapIssues, phaseFor, deriveRag, adfToText, labelValue };
+module.exports = { mapIssues, phaseFor, deriveRag, adfToText, textToAdf, labelValue, applyTransition, handlePatch };

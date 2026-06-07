@@ -218,6 +218,43 @@
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .toast.err { border-color: var(--red); }
+  .toast.ok { border-color: var(--green); }
+
+  /* ---------- Edit mode ---------- */
+  .edit-field { display: flex; flex-direction: column; gap: 5px; }
+  .edit-field label { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); font-weight: 600; }
+  .edit-field input, .edit-field select, .edit-field textarea {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 9px 11px; font-size: 13px; font-family: inherit; outline: none; width: 100%;
+  }
+  .edit-field input:focus, .edit-field select:focus, .edit-field textarea:focus { border-color: var(--accent); }
+  .edit-field textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
+  .edit-field .read-val { font-size: 13.5px; color: var(--muted); padding: 2px 0; }
+  .edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px; margin-bottom: 20px; }
+  .edit-grid .full { grid-column: 1 / -1; }
+  .edit-actions { display: flex; gap: 10px; align-items: center; padding-top: 4px; }
+  .btn-save {
+    background: var(--green); border: 1px solid var(--green); color: #fff;
+    padding: 9px 18px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 7px; transition: .15s;
+  }
+  .btn-save:hover { background: #3cba56; }
+  .btn-save:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-cancel-edit {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    padding: 9px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 550;
+  }
+  .btn-cancel-edit:hover { color: var(--text); border-color: #3d4651; }
+  .btn-edit {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+    padding: 6px 13px; border-radius: 7px; cursor: pointer; font-size: 12px; font-weight: 600;
+    margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-edit:hover { color: var(--text); border-color: #3d4651; }
+  .unsaved-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); display: none; }
+  .unsaved-dot.show { display: inline-block; }
+  .saving-spin { animation: spin .7s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -303,7 +340,7 @@ function fmtDate(s){ const d=parseDate(s); if(!d) return "—"; return d.toLocal
 function daysUntil(s){ const d=parseDate(s); if(!d) return null; return Math.round((d-today)/86400000); }
 function isOverdue(p){ const du=daysUntil(p.end); return du!=null && du<0 && p.phase!=="Closed"; }
 function isSoon(p){ const du=daysUntil(p.end); return du!=null && du>=0 && du<=SOON_DAYS && p.phase!=="Closed"; }
-function showToast(msg, isErr){ const t=$("#toast"); t.textContent=msg; t.className="toast show"+(isErr?" err":""); setTimeout(()=>t.className="toast"+(isErr?" err":""),3200); }
+function showToast(msg, isErr, isOk){ const t=$("#toast"); t.textContent=msg; t.className="toast show"+(isErr?" err":isOk?" ok":""); setTimeout(()=>t.className="toast"+(isErr?" err":isOk?" ok":""),3200); }
 
 /* ---------------- Filtering ---------------- */
 function filtered(){
@@ -523,27 +560,140 @@ function openModal(id){
         <span class="chip ${esc(p.rag)}"><span class="dot"></span>${esc(p.rag)}</span>
         <span class="tag" style="border-color:${PHASE_COLOR[p.phase]||"var(--border)"};color:${PHASE_COLOR[p.phase]||"var(--muted)"}">${esc(p.phase)}</span>
         <span class="tag">${esc(p.portfolio)}</span>
+        ${p.url?`<button class="btn-edit" id="mEdit"><svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.929-.928l.929-3.251c.081-.286.235-.547.445-.756l8.612-8.61Z"/></svg>Edit</button>`:""}
       </div>
     </div>
-    <div class="modal-body">
-      <div class="detail-grid">
-        <div class="field full">
-          <div class="k">Progress</div>
-          <div class="v">${p.pct==null?"Not tracked":p.pct+"% complete"}</div>
-          <div class="big-prog"><div style="width:${p.pct||0}%"></div></div>
-        </div>
-        <div class="field"><div class="k">Business Sponsor</div><div class="v">${esc(p.sponsor||"—")}</div></div>
-        <div class="field"><div class="k">IT Owner</div><div class="v">${esc(p.itOwner||"—")}</div></div>
-        <div class="field"><div class="k">Target End</div><div class="v">${fmtDate(p.end)}${timing}</div></div>
-        <div class="field"><div class="k">Compliance Driver</div><div class="v">${esc(p.compliance||"—")}</div></div>
-        <div class="field"><div class="k">Dependencies</div><div class="v">${esc(p.dependencies||"—")}</div></div>
-      </div>
-      <div class="k" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;margin-bottom:8px">Notes / Next Milestone</div>
-      <div class="notes-box">${esc(p.notes||"—")}</div>
-    </div>`;
+    <div class="modal-body" id="mBody">${modalViewBody(p, timing)}</div>`;
   $("#overlay").classList.add("open");
   $("#mClose").addEventListener("click", closeModal);
+  if (p.url) $("#mEdit").addEventListener("click", ()=>openEditMode(id));
 }
+
+function modalViewBody(p, timing){
+  return `
+    <div class="detail-grid">
+      <div class="field full">
+        <div class="k">Progress</div>
+        <div class="v">${p.pct==null?"Not tracked":p.pct+"% complete"}</div>
+        <div class="big-prog"><div style="width:${p.pct||0}%"></div></div>
+      </div>
+      <div class="field"><div class="k">Business Sponsor</div><div class="v">${esc(p.sponsor||"—")}</div></div>
+      <div class="field"><div class="k">IT Owner</div><div class="v">${esc(p.itOwner||"—")}</div></div>
+      <div class="field"><div class="k">Target End</div><div class="v">${fmtDate(p.end)}${timing}</div></div>
+      <div class="field"><div class="k">Compliance Driver</div><div class="v">${esc(p.compliance||"—")}</div></div>
+      <div class="field"><div class="k">Dependencies</div><div class="v">${esc(p.dependencies||"—")}</div></div>
+    </div>
+    <div class="k" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;margin-bottom:8px">Notes / Next Milestone</div>
+    <div class="notes-box">${esc(p.notes||"—")}</div>`;
+}
+
+function openEditMode(id){
+  const p = PROJECTS.find(x=>x.id===id); if(!p) return;
+  const phaseOpts = ["Planning","In-Flight","Stabilization","Closed"].map(ph=>`<option value="${ph}" ${p.phase===ph?"selected":""}>${ph}</option>`).join("");
+  const ragOpts   = ["Green","Yellow","Red"].map(r=>`<option value="${r}" ${p.rag===r?"selected":""}>${r}</option>`).join("");
+  $("#mBody").innerHTML = `
+    <div class="edit-grid">
+      <div class="edit-field">
+        <label>Phase</label>
+        <select id="ePhase">${phaseOpts}</select>
+      </div>
+      <div class="edit-field">
+        <label>RAG Status</label>
+        <select id="eRag">${ragOpts}</select>
+      </div>
+      <div class="edit-field">
+        <label>Target End</label>
+        <input type="date" id="eEnd" value="${esc(p.end||"")}" />
+      </div>
+      <div class="edit-field">
+        <label>Portfolio</label>
+        <input type="text" id="ePortfolio" value="${esc(p.portfolio||"")}" />
+      </div>
+      <div class="edit-field">
+        <label>Compliance Driver</label>
+        <input type="text" id="eCompliance" value="${esc(p.compliance==="N/A"?"":p.compliance||"")}" placeholder="e.g. FERPA; GLBA" />
+      </div>
+      <div class="edit-field">
+        <label>IT Owner &amp; Sponsor</label>
+        <div class="read-val">${esc(p.itOwner||"—")} / ${esc(p.sponsor||"—")} <span style="font-size:11px;color:var(--muted)">(edit in Jira)</span></div>
+      </div>
+      <div class="edit-field full">
+        <label>Notes / Next Milestone</label>
+        <textarea id="eNotes">${esc(p.notes||"")}</textarea>
+      </div>
+    </div>
+    <div class="edit-actions">
+      <button class="btn-save" id="eSave">
+        <span id="eSaveIcon">↑</span> Save to Jira
+        <span class="unsaved-dot show" id="eDot"></span>
+      </button>
+      <button class="btn-cancel-edit" id="eCancel">Cancel</button>
+      <span id="eSaveStatus" style="font-size:12px;color:var(--muted);margin-left:4px"></span>
+    </div>`;
+  $("#eCancel").addEventListener("click", ()=>{
+    const du=daysUntil(p.end); let timing="";
+    if(du!=null && p.phase!=="Closed") timing=du<0?` · <span style="color:#ff7b72;font-weight:600">${Math.abs(du)} days overdue</span>`:` · ${du} days remaining`;
+    $("#mBody").innerHTML=modalViewBody(p,timing);
+  });
+  $("#eSave").addEventListener("click", ()=>saveToJira(id));
+}
+
+async function saveToJira(id){
+  const p = PROJECTS.find(x=>x.id===id); if(!p) return;
+  const changes = {
+    phase:      $("#ePhase").value,
+    rag:        $("#eRag").value,
+    end:        $("#eEnd").value,
+    portfolio:  $("#ePortfolio").value.trim(),
+    compliance: $("#eCompliance").value.trim() || "N/A",
+    notes:      $("#eNotes").value.trim(),
+  };
+  // Skip fields that haven't changed (avoid unnecessary Jira writes)
+  if (changes.phase      === p.phase)      delete changes.phase;
+  if (changes.rag        === p.rag)        delete changes.rag;
+  if (changes.end        === (p.end||""))  delete changes.end;
+  if (changes.portfolio  === p.portfolio)  delete changes.portfolio;
+  if (changes.compliance === (p.compliance||"N/A")) delete changes.compliance;
+  if (changes.notes      === (p.notes||""))delete changes.notes;
+
+  if (!Object.keys(changes).length){ showToast("No changes to save."); return; }
+
+  const btn = $("#eSave"), status = $("#eSaveStatus"), icon = $("#eSaveIcon");
+  btn.disabled = true;
+  icon.className = "saving-spin"; icon.textContent = "↻";
+  status.textContent = "Saving…";
+
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(changes),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || ("HTTP "+res.status));
+
+    // Update local project data immediately (don't wait for Jira re-fetch)
+    Object.assign(p, changes);
+    if (!p.rag || changes.rag) p.rag = changes.rag || p.rag;
+    const du=daysUntil(p.end); let timing="";
+    if(du!=null && p.phase!=="Closed") timing=du<0?` · <span style="color:#ff7b72;font-weight:600">${Math.abs(du)} days overdue</span>`:` · ${du} days remaining`;
+    $("#mBody").innerHTML = modalViewBody(p, timing);
+    // Re-add Edit button listener
+    const editBtn = document.querySelector("#modal .btn-edit");
+    if (editBtn) editBtn.addEventListener("click", ()=>openEditMode(id));
+    render();
+    showToast("Saved to Jira" + (data.transitionApplied?` — status → ${data.transitionApplied}`:""), false, true);
+  } catch(e){
+    console.error(e);
+    const hint = /Failed to fetch|NetworkError/i.test(String(e)) ?
+      "Server not running — start it with start.bat first." : e.message;
+    status.textContent = "";
+    icon.className=""; icon.textContent="↑";
+    btn.disabled = false;
+    showToast("Save failed: "+hint, true);
+  }
+}
+
 function closeModal(){ $("#overlay").classList.remove("open"); }
 
 /* ---------------- Filters UI ---------------- */
