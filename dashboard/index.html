@@ -285,9 +285,14 @@
       <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.75.75 0 0 1 .75.75v6.69l1.72-1.72a.75.75 0 1 1 1.06 1.06l-3 3a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 0 1 1.06-1.06l1.72 1.72V1.75A.75.75 0 0 1 8 1Z"/><path d="M2.75 12a.75.75 0 0 1 .75.75v1.5h9v-1.5a.75.75 0 0 1 1.5 0V14a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1v-1.25a.75.75 0 0 1 .75-.75Z"/></svg>
       Export CSV
     </button>
+    <select class="filter" id="jiraProject" title="Choose a Jira project to load" style="display:none"></select>
     <button class="btn" id="jiraBtn" title="Pull live data from Jira (requires the proxy server running)">
       <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm11.53-1.97a.75.75 0 0 1 0 1.06l-3.5 3.5a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 1 1 1.06-1.06l1.47 1.47 2.97-2.97a.75.75 0 0 1 1.06 0Z"/></svg>
       Load from Jira
+    </button>
+    <button class="btn" id="newItemBtn" title="Create a new work item in the selected Jira project" style="display:none">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a.75.75 0 0 1 .75.75v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5A.75.75 0 0 1 8 2Z"/></svg>
+      New work item
     </button>
     <button class="btn primary" id="uploadBtn" title="Refresh dashboard from an updated spreadsheet">
       <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 15a.75.75 0 0 1-.75-.75V7.56L5.53 9.28a.75.75 0 0 1-1.06-1.06l3-3a.75.75 0 0 1 1.06 0l3 3a.75.75 0 1 1-1.06 1.06L8.75 7.56v6.69A.75.75 0 0 1 8 15Z"/><path d="M2.75 4a.75.75 0 0 0 .75-.75v-1.5h9v1.5a.75.75 0 0 0 1.5 0V1.75a1 1 0 0 0-1-1h-10a1 1 0 0 0-1 1v1.5A.75.75 0 0 0 2.75 4Z"/></svg>
@@ -333,15 +338,18 @@
 
 <script>
 /* ============================================================
-   Embedded dataset (parsed from MU_VPMO_Program_Plan_v4.xlsx).
-   Use "Update from spreadsheet" to refresh from a new .xlsx/.csv.
+   Jira is the system of record. The dashboard starts empty and
+   loads live from a Jira project (picker in the header). A
+   spreadsheet upload is still supported for a one-time import.
    ============================================================ */
-const META = { asOf: "2026-05-21" };
+const META = { asOf: "—" };
 const PHASES = ["Planning", "In-Flight", "Stabilization", "Closed"];
 const PHASE_COLOR = { "Planning":"#8b949e", "In-Flight":"#2f81f7", "Stabilization":"#a371f7", "Closed":"#3fb950" };
 const RAG_COLOR = { "Green":"#2ea043", "Yellow":"#d29922", "Red":"#f85149" };
 
-let PROJECTS = [{"id":"P-001","name":"Colleague SaaS \u2014 Financial Aid Implementation","phase":"In-Flight","portfolio":"Colleague SaaS","sponsor":"Dawn Ausborn","itOwner":"Jason Greene","start":"2025-09-01","end":"2026-08-31","pct":55,"rag":"Yellow","dependencies":"Colleague Finance live; Ethos","compliance":"FERPA","notes":"FA packaging live 3/6; rules validation in progress \u2014 ~1,750 records failing FA rules + budget fund error open (6/5 Ellucian update)"},{"id":"P-003","name":"Ellucian Forms & EIP","phase":"In-Flight","portfolio":"Colleague SaaS","sponsor":"Dawn Ausborn","itOwner":"Jason Greene","start":"2026-01-27","end":"2026-10-01","pct":90,"rag":"Yellow","dependencies":"Colleague SaaS","compliance":"FERPA","notes":"Forms/EIP + Etrieve live to students 3/30; residual form tuning (vehicle-reg config) ongoing"},{"id":"P-004","name":"Ellucian Insights \u2014 Implementation","phase":"In-Flight","portfolio":"Colleague SaaS","sponsor":"Jason Greene","itOwner":"Jason Greene","start":"2025-10-01","end":"2026-12-31","pct":60,"rag":"Green","dependencies":"Colleague SaaS; Ethos","compliance":"FERPA","notes":"Ellucian implementation engagement complete; internal report development ongoing"},{"id":"P-005","name":"Historical Data Migration (Jenzabar \u2192 Colleague)","phase":"Planning","portfolio":"Colleague SaaS","sponsor":"Dawn Ausborn","itOwner":"Jason Greene","start":"2026-07-01","end":"2027-12-31","pct":5,"rag":"Green","dependencies":"Colleague SaaS; Jenzabar source","compliance":"FERPA","notes":"Data Migration Scope & Decision Doc v1.0 (5/7); active record-placement decisions with Ellucian (6/5)"},{"id":"P-006","name":"Vehicle Maintenance, Registration & Citations","phase":"In-Flight","portfolio":"Colleague SaaS","sponsor":"Sheila Kinsey","itOwner":"Jason Greene","start":"2026-06-01","end":"2026-12-31","pct":20,"rag":"Yellow","dependencies":"Colleague VRMN; Data Connect; Ellucian Intelligent Processes","compliance":"N/A","notes":"Faculty/staff + student reg forms in build; payment method (Touchnet/Authorize.net) under discussion (6/2)"},{"id":"P-007","name":"Athletics \u2014 Team & Roster Tracking / Reporting","phase":"In-Flight","portfolio":"Colleague SaaS","sponsor":"TBD (Athletics)","itOwner":"Jason Greene","start":"2026-08-01","end":"2027-03-31","pct":0,"rag":"Yellow","dependencies":"Colleague; Insights","compliance":"FERPA","notes":"Reporting requirements gathering"},{"id":"P-008","name":"Colleague Finance \u2014 Post-Go-Live Stabilization","phase":"Stabilization","portfolio":"Colleague SaaS","sponsor":"Dawn Ausborn","itOwner":"Jason Greene","start":"2025-07-01","end":"2026-06-30","pct":85,"rag":"Green","dependencies":"Colleague SaaS","compliance":"PCI","notes":"FY year-end close engagement with Ellucian commenced (year-end 6/30); defect cleanup & reporting tuning ongoing"},{"id":"P-009","name":"Colleague Integration \u2014 Follett","phase":"In-Flight","portfolio":"Colleague Integrations","sponsor":"Dawn Ausborn","itOwner":"Jason Greene","start":"2026-07-01","end":"2026-06-30","pct":0,"rag":"Green","dependencies":"Ethos; Colleague","compliance":"FERPA","notes":"Follett Integrations Migration #1597 active through 6/5; course-format fixes \u2014 near complete"},{"id":"P-010","name":"Colleague Integration \u2014 THD","phase":"Closed","portfolio":"Colleague Integrations","sponsor":"TBD","itOwner":"Jason Greene","start":"2026-07-01","end":"2027-03-31","pct":0,"rag":"Green","dependencies":"Ethos; Colleague","compliance":"FERPA","notes":"CANCELLED. StarRez/THD: contract buy-out option considered; room-assignment to Colleague feed (5/21-28)"},{"id":"P-012","name":"Colleague Integration \u2014 Risepoint","phase":"Planning","portfolio":"Colleague Integrations","sponsor":"Suzanne Blum Malley","itOwner":"Jason Greene","start":"2026-06-01","end":"2027-06-30","pct":5,"rag":"Green","dependencies":"Ellucian Colleague; data feeds","compliance":"FERPA","notes":"Data-mapping specs delivered; IT reviewing, timeline TBD (5/11-12)"},{"id":"P-013","name":"Colleague Integration \u2014 Handshake","phase":"Planning","portfolio":"Colleague Integrations","sponsor":"","itOwner":"Jason Greene","start":"2026-02-15","end":"2026-06-30","pct":70,"rag":"Green","dependencies":"Ethos; Insights","compliance":"FERPA","notes":"ON HOLD. For Each + Reducer architecture"},{"id":"P-014","name":"Colleague Integration \u2014 Maxient","phase":"Planning","portfolio":"Colleague Integrations","sponsor":"William Walker; Kelvin Jacobs","itOwner":"Jason Greene","start":"2026-03-01","end":"","pct":0,"rag":"Green","dependencies":"Data Connect; Insights","compliance":"FERPA","notes":"Contract + tech/security POC delivered 4/16-23; in IT Governance. Sponsors William Walker; Kelvin Jacobs"},{"id":"P-015","name":"Colleague Integration \u2014 eRezLife (Application Integration)","phase":"In-Flight","portfolio":"Colleague Integrations","sponsor":"William Walker","itOwner":"Jason Greene","start":"2026-01-01","end":"2026-06-30","pct":90,"rag":"Green","dependencies":"Data Connect; SFTP to Fondor","compliance":"FERPA","notes":"Implementation kick-off held 4/28"},{"id":"P-016","name":"Colleague Integration \u2014 MedProctor","phase":"Planning","portfolio":"Colleague Integrations","sponsor":"TBD (Health Services)","itOwner":"Jason Greene","start":"2026-08-01","end":"2027-01-31","pct":0,"rag":"Green","dependencies":"Ethos; Colleague","compliance":"FERPA; HIPAA","notes":"Contract progressing; in IT Governance tech/security review (5/11-21)"},{"id":"P-017","name":"Touchnet Payment Center (Colleague-integrated)","phase":"In-Flight","portfolio":"Enterprise Apps","sponsor":"Dawn Ausborn","itOwner":"Jason Greene","start":"2026-07-01","end":"2026-06-21","pct":0,"rag":"Yellow","dependencies":"Colleague Finance; Colleague AR","compliance":"PCI","notes":"Active weekly cadence; Payment Center / Bill Pay Suite (recap Week 33, 6/2)"},{"id":"P-018","name":"Touchnet OneCard \u2014 VIP Access Management","phase":"In-Flight","portfolio":"Enterprise Apps","sponsor":"Sheila Kinsey","itOwner":"Jason Greene","start":"2026-08-01","end":"2026-06-21","pct":0,"rag":"Yellow","dependencies":"Touchnet; access control","compliance":"N/A","notes":"OneCard VIP live 4/7; weekly status 6/3; card-reader connectivity troubleshooting (6/5)"},{"id":"P-019","name":"EAB Navigate 360 \u2014 Implementation & Data Pipeline","phase":"In-Flight","portfolio":"Enterprise Apps","sponsor":"Keri Walters","itOwner":"Jason Greene","start":"2026-04-01","end":"2026-09-30","pct":30,"rag":"Green","dependencies":"Insights; SQL extracts","compliance":"FERPA","notes":"Discovery-call follow-up 3/30; branded ConnectU 360 \u2014 early/discovery. Ben Sochor on custom data categories; texting opt-in TBD"},{"id":"P-020","name":"Amp \u2192 Colleague Integration","phase":"In-Flight","portfolio":"Colleague Integrations","sponsor":"TBD","itOwner":"Jason Greene","start":"2026-08-01","end":"2027-03-31","pct":0,"rag":"Green","dependencies":"Ethos; Colleague","compliance":"FERPA","notes":"Scope to confirm"},{"id":"P-021","name":"Element451 \u2014 CRM Implementation & Colleague Integration","phase":"In-Flight","portfolio":"Enterprise Apps","sponsor":"Andre Richburg","itOwner":"Jason Greene","start":"2026-01-15","end":"2026-08-01","pct":45,"rag":"Red","dependencies":"Ethos; Element451","compliance":"FERPA","notes":"UG go-live 4/15; data mapping (apps to Element451 to Ethos to Colleague); testing target ~7/1 (5/28)"},{"id":"P-022","name":"Paycom API Implementation + Ellucian HR Module Decision","phase":"Planning","portfolio":"Enterprise Apps","sponsor":"TBD (HR)","itOwner":"Jason Greene","start":"2026-04-01","end":"2026-12-31","pct":25,"rag":"Green","dependencies":"Paycom (SoR); Ethos Identity; Colleague HR","compliance":"FERPA","notes":"HR/Payroll + NeoEd decision pending (5/27); HR/IT process mapping. Document Colleague HR build; Paycom API contract pending"},{"id":"P-023","name":"Standardized Patient Management System","phase":"In-Flight","portfolio":"SOM / Clinical Systems","sponsor":"Kalindra McRae","itOwner":"Kalindra McRae","start":"2026-07-01","end":"2027-03-31","pct":0,"rag":"Yellow","dependencies":"SOM network","compliance":"FERPA; HIPAA","notes":"SOM simulation operations"},{"id":"P-024","name":"Titanium EHR (Health Services / Counseling)","phase":"Planning","portfolio":"SOM / Clinical Systems","sponsor":"Sheila Kinsey","itOwner":"Jason Greene","start":"2026-06-01","end":"2026-12-31","pct":15,"rag":"Green","dependencies":"AVD; Entra CA; PIM; WHfB","compliance":"FERPA; HIPAA","notes":"Compensating controls for SSO/MFA gaps"},{"id":"P-025","name":"TimelyCare \u2014 Implementation","phase":"In-Flight","portfolio":"SOM / Clinical Systems","sponsor":"Sheila Kinsey","itOwner":"Jason Greene","start":"2026-07-01","end":"2026-12-31","pct":0,"rag":"Green","dependencies":"SSO; data feeds","compliance":"FERPA; HIPAA","notes":"MSA in legal; campus-wide expansion pending President approval + IT Governance (5/13-6/1)"},{"id":"P-026","name":"Laerdal B-Line SimCapture","phase":"In-Flight","portfolio":"SOM / Clinical Systems","sponsor":"Kalindra McRae","itOwner":"Kalindra McRae","start":"2026-08-01","end":"2026-08-01","pct":0,"rag":"Red","dependencies":"SOM AV; SOM network","compliance":"HIPAA","notes":"Install dates confirmed; site survey 6/1; change order (4 overlay sim bays) signed late May-Jun \u2014 installing"},{"id":"P-027","name":"Otoscope Simulation","phase":"Planning","portfolio":"SOM / Clinical Systems","sponsor":"Kalindra McRae","itOwner":"Kalindra McRae","start":"2026-08-01","end":"2027-01-31","pct":0,"rag":"Green","dependencies":"SOM AV","compliance":"N/A","notes":"Otosim documentation shared 5/20 \u2014 evaluation"},{"id":"P-028","name":"Butterfly IQ POCUS","phase":"In-Flight","portfolio":"SOM / Clinical Systems","sponsor":"Kalindra McRae","itOwner":"Kalindra McRae","start":"2026-08-01","end":"2027-01-31","pct":0,"rag":"Green","dependencies":"SOM network; mobile","compliance":"HIPAA","notes":"Quote + PO ready 6/2 (SOM) \u2014 procurement"},{"id":"P-029","name":"Toltech Configuration","phase":"In-Flight","portfolio":"SOM / Clinical Systems","sponsor":"Kalindra McRae","itOwner":"Kalindra McRae","start":"2026-07-01","end":"2026-06-30","pct":0,"rag":"Green","dependencies":"SOM network","compliance":"N/A","notes":"VH Dissector install in Anatomy Lab 5/28-30; 2nd-phase network management"},{"id":"P-030","name":"SOM Network Implementation","phase":"Stabilization","portfolio":"SOM Infrastructure","sponsor":"Kalindra McRae","itOwner":"Jason Joseph","start":"2026-06-01","end":"2027-03-31","pct":10,"rag":"Yellow","dependencies":"Wireless refresh dependencies","compliance":"GLBA","notes":"Racks ordered; change orders; Next Steps active early June \u2014 in build"},{"id":"P-031","name":"SOM AV Implementation","phase":"Stabilization","portfolio":"SOM Infrastructure","sponsor":"Kalindra McRae","itOwner":"Isaiah Noffitz","start":"2026-06-01","end":"2027-03-31","pct":10,"rag":"Yellow","dependencies":"SOM network","compliance":"N/A","notes":"Infinite AV/Kontek site survey; simulation + Dante VLANs required (6/2)"},{"id":"P-032","name":"Cisco ISE \u2014 Network Access Control Implementation","phase":"In-Flight","portfolio":"Infrastructure","sponsor":"Jason Greene","itOwner":"Jason Joseph","start":"2026-09-01","end":"2027-06-30","pct":0,"rag":"Red","dependencies":"Wireless refresh; Entra","compliance":"GLBA","notes":"No current ISE capability \u2014 gap flagged"},{"id":"P-033","name":"Wireless Infrastructure Refresh (Cisco AP EoL)","phase":"Planning","portfolio":"Infrastructure","sponsor":"Jason Greene","itOwner":"Jason Joseph","start":"2026-07-01","end":"2027-03-31","pct":5,"rag":"Green","dependencies":"C9120AXI-B EoS 3/30/2026","compliance":"N/A","notes":"Wireless expertise gap flagged"},{"id":"P-034","name":"M365 Governance Remediation (Orphaned Teams/Groups)","phase":"Planning","portfolio":"Security & Identity","sponsor":"Suzanne Blum Malley","itOwner":"Jason Greene","start":"2026-04-01","end":"2026-09-30","pct":50,"rag":"Green","dependencies":"PowerShell scripts; SharePoint","compliance":"FERPA","notes":"Tenant audit complete; remediation in progress"},{"id":"P-035","name":"Identity & Onboarding Modernization \u2014 Ethos Identity","phase":"In-Flight","portfolio":"Security & Identity","sponsor":"Dawn Ausborn; Jason Greene","itOwner":"Jason Greene","start":"2026-05-01","end":"2027-03-31","pct":15,"rag":"Green","dependencies":"Paycom SoR; Ethos Identity","compliance":"FERPA; GLBA","notes":"Ready to cut over HR onboarding workflow to Colleague from Jenzabar; event-driven target; sponsored portal for non-employees"},{"id":"P-037","name":"Data Governance \u2014 Operationalization (DGC, Stewards)","phase":"In-Flight","portfolio":"Governance","sponsor":"Jason Greene","itOwner":"Jason Greene","start":"2026-01-15","end":"2026-09-30","pct":55,"rag":"Green","dependencies":"DGC tiered structure","compliance":"FERPA; GLBA","notes":"Data Governance Program Charter v1.1 in review with comments (4/30-5/21); stewards onboarding"},{"id":"P-038","name":"AI Governance \u2014 Operationalization (Intake, Reviews)","phase":"Planning","portfolio":"Governance","sponsor":"Suzanne Blum Malley","itOwner":"Jason Greene","start":"2026-05-01","end":"2026-10-31","pct":25,"rag":"Green","dependencies":"AI System Request Form","compliance":"N/A","notes":"Intake workflow and review cadence"},{"id":"P-039","name":"Jenzabar / myMU Sunset","phase":"Planning","portfolio":"Colleague SaaS","sponsor":"Dawn Ausborn","itOwner":"Jason Greene","start":"2026-07-01","end":"2027-12-31","pct":10,"rag":"Green","dependencies":"Colleague SaaS cutover; historical migration","compliance":"FERPA","notes":"Dependent on Colleague Financial Aid go-live"},{"id":"P-040","name":"Ethos Data Connect \u2014 Platform Build-Out","phase":"Closed","portfolio":"Data & Integration","sponsor":"Jason Greene","itOwner":"Jason Greene","start":"2025-10-01","end":"2026-12-31","pct":100,"rag":"Green","dependencies":"Ellucian Insights; Ethos APIs","compliance":"FERPA","notes":"Multi-pipeline platform"},{"id":"P-042","name":"EBSCO Dyna AI","phase":"Planning","portfolio":"Enterprise Apps","sponsor":"TBD (Library/Academic)","itOwner":"Jason Greene","start":"2026-08-01","end":"2026-12-31","pct":0,"rag":"Green","dependencies":"EBSCO; SSO","compliance":"FERPA","notes":"DynaMed/Dyna AI pricing for med students; routed to IT Governance (6/5)"},{"id":"P-043","name":"Simpli5 \u2014 Implementation","phase":"Planning","portfolio":"Enterprise Apps","sponsor":"TBD (HR/Academic)","itOwner":"Jason Greene","start":"2026-08-01","end":"2026-12-31","pct":0,"rag":"Green","dependencies":"SSO","compliance":"N/A","notes":"Contract-approval request via Smartsheet; in IT Governance (5/25)"},{"id":"P-044","name":"Get Connected \u2014 Community Engagement Platform","phase":"Planning","portfolio":"Enterprise Apps","sponsor":"Quincy Malloy","itOwner":"Jason Greene","start":"2026-09-01","end":"2027-03-31","pct":0,"rag":"Green","dependencies":"SSO; data feed (TBD)","compliance":"FERPA","notes":"HECVAT + standard agreement sent 5/21 (Galaxy Digital); IT eval meeting scheduled"},{"id":"P-045","name":"Softdocs / Etrieve Forms \u2014 Premier+ Managed Services","phase":"In-Flight","portfolio":"Enterprise Apps","sponsor":"Jennifer Dumond","itOwner":"Jason Greene","start":"2024-12-20","end":"","pct":null,"rag":"Yellow","dependencies":"Colleague dept-chair data normalization; Softdocs","compliance":"FERPA","notes":"Existing Softdocs/Etrieve platform (MSA signed Dec 2024; Premier+ managed services ~$45K/yr, 112 hrs/yr). Current build: Faculty Overload & Student Employment agreement forms (Russ Bates/Softdocs; Ben Sochor on Colleague data); Work-Study Eligibility next. Blocker: dept-chair data normalization, business-rule override due 6/11. Parallel to P-003 Ellucian Forms/EIP"},{"id":"P-046","name":"Panopto \u2014 Lecture Capture","phase":"Planning","portfolio":"Enterprise Apps","sponsor":"TBD","itOwner":"Jason Greene","start":"","end":"","pct":0,"rag":"Green","dependencies":"","compliance":"N/A","notes":"IT request submitted; tech-infra/security docs provided 6/1 \u2014 intake. Quote: $7,500/yr +$1K/yr over 3 yrs, MUSOM + Methodist"}];
+let PROJECTS = [];
+let JIRA_PROJECTS = [];   // [{key,name,issueTypes:[...]}] from the proxy
+let JIRA_READY = false;   // true once the proxy answers (enables edit/create)
 
 /* ---------------- State ---------------- */
 const state = { view: "board", search: "", portfolio: "", phase: "", rag: "", owner: "", sortKey: "id", sortDir: 1 };
@@ -594,6 +602,7 @@ function modalViewBody(p, timing){
         <div class="v">${p.pct==null?"Not tracked":p.pct+"% complete"}</div>
         <div class="big-prog"><div style="width:${p.pct||0}%"></div></div>
       </div>
+      ${p.projectId?`<div class="field"><div class="k">Project ID</div><div class="v">${esc(p.projectId)}</div></div>`:""}
       <div class="field"><div class="k">Business Sponsor</div><div class="v">${esc(p.sponsor||"—")}</div></div>
       <div class="field"><div class="k">IT Owner</div><div class="v">${esc(p.itOwner||"—")}</div></div>
       <div class="field"><div class="k">Target End</div><div class="v">${fmtDate(p.end)}${timing}</div></div>
@@ -779,12 +788,30 @@ function populateFilters(){
 
 /* ---------------- Main render ---------------- */
 function render(){
+  if (!PROJECTS.length){ renderEmpty(); return; }
   const list = filtered();
   renderKpis();
   renderCharts();
   if (state.view==="board") { $("#boardView").classList.remove("hidden"); $("#tableView").classList.add("hidden"); renderBoard(list); }
   else { $("#tableView").classList.remove("hidden"); $("#boardView").classList.add("hidden"); renderTable(list); }
   $("#resultCount").textContent = `${list.length} of ${PROJECTS.length} projects`;
+  $("#asOf").textContent = META.asOf || "—";
+}
+
+function renderEmpty(){
+  $("#kpis").innerHTML = "";
+  ["#chartPhase","#chartPortfolio","#chartRag"].forEach(s=>{ const el=$(s); if(el) el.innerHTML=""; });
+  $("#tableView").classList.add("hidden");
+  $("#boardView").classList.remove("hidden");
+  const msg = JIRA_READY
+    ? `Pick a project above and click <b>Load from Jira</b>, create a <b>New work item</b>, or import a spreadsheet.`
+    : `Start the proxy (<code>start.bat</code> / <code>node server.js</code>) to load live from Jira, or click <b>Update from spreadsheet</b> to import a one-time <code>.xlsx</code>/<code>.csv</code>.`;
+  $("#boardView").innerHTML =
+    `<div style="text-align:center;color:var(--muted);padding:64px 20px;border:1px dashed var(--border);border-radius:var(--radius);background:var(--panel)">
+       <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">No projects loaded</div>
+       <div style="font-size:13px;max-width:520px;margin:0 auto;line-height:1.6">${msg}</div>
+     </div>`;
+  $("#resultCount").textContent = "0 projects";
   $("#asOf").textContent = META.asOf || "—";
 }
 
@@ -980,23 +1007,119 @@ async function handleFile(file){
   }
 }
 
+/* ---------------- Discover Jira projects (via proxy) ---------------- */
+async function initJira(){
+  try{
+    const res = await fetch("/api/jira/projects", { headers:{ "Accept":"application/json" } });
+    if(!res.ok) return;                       // no auth / server error → stay on empty state
+    const data = await res.json();
+    JIRA_PROJECTS = data.projects || [];
+    if(!JIRA_PROJECTS.length) return;
+    JIRA_READY = true;
+    const sel = $("#jiraProject");
+    sel.innerHTML = JIRA_PROJECTS.map(p=>`<option value="${esc(p.key)}">${esc(p.key)} — ${esc(p.name)}</option>`).join("");
+    if (data.default && JIRA_PROJECTS.some(p=>p.key===data.default)) sel.value = data.default;
+    sel.style.display = "";
+    $("#newItemBtn").style.display = "";
+    await loadFromJira();                      // auto-load the selected project
+  }catch(e){ /* offline or file:// — empty state already shown */ }
+}
+
 /* ---------------- Load live from Jira (via proxy) ---------------- */
 async function loadFromJira(){
+  const proj = $("#jiraProject").value || "";
   showToast("Loading from Jira…");
   try{
-    const res = await fetch("/api/projects", { headers:{ "Accept":"application/json" } });
+    const url = "/api/projects" + (proj ? `?project=${encodeURIComponent(proj)}` : "");
+    const res = await fetch(url, { headers:{ "Accept":"application/json" } });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || ("HTTP "+res.status));
-    if (!data.projects || !data.projects.length) throw new Error("Jira returned no projects.");
-    PROJECTS = data.projects;
-    META.asOf = (data.asOf || new Date().toISOString().slice(0,10)) + " (Jira live)";
+    PROJECTS = data.projects || [];
+    META.asOf = (data.asOf || new Date().toISOString().slice(0,10)) + ` (Jira: ${proj||"live"})`;
     populateFilters(); render();
-    showToast(`Loaded ${PROJECTS.length} projects live from Jira`);
+    showToast(PROJECTS.length ? `Loaded ${PROJECTS.length} projects from ${proj||"Jira"}` : `${proj||"Jira"} has no top-level projects yet`, false, PROJECTS.length>0);
   } catch(e){
     console.error(e);
     const hint = /Failed to fetch|NetworkError|JSON/i.test(String(e)) ?
       "Start the proxy first: node dashboard/server.js (with JIRA_* env vars set)." : e.message;
     showToast("Jira load failed: "+hint, true);
+  }
+}
+
+/* ---------------- Create a new work item ---------------- */
+function openCreate(){
+  if(!JIRA_READY){ showToast("Connect to Jira first (start the proxy).", true); return; }
+  const proj = JIRA_PROJECTS.find(p=>p.key===$("#jiraProject").value) || JIRA_PROJECTS[0];
+  const types = (proj && proj.issueTypes && proj.issueTypes.length) ? proj.issueTypes : ["Task"];
+  const typeOpts  = types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("");
+  const phaseOpts = ["Planning","In-Flight","Stabilization","Closed"].map(ph=>`<option value="${ph}">${ph}</option>`).join("");
+  const ragOpts   = ["Green","Yellow","Red"].map(r=>`<option value="${r}"${r==="Green"?" selected":""}>${r}</option>`).join("");
+  $("#modal").innerHTML = `
+    <div class="modal-head">
+      <div class="mh-top">
+        <div><span class="m-id">New work item</span><h2>in ${esc(proj?proj.key:"")}</h2></div>
+        <button class="modal-close" id="mClose">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="edit-grid">
+        <div class="edit-field full"><label>Name / Summary *</label><input id="nName" type="text" placeholder="Project or work item name" /></div>
+        <div class="edit-field"><label>Issue type</label><select id="nType">${typeOpts}</select></div>
+        <div class="edit-field"><label>Phase</label><select id="nPhase">${phaseOpts}</select></div>
+        <div class="edit-field"><label>RAG Status</label><select id="nRag">${ragOpts}</select></div>
+        <div class="edit-field"><label>Portfolio</label><input id="nPortfolio" type="text" placeholder="e.g. Infrastructure" /></div>
+        <div class="edit-field"><label>Business Sponsor</label><input id="nSponsor" type="text" placeholder="Sponsor name" /></div>
+        <div class="edit-field"><label>Compliance Driver</label><input id="nCompliance" type="text" placeholder="e.g. FERPA; GLBA" /></div>
+        <div class="edit-field"><label>Project ID</label><input id="nProjectId" type="text" placeholder="e.g. P-001" /></div>
+        <div class="edit-field"><label>Target End</label><input id="nEnd" type="date" /></div>
+        <div class="edit-field"><label>Start Date</label><input id="nStart" type="date" /></div>
+        <div class="edit-field full"><label>Notes / Next Milestone</label><textarea id="nNotes" placeholder="Notes"></textarea></div>
+      </div>
+      <div class="edit-actions">
+        <button class="btn-save" id="nSave"><span id="nSaveIcon">＋</span> Create in Jira</button>
+        <button class="btn" id="nCancel">Cancel</button>
+        <span id="nStatus" style="font-size:12px;color:var(--muted);margin-left:4px"></span>
+      </div>
+    </div>`;
+  $("#overlay").classList.add("open");
+  $("#mClose").addEventListener("click", closeModal);
+  $("#nCancel").addEventListener("click", closeModal);
+  $("#nSave").addEventListener("click", submitCreate);
+  $("#nName").focus();
+}
+
+async function submitCreate(){
+  const proj = $("#jiraProject").value || "";
+  const body = {
+    name:       $("#nName").value.trim(),
+    issueType:  $("#nType").value,
+    phase:      $("#nPhase").value,
+    rag:        $("#nRag").value,
+    portfolio:  $("#nPortfolio").value.trim(),
+    sponsor:    $("#nSponsor").value.trim(),
+    compliance: $("#nCompliance").value.trim(),
+    projectId:  $("#nProjectId").value.trim(),
+    end:        $("#nEnd").value,
+    start:      $("#nStart").value,
+    notes:      $("#nNotes").value.trim(),
+  };
+  if(!body.name){ showToast("Name is required.", true); $("#nName").focus(); return; }
+  const btn=$("#nSave"), icon=$("#nSaveIcon"), status=$("#nStatus");
+  btn.disabled=true; icon.className="saving-spin"; icon.textContent="↻"; status.textContent="Creating…";
+  try{
+    const res = await fetch("/api/projects"+(proj?`?project=${encodeURIComponent(proj)}`:""), {
+      method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body),
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || ("HTTP "+res.status));
+    closeModal();
+    showToast(`Created ${data.key}`+(data.degradedToLabels?" (metadata stored as labels)":""), false, true);
+    await loadFromJira();   // refresh so the new item appears
+  }catch(e){
+    console.error(e);
+    icon.className=""; icon.textContent="＋"; btn.disabled=false; status.textContent="";
+    const hint=/Failed to fetch|NetworkError/i.test(String(e))?"Start the proxy first.":e.message;
+    showToast("Create failed: "+hint, true);
   }
 }
 
@@ -1016,6 +1139,8 @@ $("#viewSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",(
   render();
 }));
 $("#jiraBtn").addEventListener("click", loadFromJira);
+$("#jiraProject").addEventListener("change", loadFromJira);
+$("#newItemBtn").addEventListener("click", openCreate);
 $("#uploadBtn").addEventListener("click", ()=>$("#fileInput").click());
 $("#fileInput").addEventListener("change", e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); e.target.value=""; });
 $("#exportBtn").addEventListener("click", exportCSV);
@@ -1028,6 +1153,7 @@ window.addEventListener("drop", e=>{ e.preventDefault(); if(e.dataTransfer.files
 
 populateFilters();
 render();
+initJira();   // discover Jira projects, then auto-load the default one
 </script>
 </body>
 </html>

@@ -236,6 +236,38 @@ async function applyTransition(key, targetPhase) {
   return match.name;
 }
 
+// Build a Jira `fields` payload from a change body.
+//   mode "fields" → write VPMO data to custom fields where they exist;
+//   mode "labels" → force VPMO data into labels (universal fallback).
+// Non-VPMO labels on the issue are always preserved.
+function buildWritePayload(body, existingLabels, mode) {
+  const PREFIXES = ["rag:", "portfolio:", "compliance:", "sponsor:"];
+  const labels = (existingLabels || []).filter(l => !PREFIXES.some(p => l.toLowerCase().startsWith(p)));
+  const fields = {};
+  for (const key of VPMO_KEYS) {
+    if (!(key in body)) continue;
+    const val = body[key];
+    if (mode === "fields" && hasField(key)) { writeVpmo(fields, key, val); continue; }
+    if (key in LABEL_KEYS && val && val !== "N/A") {              // label fallback
+      const v = String(val).trim().replace(/;\s*/g, ";").replace(/ /g, "_");
+      labels.push(`${LABEL_KEYS[key]}:${v}`);
+    }
+  }
+  fields.labels = labels;
+  if ("end"   in body) fields.duedate           = body.end   || null;
+  if ("notes" in body) fields.description        = textToAdf(body.notes);
+  if ("name"  in body) fields.summary            = body.name;
+  if ("start" in body) fields[FIELDS.startDate]  = body.start || null;
+  return fields;
+}
+function putIssue(key, fields) {
+  return fetch(`${CONFIG.baseUrl}/rest/api/3/issue/${key}`, {
+    method: "PUT",
+    headers: { Authorization: authHeader(), "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ fields }),
+  });
+}
+
 async function handlePatch(key, body) {
   // Fetch current labels so we preserve any non-VPMO ones.
   const r = await fetch(`${CONFIG.baseUrl}/rest/api/3/issue/${key}?fields=labels`, {
@@ -243,30 +275,83 @@ async function handlePatch(key, body) {
   });
   if (!r.ok) throw new Error(`Could not fetch issue ${key}: ${r.status}`);
   const issue = await r.json();
-  const VPMO = ["rag:", "portfolio:", "compliance:", "sponsor:"];
-  let labels = (issue.fields.labels || []).filter(l => !VPMO.some(p => l.toLowerCase().startsWith(p)));
-  if (body.rag)        labels.push(`rag:${body.rag}`);
-  if (body.portfolio)  labels.push(`portfolio:${body.portfolio.trim().replace(/ /g, "_")}`);
-  if (body.compliance && body.compliance !== "N/A")
-    labels.push(`compliance:${body.compliance.trim().replace(/;\s*/g, ";")}`);
+  const existingLabels = issue.fields.labels || [];
 
-  const fields = { labels };
-  if ("end"   in body) fields.duedate     = body.end   || null;
-  if ("notes" in body) fields.description = textToAdf(body.notes);
-
-  const pr = await fetch(`${CONFIG.baseUrl}/rest/api/3/issue/${key}`, {
-    method: "PUT",
-    headers: { Authorization: authHeader(), "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ fields }),
-  });
+  // Prefer custom fields; if the write fails (e.g. a VPMO field isn't on this
+  // project's edit screen) retry once with everything stored as labels.
+  const usingFields = VPMO_KEYS.some(k => k in body && hasField(k));
+  let degradedToLabels = false;
+  let pr = await putIssue(key, buildWritePayload(body, existingLabels, usingFields ? "fields" : "labels"));
+  if (!pr.ok && usingFields) {
+    pr = await putIssue(key, buildWritePayload(body, existingLabels, "labels"));
+    degradedToLabels = pr.ok;
+  }
   if (!pr.ok) {
     const err = await pr.text();
     throw new Error(`Jira field update ${pr.status}: ${err.slice(0, 300)}`);
   }
 
   const transitionApplied = "phase" in body ? await applyTransition(key, body.phase) : null;
-  cache = { at: 0, data: null }; // bust cache so next GET is fresh
-  return { transitionApplied };
+  bustCache(); // next GET is fresh
+  return { transitionApplied, degradedToLabels };
+}
+
+/* ---- create a new work item from the dashboard ---------------------- */
+async function createIssue(projectKey, body) {
+  const proj = projectKey || CONFIG.project;
+  if (!body || !body.name || !body.name.trim()) throw new Error("A name/summary is required.");
+
+  // Step 1: create with widely-available native fields only (max compatibility
+  // with whatever create screen the project uses).
+  const createFields = {
+    project:   { key: proj },
+    issuetype: { name: (body.issueType || "Task") },
+    summary:   body.name.trim(),
+  };
+  if (body.notes) createFields.description       = textToAdf(body.notes);
+  if (body.end)   createFields.duedate           = body.end;
+  if (body.start) createFields[FIELDS.startDate]  = body.start;
+
+  const cr = await fetch(`${CONFIG.baseUrl}/rest/api/3/issue`, {
+    method: "POST",
+    headers: { Authorization: authHeader(), "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ fields: createFields }),
+  });
+  if (!cr.ok) { const e = await cr.text(); throw new Error(`Jira create ${cr.status}: ${e.slice(0, 300)}`); }
+  const created = await cr.json();
+  const key = created.key;
+
+  // Step 2: apply VPMO metadata + phase through the same fallback path as edits.
+  const patchBody = {};
+  for (const k of [...VPMO_KEYS, "phase"]) if (k in body && body[k] != null && body[k] !== "") patchBody[k] = body[k];
+  let extra = {};
+  if (Object.keys(patchBody).length) {
+    try { extra = await handlePatch(key, patchBody); }
+    catch (e) { extra = { patchError: String(e.message || e) }; } // issue exists; metadata can be fixed later
+  }
+  bustCache();
+  return { key, url: `${CONFIG.baseUrl}/browse/${key}`, ...extra };
+}
+
+/* ---- list visible Jira projects (for the dashboard picker) ---------- */
+async function getJiraProjects() {
+  const out = [];
+  let startAt = 0;
+  for (;;) {
+    const res = await fetch(`${CONFIG.baseUrl}/rest/api/3/project/search?maxResults=50&startAt=${startAt}&orderBy=key&expand=issueTypes`, {
+      headers: { Authorization: authHeader(), Accept: "application/json" },
+    });
+    if (!res.ok) { const e = await res.text(); throw new Error(`Jira projects ${res.status}: ${e.slice(0, 200)}`); }
+    const data = await res.json();
+    (data.values || []).forEach(p => out.push({
+      key: p.key,
+      name: p.name,
+      issueTypes: (p.issueTypes || []).filter(t => !t.subtask).map(t => t.name),
+    }));
+    if (data.isLast || !data.values || !data.values.length) break;
+    startAt += data.values.length;
+  }
+  return out;
 }
 
 /* ---- comments -------------------------------------------------------- */
@@ -294,20 +379,48 @@ async function postComment(key, text) {
   return { author: (c.author && c.author.displayName) || "You", created: c.created, text };
 }
 
-let cache = { at: 0, data: null };
-async function getProjects() {
-  if (cache.data && Date.now() - cache.at < CONFIG.cacheMs) return cache.data;
-  const jql = CONFIG.jql || `project = ${CONFIG.project} ORDER BY created DESC`;
+let caches = {};                    // keyed by JQL so each project caches independently
+function bustCache() { caches = {}; }
+async function getProjects(projectKey) {
+  // An explicit project selection always wins; otherwise use the configured
+  // JQL/default project.
+  const jql = projectKey
+    ? `project = "${String(projectKey).replace(/"/g, "")}" ORDER BY created DESC`
+    : (CONFIG.jql || `project = ${CONFIG.project} ORDER BY created DESC`);
+  const c = caches[jql];
+  if (c && Date.now() - c.at < CONFIG.cacheMs) return c.data;
+  const vpmoFieldIds = VPMO_KEYS.map(k => VPMO.ids && VPMO.ids[k]).filter(Boolean);
   const fields = ["summary", "status", "issuetype", "assignee", "reporter",
-    "duedate", "labels", "parent", "issuelinks", "description", FIELDS.startDate];
+    "duedate", "labels", "parent", "issuelinks", "description", FIELDS.startDate, ...vpmoFieldIds];
   const issues = await jiraSearch(jql, fields);
-  const data = { asOf: new Date().toISOString().slice(0, 10), source: jql, projects: mapIssues(issues) };
-  cache = { at: Date.now(), data };
+  const data = {
+    asOf: new Date().toISOString().slice(0, 10),
+    source: jql,
+    project: projectKey || CONFIG.project,
+    projects: mapIssues(issues),
+  };
+  caches[jql] = { at: Date.now(), data };
   return data;
 }
 
 /* ---- HTTP server ----------------------------------------------------- */
 const server = http.createServer(async (req, res) => {
+  // GET /api/jira/projects — list visible Jira projects for the picker
+  if (req.url.startsWith("/api/jira/projects")) {
+    if (!CONFIG.email || !CONFIG.token) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ error: "Set JIRA_EMAIL and JIRA_TOKEN environment variables." }));
+    }
+    try {
+      const projects = await getJiraProjects();
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      res.end(JSON.stringify({ projects, default: CONFIG.project }));
+    } catch (e) {
+      res.writeHead(502, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(e.message || e) }));
+    }
+    return;
+  }
   if (req.url.startsWith("/api/projects")) {
     if (!CONFIG.email || !CONFIG.token) {
       res.writeHead(500, { "Content-Type": "application/json" });
@@ -344,6 +457,23 @@ const server = http.createServer(async (req, res) => {
         return;
       }
     }
+    // POST /api/projects[?project=KEY]  — create a new work item
+    if (req.method === "POST") {
+      const projectKey = new URL(req.url, "http://localhost").searchParams.get("project") || "";
+      let raw = "";
+      req.on("data", d => raw += d);
+      req.on("end", async () => {
+        try {
+          const result = await createIssue(projectKey, JSON.parse(raw));
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(502, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: String(e.message || e) }));
+        }
+      });
+      return;
+    }
     // PATCH /api/projects/:key  — write changes back to Jira
     if (req.method === "PATCH") {
       const key = req.url.replace(/^\/api\/projects\//, "").split("?")[0];
@@ -361,9 +491,10 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
-    // GET /api/projects
+    // GET /api/projects[?project=KEY]
     try {
-      const data = await getProjects();
+      const projectKey = new URL(req.url, "http://localhost").searchParams.get("project") || "";
+      const data = await getProjects(projectKey);
       res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
       res.end(JSON.stringify(data));
     } catch (e) {
@@ -392,4 +523,4 @@ if (require.main === module) {
 }
 
 // Exported for testing without a live Jira connection.
-module.exports = { mapIssues, phaseFor, deriveRag, adfToText, textToAdf, labelValue, applyTransition, handlePatch, getComments, postComment };
+module.exports = { mapIssues, phaseFor, deriveRag, adfToText, textToAdf, labelValue, readVpmo, writeVpmo, buildWritePayload, applyTransition, handlePatch, createIssue, getJiraProjects, getProjects, getComments, postComment };

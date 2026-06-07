@@ -1,8 +1,12 @@
 # MU VPMO — Program Management Dashboard
 
 An interactive, single-file dashboard for the Methodist University VPMO program
-plan. Open `dashboard/index.html` in any modern browser — no server, build step,
-or internet connection required.
+plan. **Jira is the system of record:** the dashboard starts empty and loads
+live from any Jira project you pick, and you can edit items and create new work
+items straight from the page. A one-time spreadsheet import is also supported.
+
+There's no build step and no dependencies — `index.html` is plain HTML/JS and
+`server.js` is a zero-dependency Node proxy that holds your Jira token.
 
 ## What it shows
 
@@ -49,9 +53,27 @@ The header row should contain (names are matched case-insensitively):
 
 ## Live data from Jira
 
-The dashboard can pull **live** from Jira via a tiny built-in proxy
-(`server.js`). The proxy holds your Jira API token server-side, so the browser
-never sees credentials and there are no CORS issues.
+The dashboard pulls **live** from Jira via a tiny built-in proxy (`server.js`).
+The proxy holds your Jira API token server-side, so the browser never sees
+credentials and there are no CORS issues.
+
+### Pulling from any project
+
+When the proxy is running, a **project picker** appears in the header, populated
+with every Jira project you can see. Pick one and the board reloads from it;
+each project caches independently for 60s. The default selection comes from
+`JIRA_PROJECT` (falls back to `ITPM`). "Projects" on the board are top-level
+issues (Epics and any Story/Task without a parent); sub-tasks roll up into their
+parent's percentage.
+
+### Creating a work item
+
+With the proxy running, click **New work item** to create an issue directly in
+the selected project. Choose the issue type (the dropdown lists the types that
+project actually offers), set name, phase, RAG, portfolio, sponsor, compliance,
+Project ID, dates, and notes, then **Create in Jira**. The issue is created with
+native fields first, then VPMO metadata is applied (custom fields where present,
+labels otherwise), and the board refreshes so the new item appears.
 
 ### Running it
 
@@ -81,27 +103,51 @@ Node 18+ required (uses built-in `fetch`). Responses are cached for 60s
 
 | Dashboard field | Jira source |
 |---|---|
-| Project / ID | issue `summary` / issue key |
+| Name | issue `summary` |
+| Key | issue key (used for write-back; shown in the detail header) |
 | Notes | `description` (ADF flattened to text) |
 | IT Owner | `assignee` |
-| Business Sponsor | label `sponsor:Name`, else `reporter` |
 | Start Date | `customfield_10015` ("Start date") |
 | Target End | `duedate` |
 | Phase | `status` → Planning / In-Flight / Stabilization / Closed |
-| % Complete | rolled up from child-issue completion (else status) |
 | Dependencies | linked issues (`issuelinks`) |
-| RAG | label `rag:Red\|Yellow\|Green`, else **derived** from schedule |
-| Portfolio | label `portfolio:Name`, else issue type |
-| Compliance | label `compliance:FERPA;GLBA`, else `N/A` |
+| RAG | **VPMO field** → label `rag:…` → **derived** from schedule |
+| Portfolio | **VPMO field** → label `portfolio:…` → issue type |
+| Compliance | **VPMO field** → label `compliance:…` → `N/A` |
+| Business Sponsor | **VPMO field** → label `sponsor:…` → `reporter` |
+| Project ID | **VPMO field** (e.g. P-001), else blank |
+| % Complete | child-issue rollup → **VPMO field** → status |
 
-Jira has no native RAG / Portfolio / Compliance fields, so those are read from
-**labels** if you add them (e.g. `portfolio:Infrastructure`, `rag:Yellow`,
-`compliance:GLBA`). Until then, RAG is derived from schedule (overdue → Red;
-due within 30 days and < 50% complete → Yellow; otherwise Green) and Portfolio
-falls back to the issue type. "Projects" are top-level issues (Epics and any
-Story/Task without a parent); child issues roll up into their parent's
-percentage. Adjust the mapping in the `FIELDS` / `PHASE_MAP` blocks at the top
-of `server.js`.
+Each VPMO row uses a **fallback chain**: the custom field value wins; if it's
+empty it reads the legacy label; if that's missing it derives a sensible default
+(RAG from schedule — overdue → Red; due within 30 days and < 50% → Yellow; else
+Green). This means the dashboard works at every stage of Jira buildout — no
+fields, labels only, or full custom fields all render correctly.
+
+### Creating the VPMO custom fields (one-time)
+
+Jira has no native RAG / Portfolio / Compliance / Sponsor / Project ID fields.
+Run the setup script **once** to create them as proper typed custom fields:
+
+```bash
+export JIRA_BASE_URL="https://methodist.atlassian.net"
+export JIRA_EMAIL="jgreene@methodist.edu"
+export JIRA_TOKEN="<Atlassian API token>"
+node dashboard/setup-jira-fields.js
+```
+
+It creates six fields (RAG as a select with Green/Yellow/Red; the rest as
+text/number), skips any that already exist, and writes `dashboard/vpmo-fields.json`
+with their IDs. Restart `server.js` to pick them up — from then on the dashboard
+reads and writes those fields directly.
+
+Custom-field IDs are **global to the Jira site**, so one `vpmo-fields.json` works
+across every project. What varies per project is *availability* (a global field
+must be added to a project's screens before you can write to it). The proxy
+handles this automatically: writes go to the custom field, and if a project
+rejects it (field not on screen) the proxy retries the write as a label. Without
+`vpmo-fields.json` at all, everything falls back to labels. Adjust the mapping in
+the `FIELDS` / `VPMO` / `PHASE_MAP` blocks at the top of `server.js`.
 
 ## Editing and commenting
 
@@ -114,18 +160,17 @@ controls are hidden in spreadsheet mode, since there's no issue to update.)
 | Field | Writes to Jira as |
 |---|---|
 | Phase | a **status transition** (matched to your workflow by name, then status category) |
-| RAG | `rag:` label |
+| RAG | VPMO RAG custom field, else `rag:` label |
 | Target End | `duedate` |
-| Portfolio | `portfolio:` label |
-| Compliance | `compliance:` label |
+| Portfolio | VPMO Portfolio custom field, else `portfolio:` label |
+| Compliance | VPMO Compliance custom field, else `compliance:` label |
 | Notes | `description` |
 
 Click **Save to Jira**. Only fields you actually changed are sent (no needless
 writes), existing non-VPMO labels are preserved, and the board/table update
 immediately. The confirmation shows which workflow transition was applied
-(e.g. *"Saved to Jira — status → Done"*). IT Owner and Sponsor are shown
-read-only because changing them needs a Jira user-account lookup; edit those in
-Jira directly.
+(e.g. *"Saved to Jira — status → Done"*). IT Owner is shown read-only because
+changing it needs a Jira user-account lookup; edit it in Jira directly.
 
 **Comment on a work item** — the **Comments** section lists existing Jira
 comments (author + timestamp) and has a box to add a new one. Posting writes the
@@ -138,11 +183,12 @@ original column headers — handy for sharing a slice (e.g. all Red projects).
 
 ## Data sources
 
-- **Spreadsheet** (default, baked in): `MU_VPMO_Program_Plan_v4.xlsx`, data as of
-  2026-05-21 — the curated VPMO executive view (42 projects).
-- **Jira live** (`ITPM` via the proxy): the IT Project Management portfolio.
+- **Jira live** (primary): any project you select in the header picker, via the
+  proxy. Defaults to `JIRA_PROJECT` (or `ITPM`).
+- **Spreadsheet** (one-time import): use **Update from spreadsheet** to load an
+  `.xlsx`/`.csv` export — handy for the initial migration before the data lives
+  in Jira.
 
-Note these are *different sets*: the spreadsheet is the curated program plan,
-while ITPM holds IT infrastructure/security delivery work. The broader
-Colleague / Element451 / EAB program epics live in the **EPM** project — set
-`JIRA_PROJECT=EPM` (or a custom `JIRA_JQL`) to pull those instead.
+The intended workflow is: stand the dashboard up against Jira, run
+`setup-jira-fields.js` once, import or create your projects, and from then on
+Jira is the single source of record — the spreadsheet is no longer needed.
