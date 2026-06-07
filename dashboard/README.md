@@ -53,6 +53,12 @@ never sees credentials and there are no CORS issues.
 
 ### Running it
 
+**Windows — easiest:** double-click **`start.bat`**. It checks for Node, asks
+for your Atlassian API token the first time (and can save it to a git-ignored
+`jira-credentials.bat`), starts the server, and opens your browser.
+
+**Any platform — manual:**
+
 ```bash
 export JIRA_BASE_URL="https://methodist.atlassian.net"
 export JIRA_EMAIL="jgreene@methodist.edu"
