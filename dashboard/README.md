@@ -12,16 +12,16 @@ There's no build step and no dependencies — `index.html` is plain HTML/JS and
 
 - **KPI cards** — total/active projects, average % complete (active), Red &
   Yellow counts, projects due within 90 days, and overdue projects.
-- **Charts** — projects by phase, active projects by portfolio, and a RAG-status
+- **Charts** — projects by phase, active projects by portfolio, and a Risk-status
   donut. Click any bar or legend item to filter the whole dashboard.
 - **Board view** — a Kanban board grouped by phase (Planning → In-Flight →
-  Stabilization → Closed), with RAG color-coding, progress bars, and
+  Stabilization → Closed), with Risk color-coding, progress bars, and
   overdue/due-soon badges.
 - **Table view** — every column from the plan, sortable by clicking headers,
   with inline progress bars and dependency hints.
 - **Project detail** — click any card or row for full sponsor, owner, dates,
   dependencies, compliance driver, and the latest notes / next milestone.
-- **Filters** — search box plus portfolio, phase, RAG, and IT-owner dropdowns.
+- **Filters** — search box plus portfolio, phase, Risk, and IT-owner dropdowns.
 - **Edit & comment** (live Jira mode only) — change fields and post comments
   straight to the Jira issue. See [Editing and commenting](#editing-and-commenting).
 
@@ -43,13 +43,13 @@ maps columns by header name, so it tolerates added/reordered columns.
 The header row should contain (names are matched case-insensitively):
 
 `Project ID`, `Project Name`, `Phase`, `Portfolio`, `Business Sponsor`,
-`IT Owner`, `Start Date`, `Target End`, `% Complete`, `RAG`, `Dependencies`,
+`IT Owner`, `Start Date`, `Target End`, `% Complete`, `Risk`, `Dependencies`,
 `Compliance Driver`, `Notes / Next Milestone`.
 
 - `% Complete` accepts a fraction (`0.55`) or a percent (`55`).
 - Dates accept Excel serial numbers or any standard date string.
 - `Phase` values: Planning, In-Flight, Stabilization, Closed.
-- `RAG` values: Green, Yellow, Red.
+- `Risk` values: Green, Yellow, Red.
 
 ## Live data from Jira
 
@@ -70,7 +70,7 @@ parent's percentage.
 
 With the proxy running, click **New work item** to create an issue directly in
 the selected project. Choose the issue type (the dropdown lists the types that
-project actually offers), set name, phase, RAG, portfolio, sponsor, compliance,
+project actually offers), set name, phase, Risk, portfolio, sponsor, compliance,
 Project ID, dates, and notes, then **Create in Jira**. The issue is created with
 native fields first, then VPMO metadata is applied (custom fields where present,
 labels otherwise), and the board refreshes so the new item appears.
@@ -111,7 +111,7 @@ Node 18+ required (uses built-in `fetch`). Responses are cached for 60s
 | Target End | `duedate` |
 | Phase | `status` → Planning / In-Flight / Stabilization / Closed |
 | Dependencies | linked issues (`issuelinks`) |
-| RAG | **VPMO field** → label `rag:…` → **derived** from schedule |
+| Risk | **VPMO field** → label `risk:…` → **derived** from schedule |
 | Portfolio | **VPMO field** → label `portfolio:…` → issue type |
 | Compliance | **VPMO field** → label `compliance:…` → `N/A` |
 | Business Sponsor | **VPMO field** → label `sponsor:…` → `reporter` |
@@ -120,13 +120,13 @@ Node 18+ required (uses built-in `fetch`). Responses are cached for 60s
 
 Each VPMO row uses a **fallback chain**: the custom field value wins; if it's
 empty it reads the legacy label; if that's missing it derives a sensible default
-(RAG from schedule — overdue → Red; due within 30 days and < 50% → Yellow; else
+(Risk from schedule — overdue → Red; due within 30 days and < 50% → Yellow; else
 Green). This means the dashboard works at every stage of Jira buildout — no
 fields, labels only, or full custom fields all render correctly.
 
 ### Creating the VPMO custom fields (one-time)
 
-Jira has no native RAG / Portfolio / Compliance / Sponsor / Project ID fields.
+Jira has no native Risk / Portfolio / Compliance / Sponsor / Project ID fields.
 Run the setup script **once** to create them as proper typed custom fields:
 
 ```bash
@@ -136,7 +136,7 @@ export JIRA_TOKEN="<Atlassian API token>"
 node dashboard/setup-jira-fields.js
 ```
 
-It creates six fields (RAG as a select with Green/Yellow/Red; the rest as
+It creates six fields (Risk as a select with Green/Yellow/Red; the rest as
 text/number), skips any that already exist, and writes `dashboard/vpmo-fields.json`
 with their IDs. Restart `server.js` to pick them up — from then on the dashboard
 reads and writes those fields directly.
@@ -160,7 +160,7 @@ controls are hidden in spreadsheet mode, since there's no issue to update.)
 | Field | Writes to Jira as |
 |---|---|
 | Phase | a **status transition** (matched to your workflow by name, then status category) |
-| RAG | VPMO RAG custom field, else `rag:` label |
+| Risk | VPMO Risk custom field, else `risk:` label |
 | Target End | `duedate` |
 | Portfolio | VPMO Portfolio custom field, else `portfolio:` label |
 | Compliance | VPMO Compliance custom field, else `compliance:` label |

@@ -52,12 +52,12 @@ async function jira(method, endpoint, body) {
 
 /* ---- Field definitions --------------------------------------------------- */
 // These match the spreadsheet columns that have no proper Jira equivalent.
-// RAG uses a select so the three values stay consistent; the rest use text/number
+// Risk uses a select so the three values stay consistent; the rest use text/number
 // so the dashboard can write any value without hitting "option not found" errors.
 const WANTED = [
   {
-    key:          "rag",
-    name:         "VPMO RAG Status",
+    key:          "risk",
+    name:         "VPMO Risk Status",
     description:  "Red/Amber/Green project health indicator (Green | Yellow | Red)",
     type:         "com.atlassian.jira.plugin.system.customfieldtypes:select",
     searcherKey:  "com.atlassian.jira.plugin.system.customfieldtypes:multiselectsearcher",

@@ -136,9 +136,9 @@
     margin-bottom: 9px; cursor: pointer; transition: .12s; border-left: 3px solid var(--green);
   }
   .pcard:hover { transform: translateY(-1px); border-color: #3d4651; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
-  .pcard.rag-Green { border-left-color: var(--green); }
-  .pcard.rag-Yellow { border-left-color: var(--yellow); }
-  .pcard.rag-Red { border-left-color: var(--red); }
+  .pcard.risk-Green { border-left-color: var(--green); }
+  .pcard.risk-Yellow { border-left-color: var(--yellow); }
+  .pcard.risk-Red { border-left-color: var(--red); }
   .pcard .pc-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 5px; }
   .pcard .pc-id { font-size: 11px; color: var(--muted); font-weight: 600; font-family: ui-monospace, monospace; }
   .pcard .pc-name { font-size: 12.5px; font-weight: 600; line-height: 1.3; margin-bottom: 8px; }
@@ -307,7 +307,7 @@
   <section class="charts">
     <div class="card"><h3>Projects by Phase</h3><div id="chartPhase"></div></div>
     <div class="card"><h3>Active Projects by Portfolio <span class="hint">(excludes Closed)</span></h3><div id="chartPortfolio"></div></div>
-    <div class="card"><h3>RAG Status <span class="hint">(active)</span></h3><div id="chartRag"></div></div>
+    <div class="card"><h3>Risk Status <span class="hint">(active)</span></h3><div id="chartRag"></div></div>
   </section>
 
   <div class="toolbar">
@@ -317,7 +317,7 @@
     </div>
     <select class="filter" id="fPortfolio"><option value="">All portfolios</option></select>
     <select class="filter" id="fPhase"><option value="">All phases</option></select>
-    <select class="filter" id="fRag"><option value="">All RAG</option></select>
+    <select class="filter" id="fRag"><option value="">All Risk</option></select>
     <select class="filter" id="fOwner"><option value="">All IT owners</option></select>
     <button class="clear-link" id="clearBtn">Clear filters</button>
     <div class="seg" id="viewSeg">
@@ -352,7 +352,7 @@ let JIRA_PROJECTS = [];   // [{key,name,issueTypes:[...]}] from the proxy
 let JIRA_READY = false;   // true once the proxy answers (enables edit/create)
 
 /* ---------------- State ---------------- */
-const state = { view: "board", search: "", portfolio: "", phase: "", rag: "", owner: "", sortKey: "id", sortDir: 1 };
+const state = { view: "board", search: "", portfolio: "", phase: "", risk: "", owner: "", sortKey: "id", sortDir: 1 };
 const SOON_DAYS = 90;
 const today = new Date();
 
@@ -373,7 +373,7 @@ function filtered(){
   let list = PROJECTS.filter(p => {
     if (state.portfolio && p.portfolio !== state.portfolio) return false;
     if (state.phase && p.phase !== state.phase) return false;
-    if (state.rag && p.rag !== state.rag) return false;
+    if (state.risk && p.risk !== state.risk) return false;
     if (state.owner && p.itOwner !== state.owner) return false;
     if (q) {
       const hay = [p.id,p.name,p.portfolio,p.sponsor,p.itOwner,p.notes,p.dependencies,p.compliance].join(" ").toLowerCase();
@@ -389,8 +389,8 @@ function renderKpis(){
   const all = PROJECTS;
   const active = all.filter(p => p.phase !== "Closed");
   const avgActive = active.length ? Math.round(active.reduce((s,p)=>s+(p.pct||0),0)/active.length) : 0;
-  const reds = active.filter(p => p.rag==="Red").length;
-  const yellows = active.filter(p => p.rag==="Yellow").length;
+  const reds = active.filter(p => p.risk==="Red").length;
+  const yellows = active.filter(p => p.risk==="Yellow").length;
   const overdue = all.filter(isOverdue).length;
   const soon = all.filter(isSoon).length;
   const cards = [
@@ -439,12 +439,12 @@ function renderCharts(){
   const portm = countBy(active, "portfolio");
   const portRows = Object.entries(portm).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value);
   barChart($("#chartPortfolio"), portRows, ()=>"#2f81f7", "portfolio");
-  // RAG donut (active)
+  // Risk donut (active)
   renderDonut(active);
 }
 function renderDonut(active){
   const rm = {Green:0,Yellow:0,Red:0};
-  active.forEach(p=>{ if(rm[p.rag]!=null) rm[p.rag]++; });
+  active.forEach(p=>{ if(rm[p.risk]!=null) rm[p.risk]++; });
   const total = rm.Green+rm.Yellow+rm.Red || 1;
   const segs = ["Green","Yellow","Red"].filter(k=>rm[k]>0);
   const R=52, C=2*Math.PI*R; let offset=0;
@@ -455,7 +455,7 @@ function renderDonut(active){
     offset += len; return c;
   }).join("");
   const legend = ["Green","Yellow","Red"].map(k=>`
-    <div class="legend-item" data-rag="${k}">
+    <div class="legend-item" data-risk="${k}">
       <span class="dot" style="background:${RAG_COLOR[k]}"></span>${k}
       <span class="lv">${rm[k]} · ${Math.round(rm[k]/total*100)}%</span>
     </div>`).join("");
@@ -469,7 +469,7 @@ function renderDonut(active){
       <div class="donut-legend">${legend}</div>
     </div>`;
   $("#chartRag").querySelectorAll(".legend-item").forEach(li=>li.addEventListener("click",()=>{
-    const v=li.dataset.rag; state.rag = state.rag===v?"":v; $("#fRag").value=state.rag; render();
+    const v=li.dataset.risk; state.risk = state.risk===v?"":v; $("#fRag").value=state.risk; render();
   }));
 }
 
@@ -478,10 +478,10 @@ function pcardHTML(p){
   const overdue = isOverdue(p), soon = isSoon(p);
   const badge = overdue ? `<span class="badge-overdue">OVERDUE</span>` : (soon ? `<span class="badge-soon">DUE SOON</span>` : "");
   return `
-    <div class="pcard rag-${esc(p.rag)}" data-id="${esc(p.id)}">
+    <div class="pcard risk-${esc(p.risk)}" data-id="${esc(p.id)}">
       <div class="pc-top">
         <span class="pc-id">${esc(p.id)}</span>
-        <span class="chip ${esc(p.rag)}"><span class="dot"></span>${esc(p.rag)}</span>
+        <span class="chip ${esc(p.risk)}"><span class="dot"></span>${esc(p.risk)}</span>
       </div>
       <div class="pc-name">${esc(p.name)}</div>
       <div class="pc-meta">
@@ -521,7 +521,7 @@ const COLUMNS = [
   {key:"portfolio", label:"Portfolio"},
   {key:"itOwner", label:"IT Owner"},
   {key:"pct", label:"% Comp"},
-  {key:"rag", label:"RAG"},
+  {key:"risk", label:"Risk"},
   {key:"end", label:"Target End"},
 ];
 function renderTable(list){
@@ -547,7 +547,7 @@ function renderTable(list){
         <td style="color:var(--muted)">${esc(p.portfolio)}</td>
         <td style="color:var(--muted)">${esc(p.itOwner||"—")}</td>
         <td><div class="prog-cell"><div class="prog-bar"><div style="width:${p.pct||0}%"></div></div><span class="prog-num">${p.pct==null?"—":p.pct+"%"}</span></div></td>
-        <td><span class="chip ${esc(p.rag)}"><span class="dot"></span>${esc(p.rag)}</span></td>
+        <td><span class="chip ${esc(p.risk)}"><span class="dot"></span>${esc(p.risk)}</span></td>
         <td style="white-space:nowrap">${fmtDate(p.end)}${endBadge}</td>
       </tr>`;
   }).join("");
@@ -582,7 +582,7 @@ function openModal(id){
         <button class="modal-close" id="mClose">✕</button>
       </div>
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <span class="chip ${esc(p.rag)}"><span class="dot"></span>${esc(p.rag)}</span>
+        <span class="chip ${esc(p.risk)}"><span class="dot"></span>${esc(p.risk)}</span>
         <span class="tag" style="border-color:${PHASE_COLOR[p.phase]||"var(--border)"};color:${PHASE_COLOR[p.phase]||"var(--muted)"}">${esc(p.phase)}</span>
         <span class="tag">${esc(p.portfolio)}</span>
         ${p.url?`<button class="btn-edit" id="mEdit"><svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.929-.928l.929-3.251c.081-.286.235-.547.445-.756l8.612-8.61Z"/></svg>Edit</button>`:""}
@@ -676,7 +676,7 @@ async function submitComment(id){
 function openEditMode(id){
   const p = PROJECTS.find(x=>x.id===id); if(!p) return;
   const phaseOpts = ["Planning","In-Flight","Stabilization","Closed"].map(ph=>`<option value="${ph}" ${p.phase===ph?"selected":""}>${ph}</option>`).join("");
-  const ragOpts   = ["Green","Yellow","Red"].map(r=>`<option value="${r}" ${p.rag===r?"selected":""}>${r}</option>`).join("");
+  const ragOpts   = ["Green","Yellow","Red"].map(r=>`<option value="${r}" ${p.risk===r?"selected":""}>${r}</option>`).join("");
   $("#mBody").innerHTML = `
     <div class="edit-grid">
       <div class="edit-field">
@@ -684,7 +684,7 @@ function openEditMode(id){
         <select id="ePhase">${phaseOpts}</select>
       </div>
       <div class="edit-field">
-        <label>RAG Status</label>
+        <label>Risk Status</label>
         <select id="eRag">${ragOpts}</select>
       </div>
       <div class="edit-field">
@@ -724,7 +724,7 @@ async function saveToJira(id){
   const p = PROJECTS.find(x=>x.id===id); if(!p) return;
   const changes = {
     phase:      $("#ePhase").value,
-    rag:        $("#eRag").value,
+    risk:        $("#eRag").value,
     end:        $("#eEnd").value,
     portfolio:  $("#ePortfolio").value.trim(),
     compliance: $("#eCompliance").value.trim() || "N/A",
@@ -732,7 +732,7 @@ async function saveToJira(id){
   };
   // Skip fields that haven't changed (avoid unnecessary Jira writes)
   if (changes.phase      === p.phase)      delete changes.phase;
-  if (changes.rag        === p.rag)        delete changes.rag;
+  if (changes.risk        === p.risk)        delete changes.risk;
   if (changes.end        === (p.end||""))  delete changes.end;
   if (changes.portfolio  === p.portfolio)  delete changes.portfolio;
   if (changes.compliance === (p.compliance||"N/A")) delete changes.compliance;
@@ -756,7 +756,7 @@ async function saveToJira(id){
 
     // Update local project data immediately (don't wait for Jira re-fetch)
     Object.assign(p, changes);
-    if (!p.rag || changes.rag) p.rag = changes.rag || p.rag;
+    if (!p.risk || changes.risk) p.risk = changes.risk || p.risk;
     renderModalView(p);
     render();
     showToast("Saved to Jira" + (data.transitionApplied?` — status → ${data.transitionApplied}`:""), false, true);
@@ -817,8 +817,8 @@ function renderEmpty(){
 
 /* ---------------- Export ---------------- */
 function exportCSV(){
-  const cols = ["id","name","phase","portfolio","sponsor","itOwner","end","pct","rag","dependencies","compliance","notes"];
-  const headers = ["Project ID","Project Name","Phase","Portfolio","Business Sponsor","IT Owner","Target End","% Complete","RAG","Dependencies","Compliance Driver","Notes / Next Milestone"];
+  const cols = ["id","name","phase","portfolio","sponsor","itOwner","end","pct","risk","dependencies","compliance","notes"];
+  const headers = ["Project ID","Project Name","Phase","Portfolio","Business Sponsor","IT Owner","Target End","% Complete","Risk","Dependencies","Compliance Driver","Notes / Next Milestone"];
   const q = v => { v=(v==null?"":String(v)); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
   const rows = filtered().map(p=>cols.map(c=> c==="pct" ? (p.pct==null?"":p.pct/100) : q(p[c])).join(","));
   const csv = headers.map(q).join(",")+"\n"+rows.join("\n");
@@ -841,7 +841,7 @@ const HEADER_MAP = {
   "start date":"start","start":"start",
   "target end":"end","end date":"end","end":"end",
   "% complete":"pct","percent complete":"pct","complete":"pct",
-  "rag":"rag","rag status":"rag","status":"rag",
+  "risk":"risk","risk status":"risk","status":"risk",
   "dependencies":"dependencies",
   "compliance driver":"compliance","compliance":"compliance",
   "notes / next milestone":"notes","notes":"notes","next milestone":"notes",
@@ -854,7 +854,7 @@ function excelSerialToISO(n){
 function normalizeRecord(raw){
   const r = {};
   for (const k in HEADER_MAP){} // noop to keep map referenced
-  for (const key of ["id","name","phase","portfolio","sponsor","itOwner","start","end","pct","rag","dependencies","compliance","notes"]) r[key]=raw[key]??"";
+  for (const key of ["id","name","phase","portfolio","sponsor","itOwner","start","end","pct","risk","dependencies","compliance","notes"]) r[key]=raw[key]??"";
   // pct normalization: accept 0-1 fraction or 0-100
   if (r.pct==="" || r.pct==null) r.pct = null;
   else { let n=parseFloat(String(r.pct).replace("%","")); if(isNaN(n)) r.pct=null; else r.pct = n<=1 ? Math.round(n*100) : Math.round(n); }
@@ -865,8 +865,8 @@ function normalizeRecord(raw){
     if (typeof v==="number" || /^\d+(\.\d+)?$/.test(String(v).trim())) r[d]=excelSerialToISO(parseFloat(v));
     else { const dt=new Date(v); r[d]=isNaN(dt)?String(v):dt.toISOString().slice(0,10); }
   }
-  // normalize RAG capitalization
-  if (r.rag) { const x=String(r.rag).trim().toLowerCase(); r.rag = x.charAt(0).toUpperCase()+x.slice(1); }
+  // normalize Risk capitalization
+  if (r.risk) { const x=String(r.risk).trim().toLowerCase(); r.risk = x.charAt(0).toUpperCase()+x.slice(1); }
   return r;
 }
 function rowsToProjects(rows){
@@ -877,7 +877,7 @@ function rowsToProjects(rows){
     const keys = rows[i].map(c => HEADER_MAP[String(c).trim().toLowerCase()] || null);
     if (keys.filter(Boolean).length >= 4){ hi=i; headerKeys=keys; break; }
   }
-  if (hi<0) throw new Error("Could not find a recognizable header row (need columns like Project ID, Name, Phase, RAG…).");
+  if (hi<0) throw new Error("Could not find a recognizable header row (need columns like Project ID, Name, Phase, Risk…).");
   const out = [];
   for (let i=hi+1;i<rows.length;i++){
     const cells = rows[i];
@@ -1066,7 +1066,7 @@ function openCreate(){
         <div class="edit-field full"><label>Name / Summary *</label><input id="nName" type="text" placeholder="Project or work item name" /></div>
         <div class="edit-field"><label>Issue type</label><select id="nType">${typeOpts}</select></div>
         <div class="edit-field"><label>Phase</label><select id="nPhase">${phaseOpts}</select></div>
-        <div class="edit-field"><label>RAG Status</label><select id="nRag">${ragOpts}</select></div>
+        <div class="edit-field"><label>Risk Status</label><select id="nRag">${ragOpts}</select></div>
         <div class="edit-field"><label>Portfolio</label><input id="nPortfolio" type="text" placeholder="e.g. Infrastructure" /></div>
         <div class="edit-field"><label>Business Sponsor</label><input id="nSponsor" type="text" placeholder="Sponsor name" /></div>
         <div class="edit-field"><label>Compliance Driver</label><input id="nCompliance" type="text" placeholder="e.g. FERPA; GLBA" /></div>
@@ -1094,7 +1094,7 @@ async function submitCreate(){
     name:       $("#nName").value.trim(),
     issueType:  $("#nType").value,
     phase:      $("#nPhase").value,
-    rag:        $("#nRag").value,
+    risk:        $("#nRag").value,
     portfolio:  $("#nPortfolio").value.trim(),
     sponsor:    $("#nSponsor").value.trim(),
     compliance: $("#nCompliance").value.trim(),
@@ -1127,10 +1127,10 @@ async function submitCreate(){
 $("#search").addEventListener("input", e=>{ state.search=e.target.value; render(); });
 $("#fPortfolio").addEventListener("change", e=>{ state.portfolio=e.target.value; render(); });
 $("#fPhase").addEventListener("change", e=>{ state.phase=e.target.value; render(); });
-$("#fRag").addEventListener("change", e=>{ state.rag=e.target.value; render(); });
+$("#fRag").addEventListener("change", e=>{ state.risk=e.target.value; render(); });
 $("#fOwner").addEventListener("change", e=>{ state.owner=e.target.value; render(); });
 $("#clearBtn").addEventListener("click", ()=>{
-  Object.assign(state,{search:"",portfolio:"",phase:"",rag:"",owner:""});
+  Object.assign(state,{search:"",portfolio:"",phase:"",risk:"",owner:""});
   $("#search").value=""; ["#fPortfolio","#fPhase","#fRag","#fOwner"].forEach(s=>$(s).value=""); render();
 });
 $("#viewSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{

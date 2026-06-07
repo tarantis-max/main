@@ -43,19 +43,19 @@ const FIELDS = {
 
 /* ---- VPMO custom fields ----------------------------------------------
    Created by setup-jira-fields.js, which writes vpmo-fields.json:
-     { "ids": { "rag": "customfield_XXXXX", ... },
-       "fieldTypes": { "rag": "select", "portfolio": "text", ... } }
+     { "ids": { "risk": "customfield_XXXXX", ... },
+       "fieldTypes": { "risk": "select", "portfolio": "text", ... } }
    If that file is absent we fall back to reading/writing VPMO data as
-   labels (rag:Yellow, portfolio:Infrastructure, compliance:GLBA;FERPA). */
+   labels (risk:Yellow, portfolio:Infrastructure, compliance:GLBA;FERPA). */
 let VPMO = { ids: {}, fieldTypes: {} };
 try {
   VPMO = JSON.parse(fs.readFileSync(path.join(__dirname, "vpmo-fields.json"), "utf8"));
 } catch { /* no custom fields yet — label fallback stays active */ }
 const hasField = k => Boolean(VPMO.ids && VPMO.ids[k]);
 // Spreadsheet columns mapped to VPMO custom fields (also written back as labels)
-const VPMO_KEYS = ["rag", "portfolio", "compliance", "sponsor", "projectId", "pctComplete"];
+const VPMO_KEYS = ["risk", "portfolio", "compliance", "sponsor", "projectId", "pctComplete"];
 // which keys can degrade to a label when no custom field exists
-const LABEL_KEYS = { rag: "rag", portfolio: "portfolio", compliance: "compliance", sponsor: "sponsor" };
+const LABEL_KEYS = { risk: "risk", portfolio: "portfolio", compliance: "compliance", sponsor: "sponsor" };
 
 // Read a VPMO custom field off an issue's fields object (handles select/text/number)
 function readVpmo(f, key) {
@@ -128,9 +128,9 @@ function phaseFor(status) {
   if (byName) return byName;
   return CATEGORY_PHASE[(status.statusCategory && status.statusCategory.key) || "new"] || "Planning";
 }
-function deriveRag(p) {
+function deriveRisk(p) {
   // honored label wins; otherwise derive from schedule + progress
-  if (p.rag) return p.rag;
+  if (p.risk) return p.risk;
   if (p.phase === "Closed") return "Green";
   const end = p.end ? new Date(p.end + "T00:00:00") : null;
   if (end) {
@@ -195,7 +195,7 @@ function mapIssues(issues) {
       start: f[FIELDS.startDate] || "",
       end: f.duedate || "",
       pct: pct(i),
-      rag: readVpmo(f, "rag") || labelValue(labels, "rag") || "",
+      risk: readVpmo(f, "risk") || labelValue(labels, "risk") || "",
       dependencies: (f.issuelinks || []).map(l => {
         const o = l.outwardIssue || l.inwardIssue; return o ? o.key : null;
       }).filter(Boolean).join("; "),
@@ -203,7 +203,7 @@ function mapIssues(issues) {
       notes: adfToText(f.description).trim().slice(0, 800),
       url: `${CONFIG.baseUrl}/browse/${i.key}`,
     };
-    p.rag = deriveRag(p);
+    p.risk = deriveRisk(p);
     return p;
   });
 }
@@ -240,7 +240,7 @@ async function applyTransition(key, targetPhase) {
 //   mode "labels" → force VPMO data into labels (universal fallback).
 // Non-VPMO labels on the issue are always preserved.
 function buildWritePayload(body, existingLabels, mode) {
-  const PREFIXES = ["rag:", "portfolio:", "compliance:", "sponsor:"];
+  const PREFIXES = ["risk:", "portfolio:", "compliance:", "sponsor:"];
   const labels = (existingLabels || []).filter(l => !PREFIXES.some(p => l.toLowerCase().startsWith(p)));
   const fields = {};
   for (const key of VPMO_KEYS) {
@@ -522,4 +522,4 @@ if (require.main === module) {
 }
 
 // Exported for testing without a live Jira connection.
-module.exports = { mapIssues, phaseFor, deriveRag, adfToText, textToAdf, labelValue, readVpmo, writeVpmo, buildWritePayload, applyTransition, handlePatch, createIssue, getJiraProjects, getProjects, getComments, postComment };
+module.exports = { mapIssues, phaseFor, deriveRisk, adfToText, textToAdf, labelValue, readVpmo, writeVpmo, buildWritePayload, applyTransition, handlePatch, createIssue, getJiraProjects, getProjects, getComments, postComment };
