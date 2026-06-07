@@ -18,6 +18,8 @@ or internet connection required.
 - **Project detail** — click any card or row for full sponsor, owner, dates,
   dependencies, compliance driver, and the latest notes / next milestone.
 - **Filters** — search box plus portfolio, phase, RAG, and IT-owner dropdowns.
+- **Edit & comment** (live Jira mode only) — change fields and post comments
+  straight to the Jira issue. See [Editing and commenting](#editing-and-commenting).
 
 ## Updating from a spreadsheet
 
@@ -100,6 +102,34 @@ falls back to the issue type. "Projects" are top-level issues (Epics and any
 Story/Task without a parent); child issues roll up into their parent's
 percentage. Adjust the mapping in the `FIELDS` / `PHASE_MAP` blocks at the top
 of `server.js`.
+
+## Editing and commenting
+
+When the dashboard is loaded **from Jira** (via the proxy), each project's detail
+view becomes two-way — changes write straight back to the Jira issue. (These
+controls are hidden in spreadsheet mode, since there's no issue to update.)
+
+**Edit a work item** — click **Edit** in the detail header to change:
+
+| Field | Writes to Jira as |
+|---|---|
+| Phase | a **status transition** (matched to your workflow by name, then status category) |
+| RAG | `rag:` label |
+| Target End | `duedate` |
+| Portfolio | `portfolio:` label |
+| Compliance | `compliance:` label |
+| Notes | `description` |
+
+Click **Save to Jira**. Only fields you actually changed are sent (no needless
+writes), existing non-VPMO labels are preserved, and the board/table update
+immediately. The confirmation shows which workflow transition was applied
+(e.g. *"Saved to Jira — status → Done"*). IT Owner and Sponsor are shown
+read-only because changing them needs a Jira user-account lookup; edit those in
+Jira directly.
+
+**Comment on a work item** — the **Comments** section lists existing Jira
+comments (author + timestamp) and has a box to add a new one. Posting writes the
+comment to the issue and refreshes the list.
 
 ## Export
 
