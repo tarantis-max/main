@@ -220,6 +220,46 @@
   .toast.err { border-color: var(--red); }
   .toast.ok { border-color: var(--green); }
 
+  /* ---------- Change Management tab ---------- */
+  .cr-toolbar { display:flex; gap:10px; align-items:center; margin-bottom:16px; flex-wrap:wrap; }
+  .cr-table-wrap { overflow-x:auto; }
+  .cr-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .cr-table th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.4px;
+    color:var(--muted); font-weight:600; padding:8px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .cr-table td { padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .cr-table tbody tr { cursor:pointer; }
+  .cr-table tbody tr:hover { background:var(--panel-2); }
+  .cr-status { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600;
+    padding:3px 9px; border-radius:20px; white-space:nowrap; }
+  .cr-status.pending  { background:rgba(210,153,34,.15); color:var(--yellow); }
+  .cr-status.approved { background:rgba(46,160,67,.15);  color:var(--green);  }
+  .cr-status.rejected { background:rgba(248,81,73,.15);  color:var(--red);    }
+  .cr-status.implemented { background:rgba(47,129,247,.15); color:var(--accent); }
+  .cr-status.closed   { background:var(--panel-2); color:var(--muted); }
+  .cr-status.draft    { background:var(--panel-2); color:var(--muted); }
+  .cr-type { font-size:11px; font-weight:600; padding:2px 7px; border-radius:4px;
+    border:1px solid var(--border); color:var(--muted); }
+  .cr-type.Emergency { border-color:var(--red); color:var(--red); }
+  .cr-type.Normal    { border-color:var(--accent); color:var(--accent); }
+  .cr-type.Standard  { border-color:var(--muted); }
+  .cr-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:14px; margin-bottom:20px; }
+  /* Approval history in modal */
+  .approval-list { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+  .approval-item { display:flex; align-items:flex-start; gap:10px; font-size:13px;
+    background:var(--panel-2); border-radius:8px; padding:10px 12px; }
+  .approval-icon { font-size:16px; flex:none; }
+  .approval-meta { font-size:11.5px; color:var(--muted); }
+  .cr-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+  .btn-approve { background:#2ea043; border:1px solid #2ea043; color:#fff;
+    padding:9px 16px; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; }
+  .btn-approve:hover { background:#3cba56; }
+  .btn-reject  { background:transparent; border:1px solid var(--red); color:var(--red);
+    padding:9px 16px; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; }
+  .btn-reject:hover  { background:rgba(248,81,73,.1); }
+  .btn-implement { background:var(--accent); border:1px solid var(--accent); color:#fff;
+    padding:9px 16px; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; }
+  .btn-implement:hover { background:#4a93f8; }
+
   /* ---------- Edit mode ---------- */
   .edit-field { display: flex; flex-direction: column; gap: 5px; }
   .edit-field label { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); font-weight: 600; }
@@ -290,6 +330,10 @@
       <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm11.53-1.97a.75.75 0 0 1 0 1.06l-3.5 3.5a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 1 1 1.06-1.06l1.47 1.47 2.97-2.97a.75.75 0 0 1 1.06 0Z"/></svg>
       Load from Jira
     </button>
+    <button class="btn" id="newCRBtn" title="Submit a change request" style="display:none">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a.75.75 0 0 1 .75.75v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5A.75.75 0 0 1 8 2Z"/></svg>
+      New CR
+    </button>
     <button class="btn" id="newItemBtn" title="Create a new work item in the selected Jira project" style="display:none">
       <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a.75.75 0 0 1 .75.75v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5A.75.75 0 0 1 8 2Z"/></svg>
       New work item
@@ -323,12 +367,14 @@
     <div class="seg" id="viewSeg">
       <button data-view="board" class="active">Board</button>
       <button data-view="table">Table</button>
+      <button data-view="changes">Changes</button>
     </div>
     <span class="result-count" id="resultCount"></span>
   </div>
 
   <section id="boardView"></section>
   <section id="tableView" class="hidden"></section>
+  <section id="changesView" class="hidden"></section>
 </main>
 
 <div class="overlay" id="overlay">
@@ -788,6 +834,14 @@ function populateFilters(){
 
 /* ---------------- Main render ---------------- */
 function render(){
+  if (state.view==="changes") {
+    $("#boardView").classList.add("hidden");
+    $("#tableView").classList.add("hidden");
+    $("#changesView").classList.remove("hidden");
+    loadChanges();
+    return;
+  }
+  $("#changesView").classList.add("hidden");
   if (!PROJECTS.length){ renderEmpty(); return; }
   const list = filtered();
   renderKpis();
@@ -802,6 +856,7 @@ function renderEmpty(){
   $("#kpis").innerHTML = "";
   ["#chartPhase","#chartPortfolio","#chartRag"].forEach(s=>{ const el=$(s); if(el) el.innerHTML=""; });
   $("#tableView").classList.add("hidden");
+  $("#changesView").classList.add("hidden");
   $("#boardView").classList.remove("hidden");
   const msg = JIRA_READY
     ? `Pick a project above and click <b>Load from Jira</b>, create a <b>New work item</b>, or import a spreadsheet.`
@@ -1021,6 +1076,7 @@ async function initJira(){
     if (data.default && JIRA_PROJECTS.some(p=>p.key===data.default)) sel.value = data.default;
     sel.style.display = "";
     $("#newItemBtn").style.display = "";
+    $("#newCRBtn").style.display = "";
     await loadFromJira();                      // auto-load the selected project
   }catch(e){ /* offline or file:// — empty state already shown */ }
 }
@@ -1123,6 +1179,257 @@ async function submitCreate(){
   }
 }
 
+/* ================================================================
+   Change Management
+   ================================================================ */
+let CHANGES = [];
+
+function crStatusClass(s) {
+  return { "Pending Review":"pending", "Approved":"approved", "Rejected":"rejected",
+           "Implemented":"implemented", "Closed":"closed", "Draft":"draft" }[s] || "draft";
+}
+
+async function loadChanges() {
+  const proj = $("#jiraProject").value || "";
+  const url = "/api/changes" + (proj ? `?project=${encodeURIComponent(proj)}` : "");
+  try {
+    const res = await fetch(url, { headers:{ Accept:"application/json" } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || ("HTTP "+res.status));
+    CHANGES = data.changes || [];
+    renderChanges();
+  } catch(e) {
+    const hint = /Failed to fetch|NetworkError/i.test(String(e)) ? "Start the proxy first." : e.message;
+    $("#changesView").innerHTML = `<div style="color:var(--muted);padding:40px;text-align:center">Could not load change requests: ${esc(hint)}</div>`;
+  }
+}
+
+function renderChanges() {
+  const total     = CHANGES.length;
+  const pending   = CHANGES.filter(c=>c.crStatus==="Pending Review").length;
+  const approved  = CHANGES.filter(c=>c.crStatus==="Approved").length;
+  const emergency = CHANGES.filter(c=>c.type==="Emergency").length;
+
+  const rows = CHANGES.map(c => `
+    <tr data-id="${esc(c.id)}">
+      <td><a href="${esc(c.url)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--muted)">${esc(c.id)}</a></td>
+      <td style="font-weight:550;max-width:280px">${esc(c.title)}</td>
+      <td><span class="cr-type ${esc(c.type)}">${esc(c.type)}</span></td>
+      <td>${esc(c.impact)}</td>
+      <td style="max-width:160px;color:var(--muted);font-size:12px">${esc(c.affectedSystems||"—")}</td>
+      <td style="color:var(--muted);font-size:12px">${esc(c.requestor||"—")}</td>
+      <td style="color:var(--muted);font-size:12px;white-space:nowrap">${esc(c.plannedEnd||"—")}</td>
+      <td><span class="cr-status ${crStatusClass(c.crStatus)}">${esc(c.crStatus)}</span></td>
+    </tr>`).join("") || `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:32px">No change requests yet. Click <b>New CR</b> to submit one.</td></tr>`;
+
+  $("#changesView").innerHTML = `
+    <div class="cr-kpis">
+      <div class="kpi accent"><div class="label">Total CRs</div><div class="value">${total}</div></div>
+      <div class="kpi yellow"><div class="label">Pending Review</div><div class="value">${pending}</div></div>
+      <div class="kpi green"><div class="label">Approved</div><div class="value">${approved}</div></div>
+      <div class="kpi red"><div class="label">Emergency</div><div class="value">${emergency}</div></div>
+    </div>
+    <div class="cr-table-wrap">
+      <table class="cr-table">
+        <thead><tr>
+          <th>CR #</th><th>Title</th><th>Type</th><th>Impact</th>
+          <th>Affected Systems</th><th>Requestor</th><th>Planned End</th><th>Status</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  $("#changesView").querySelectorAll("tbody tr[data-id]").forEach(tr =>
+    tr.addEventListener("click", () => openCR(tr.dataset.id)));
+}
+
+/* ---- CR detail modal ---- */
+async function openCR(id) {
+  const c = CHANGES.find(x => x.id === id); if (!c) return;
+  const proj = $("#jiraProject").value || "";
+
+  // Load comments to parse approval history
+  let comments = [];
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(id)}/comments`);
+    const d   = await res.json();
+    comments  = d.comments || [];
+  } catch(_) {}
+
+  const approvals = comments.filter(cm =>
+    /^\s*[✅❌✔️🔒]\s*\[/.test(cm.text) || /^\[APPROVED\]|^\[REJECTED\]/.test(cm.text));
+  const approvalHtml = approvals.length
+    ? approvals.map(cm => {
+        const icon = cm.text.startsWith("✅") ? "✅" : cm.text.startsWith("❌") ? "❌" : cm.text.startsWith("✔️") ? "✔️" : "🔒";
+        return `<div class="approval-item">
+          <span class="approval-icon">${icon}</span>
+          <div>
+            <div>${esc(cm.text.replace(/^[✅❌✔️🔒]\s*/,"").split("\n")[0])}</div>
+            <div class="approval-meta">${esc(cm.author)} · ${esc(cm.created ? cm.created.slice(0,10) : "")}</div>
+          </div>
+        </div>`;
+      }).join("")
+    : `<div style="color:var(--muted);font-size:13px">No approval actions yet.</div>`;
+
+  const otherComments = comments.filter(cm => !approvals.includes(cm));
+  const commentsHtml = otherComments.map(cm => `
+    <div class="comment">
+      <div class="comment-meta"><b>${esc(cm.author)}</b> · ${esc(fmtDateTime(cm.created))}</div>
+      <div class="comment-text">${esc(cm.text)}</div>
+    </div>`).join("") || `<div class="read-val">No comments yet.</div>`;
+
+  const canApprove   = JIRA_READY && (c.crStatus === "Pending Review" || c.crStatus === "Draft");
+  const canImplement = JIRA_READY && c.crStatus === "Approved";
+  const canClose     = JIRA_READY && (c.crStatus === "Implemented" || c.crStatus === "Rejected");
+
+  const actionBtns = JIRA_READY ? `
+    <div class="cr-actions">
+      ${canApprove   ? `<button class="btn-approve"  id="crApprove">✅ Approve</button><button class="btn-reject" id="crReject">❌ Reject</button>` : ""}
+      ${canImplement ? `<button class="btn-implement" id="crImplement">✔️ Mark Implemented</button>` : ""}
+      ${canClose     ? `<button class="btn" id="crClose">🔒 Close CR</button>` : ""}
+    </div>` : "";
+
+  $("#modal").innerHTML = `
+    <div class="modal-head">
+      <div class="mh-top">
+        <div>
+          <span class="m-id">${esc(c.id)}</span> · <a href="${esc(c.url)}" target="_blank" rel="noopener">open in Jira ↗</a>
+          <h2>${esc(c.title)}</h2>
+        </div>
+        <button class="modal-close" id="mClose">✕</button>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <span class="cr-status ${crStatusClass(c.crStatus)}">${esc(c.crStatus)}</span>
+        <span class="cr-type ${esc(c.type)}">${esc(c.type)}</span>
+        <span class="tag">Impact: ${esc(c.impact)}</span>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="detail-grid">
+        <div class="field"><div class="k">Requestor</div><div class="v">${esc(c.requestor||"—")}</div></div>
+        <div class="field"><div class="k">Planned End</div><div class="v">${esc(c.plannedEnd||"—")}</div></div>
+        <div class="field full"><div class="k">Affected Systems</div><div class="v">${esc(c.affectedSystems||"—")}</div></div>
+      </div>
+      <div class="k" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;margin-bottom:8px">Description / Justification</div>
+      <div class="notes-box">${esc(c.description||"—")}</div>
+      ${c.rollbackPlan ? `
+      <div class="k" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;margin:14px 0 8px">Rollback Plan</div>
+      <div class="notes-box">${esc(c.rollbackPlan)}</div>` : ""}
+      <div class="k" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;margin:18px 0 8px">CAB Approval History</div>
+      <div class="approval-list">${approvalHtml}</div>
+      ${actionBtns}
+      <div class="comments-section" style="margin-top:20px">
+        <div class="k">Comments</div>
+        <div id="cList" class="comments-list">${commentsHtml}</div>
+        <div class="comment-add">
+          <textarea id="cInput" placeholder="Add a comment…"></textarea>
+          <button class="btn-save" id="cPost"><span id="cIcon">↑</span> Comment</button>
+        </div>
+      </div>
+    </div>`;
+
+  $("#overlay").classList.add("open");
+  $("#mClose").addEventListener("click", closeModal);
+  if ($("#crApprove"))    $("#crApprove").addEventListener("click", () => crAction(id, "approve"));
+  if ($("#crReject"))     $("#crReject").addEventListener("click",  () => crAction(id, "reject"));
+  if ($("#crImplement"))  $("#crImplement").addEventListener("click",() => crAction(id, "implement"));
+  if ($("#crClose"))      $("#crClose").addEventListener("click",   () => crAction(id, "close"));
+  if ($("#cPost"))        $("#cPost").addEventListener("click", () => submitComment(id));
+}
+
+async function crAction(id, action) {
+  const proj = $("#jiraProject").value || "";
+  const btn = { approve: $("#crApprove"), reject: $("#crReject"),
+                implement: $("#crImplement"), close: $("#crClose") }[action];
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(`/api/changes/${encodeURIComponent(id)}/action`+
+      (proj ? `?project=${encodeURIComponent(proj)}` : ""), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || ("HTTP "+res.status));
+    closeModal();
+    showToast(`CR ${id} ${action}d`, false, true);
+    await loadChanges();
+  } catch(e) {
+    if (btn) btn.disabled = false;
+    showToast(`Action failed: ${e.message}`, true);
+  }
+}
+
+/* ---- Submit new CR form ---- */
+function openNewCR() {
+  if (!JIRA_READY) { showToast("Connect to Jira first.", true); return; }
+  const proj = JIRA_PROJECTS.find(p => p.key === $("#jiraProject").value) || JIRA_PROJECTS[0];
+  const types = (proj && proj.issueTypes && proj.issueTypes.length) ? proj.issueTypes : ["Task"];
+  const typeOpts = types.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+
+  $("#modal").innerHTML = `
+    <div class="modal-head">
+      <div class="mh-top">
+        <div><span class="m-id">New Change Request</span><h2>in ${esc(proj ? proj.key : "")}</h2></div>
+        <button class="modal-close" id="mClose">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="edit-grid">
+        <div class="edit-field full"><label>Title / Summary *</label><input id="ncrTitle" type="text" placeholder="Brief description of the change" /></div>
+        <div class="edit-field"><label>Issue type</label><select id="ncrIssueType">${typeOpts}</select></div>
+        <div class="edit-field"><label>Change Type</label>
+          <select id="ncrType"><option>Standard</option><option selected>Normal</option><option>Emergency</option></select></div>
+        <div class="edit-field"><label>Impact</label>
+          <select id="ncrImpact"><option>Low</option><option selected>Medium</option><option>High</option></select></div>
+        <div class="edit-field"><label>Affected Systems</label><input id="ncrSystems" type="text" placeholder="e.g. Colleague, Banner, Network" /></div>
+        <div class="edit-field"><label>Planned End Date</label><input id="ncrEnd" type="date" /></div>
+        <div class="edit-field full"><label>Description / Justification *</label><textarea id="ncrDesc" placeholder="Why is this change needed? What will be done?"></textarea></div>
+        <div class="edit-field full"><label>Rollback Plan</label><textarea id="ncrRollback" placeholder="Steps to revert if something goes wrong"></textarea></div>
+      </div>
+      <div class="edit-actions">
+        <button class="btn-save" id="ncrSave"><span id="ncrIcon">＋</span> Submit CR</button>
+        <button class="btn" id="ncrCancel">Cancel</button>
+        <span id="ncrStatus" style="font-size:12px;color:var(--muted);margin-left:4px"></span>
+      </div>
+    </div>`;
+  $("#overlay").classList.add("open");
+  $("#mClose").addEventListener("click", closeModal);
+  $("#ncrCancel").addEventListener("click", closeModal);
+  $("#ncrSave").addEventListener("click", submitNewCR);
+  $("#ncrTitle").focus();
+}
+
+async function submitNewCR() {
+  const proj = $("#jiraProject").value || "";
+  const body = {
+    title:           $("#ncrTitle").value.trim(),
+    issueType:       $("#ncrIssueType").value,
+    type:            $("#ncrType").value,
+    impact:          $("#ncrImpact").value,
+    affectedSystems: $("#ncrSystems").value.trim(),
+    plannedEnd:      $("#ncrEnd").value,
+    description:     $("#ncrDesc").value.trim(),
+    rollbackPlan:    $("#ncrRollback").value.trim(),
+  };
+  if (!body.title)       { showToast("Title is required.", true); $("#ncrTitle").focus(); return; }
+  if (!body.description) { showToast("Description is required.", true); $("#ncrDesc").focus(); return; }
+  const btn = $("#ncrSave"), icon = $("#ncrIcon"), status = $("#ncrStatus");
+  btn.disabled = true; icon.className = "saving-spin"; icon.textContent = "↻"; status.textContent = "Submitting…";
+  try {
+    const res = await fetch("/api/changes" + (proj ? `?project=${encodeURIComponent(proj)}` : ""), {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || ("HTTP "+res.status));
+    closeModal();
+    showToast(`CR ${data.key} submitted`, false, true);
+    await loadChanges();
+  } catch(e) {
+    icon.className = ""; icon.textContent = "＋"; btn.disabled = false; status.textContent = "";
+    showToast("Submit failed: " + e.message, true);
+  }
+}
+
 /* ---------------- Wire up ---------------- */
 $("#search").addEventListener("input", e=>{ state.search=e.target.value; render(); });
 $("#fPortfolio").addEventListener("change", e=>{ state.portfolio=e.target.value; render(); });
@@ -1139,8 +1446,9 @@ $("#viewSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",(
   render();
 }));
 $("#jiraBtn").addEventListener("click", loadFromJira);
-$("#jiraProject").addEventListener("change", loadFromJira);
+$("#jiraProject").addEventListener("change", ()=>{ state.view==="changes" ? loadChanges() : loadFromJira(); });
 $("#newItemBtn").addEventListener("click", openCreate);
+$("#newCRBtn").addEventListener("click", openNewCR);
 $("#uploadBtn").addEventListener("click", ()=>$("#fileInput").click());
 $("#fileInput").addEventListener("change", e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); e.target.value=""; });
 $("#exportBtn").addEventListener("click", exportCSV);

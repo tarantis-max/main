@@ -54,6 +54,8 @@ try {
 const hasField = k => Boolean(VPMO.ids && VPMO.ids[k]);
 // Spreadsheet columns mapped to VPMO custom fields (also written back as labels)
 const VPMO_KEYS = ["risk", "portfolio", "compliance", "sponsor", "projectId", "pctComplete"];
+// CR-specific VPMO custom field keys
+const CR_VPMO_KEYS = ["crType", "crImpact", "crAffectedSystems", "crRollbackPlan"];
 // which keys can degrade to a label when no custom field exists
 const LABEL_KEYS = { risk: "risk", portfolio: "portfolio", compliance: "compliance", sponsor: "sponsor" };
 
@@ -378,8 +380,122 @@ async function postComment(key, text) {
   return { author: (c.author && c.author.displayName) || "You", created: c.created, text };
 }
 
+/* ---- change management -------------------------------------------------- */
+const CR_STATUS_LABEL_ORDER = ["cr:approved","cr:rejected","cr:implemented","cr:closed","cr:pending"];
+function crStatusFromLabels(labels) {
+  const lset = new Set(labels || []);
+  if (lset.has("cr:approved"))    return "Approved";
+  if (lset.has("cr:rejected"))    return "Rejected";
+  if (lset.has("cr:implemented")) return "Implemented";
+  if (lset.has("cr:closed"))      return "Closed";
+  if (lset.has("cr:pending"))     return "Pending Review";
+  return "Draft";
+}
+function mapCRs(issues) {
+  return issues.map(i => {
+    const f = i.fields;
+    const labels = f.labels || [];
+    return {
+      id:              i.key,
+      title:           f.summary || "",
+      description:     adfToText(f.description).trim().slice(0, 2000),
+      type:            readVpmo(f, "crType")           || "Normal",
+      impact:          readVpmo(f, "crImpact")         || "Medium",
+      affectedSystems: readVpmo(f, "crAffectedSystems")|| "",
+      rollbackPlan:    readVpmo(f, "crRollbackPlan")   || "",
+      requestor:       (f.reporter && f.reporter.displayName) || "",
+      plannedStart:    f[FIELDS.startDate] || "",
+      plannedEnd:      f.duedate || "",
+      crStatus:        crStatusFromLabels(labels),
+      created:         (f.created || "").slice(0, 10),
+      url:             `${CONFIG.baseUrl}/browse/${i.key}`,
+    };
+  });
+}
+
+let crCaches = {};
+async function getCRs(projectKey) {
+  const proj = projectKey || CONFIG.project;
+  const jql  = `project = "${proj.replace(/"/g,"")}" AND labels = "change-request" ORDER BY created DESC`;
+  const c = crCaches[jql];
+  if (c && Date.now() - c.at < CONFIG.cacheMs) return c.data;
+  const extra = CR_VPMO_KEYS.map(k => VPMO.ids && VPMO.ids[k]).filter(Boolean);
+  const fields = ["summary","description","reporter","labels","duedate","created",FIELDS.startDate,...extra];
+  const issues = await jiraSearch(jql, fields);
+  const data = { asOf: new Date().toISOString().slice(0,10), project: proj, changes: mapCRs(issues) };
+  crCaches[jql] = { at: Date.now(), data };
+  return data;
+}
+
+async function createCR(projectKey, body) {
+  const proj = projectKey || CONFIG.project;
+  if (!body || !body.title || !body.title.trim()) throw new Error("A title is required.");
+  const createFields = {
+    project:   { key: proj },
+    issuetype: { name: body.issueType || "Task" },
+    summary:   body.title.trim(),
+    labels:    ["change-request", "cr:pending"],
+  };
+  if (body.description)  createFields.description       = textToAdf(body.description);
+  if (body.plannedStart) createFields[FIELDS.startDate] = body.plannedStart;
+  if (body.plannedEnd)   createFields.duedate           = body.plannedEnd;
+
+  const cr = await fetch(`${CONFIG.baseUrl}/rest/api/3/issue`, {
+    method: "POST",
+    headers: { Authorization: authHeader(), "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ fields: createFields }),
+  });
+  if (!cr.ok) { const e = await cr.text(); throw new Error(`Jira create ${cr.status}: ${e.slice(0,300)}`); }
+  const created = await cr.json();
+  const key = created.key;
+
+  // Write CR-specific VPMO custom fields (best-effort; if not configured, skip)
+  const vpmoFields = {};
+  if (body.type)            writeVpmo(vpmoFields, "crType",           body.type);
+  if (body.impact)          writeVpmo(vpmoFields, "crImpact",         body.impact);
+  if (body.affectedSystems) writeVpmo(vpmoFields, "crAffectedSystems",body.affectedSystems);
+  if (body.rollbackPlan)    writeVpmo(vpmoFields, "crRollbackPlan",   body.rollbackPlan);
+  if (Object.keys(vpmoFields).length) {
+    await fetch(`${CONFIG.baseUrl}/rest/api/3/issue/${key}`, {
+      method: "PUT",
+      headers: { Authorization: authHeader(), "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ fields: vpmoFields }),
+    });
+  }
+  crCaches = {};
+  return { key, url: `${CONFIG.baseUrl}/browse/${key}` };
+}
+
+async function actionCR(key, action, note) {
+  const CR_STATUSES = ["cr:draft","cr:pending","cr:approved","cr:rejected","cr:implemented","cr:closed"];
+  const nextLabel = { approve:"cr:approved", reject:"cr:rejected", implement:"cr:implemented", close:"cr:closed" }[action];
+  if (!nextLabel) throw new Error(`Unknown action: ${action}`);
+
+  // Fetch and update labels
+  const r = await fetch(`${CONFIG.baseUrl}/rest/api/3/issue/${key}?fields=labels`, {
+    headers: { Authorization: authHeader(), Accept: "application/json" },
+  });
+  if (!r.ok) throw new Error(`Could not fetch ${key}: ${r.status}`);
+  const issue = await r.json();
+  const labels = (issue.fields.labels || []).filter(l => !CR_STATUSES.includes(l)).concat([nextLabel]);
+  await fetch(`${CONFIG.baseUrl}/rest/api/3/issue/${key}`, {
+    method: "PUT",
+    headers: { Authorization: authHeader(), "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ fields: { labels } }),
+  });
+
+  // Post a structured comment so the UI can parse the approval history
+  const emoji = { approve:"✅", reject:"❌", implement:"✔️", close:"🔒" }[action];
+  const verb  = { approve:"APPROVED", reject:"REJECTED", implement:"IMPLEMENTED", close:"CLOSED" }[action];
+  const commentText = `${emoji} [${verb}] — via VPMO Dashboard · ${new Date().toISOString().slice(0,10)}${note ? `\n\n${note}` : ""}`;
+  await postComment(key, commentText);
+
+  crCaches = {};
+  return { action, key };
+}
+
 let caches = {};                    // keyed by JQL so each project caches independently
-function bustCache() { caches = {}; }
+function bustCache() { caches = {}; crCaches = {}; }
 async function getProjects(projectKey) {
   // An explicit project selection always wins; otherwise use the configured
   // JQL/default project.
@@ -404,6 +520,59 @@ async function getProjects(projectKey) {
 
 /* ---- HTTP server ----------------------------------------------------- */
 const server = http.createServer(async (req, res) => {
+  // /api/changes — change-request CRUD + approval actions
+  if (req.url.startsWith("/api/changes")) {
+    if (!CONFIG.email || !CONFIG.token) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ error: "Set JIRA_EMAIL and JIRA_TOKEN environment variables." }));
+    }
+    const u = new URL(req.url, "http://localhost");
+    const proj = u.searchParams.get("project") || "";
+    // POST /api/changes/:key/action  — approve / reject / implement / close
+    const actionM = req.url.match(/^\/api\/changes\/([^/?]+)\/action/);
+    if (actionM && req.method === "POST") {
+      let raw = "";
+      req.on("data", d => raw += d);
+      req.on("end", async () => {
+        try {
+          const { action, note } = JSON.parse(raw);
+          const result = await actionCR(decodeURIComponent(actionM[1]), action, note || "");
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(502, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: String(e.message || e) }));
+        }
+      });
+      return;
+    }
+    if (req.method === "GET") {
+      try {
+        const data = await getCRs(proj);
+        res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+        res.end(JSON.stringify(data));
+      } catch (e) {
+        res.writeHead(502, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: String(e.message || e) }));
+      }
+      return;
+    }
+    if (req.method === "POST") {
+      let raw = "";
+      req.on("data", d => raw += d);
+      req.on("end", async () => {
+        try {
+          const result = await createCR(proj, JSON.parse(raw));
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(502, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: String(e.message || e) }));
+        }
+      });
+      return;
+    }
+  }
   // GET /api/jira/projects — list visible Jira projects for the picker
   if (req.url.startsWith("/api/jira/projects")) {
     if (!CONFIG.email || !CONFIG.token) {
@@ -522,4 +691,4 @@ if (require.main === module) {
 }
 
 // Exported for testing without a live Jira connection.
-module.exports = { mapIssues, phaseFor, deriveRisk, adfToText, textToAdf, labelValue, readVpmo, writeVpmo, buildWritePayload, applyTransition, handlePatch, createIssue, getJiraProjects, getProjects, getComments, postComment };
+module.exports = { mapIssues, phaseFor, deriveRisk, adfToText, textToAdf, labelValue, readVpmo, writeVpmo, buildWritePayload, applyTransition, handlePatch, createIssue, getJiraProjects, getProjects, getComments, postComment, mapCRs, getCRs, createCR, actionCR };

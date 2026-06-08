@@ -104,6 +104,41 @@ const WANTED = [
     searcherKey:  "com.atlassian.jira.plugin.system.customfieldtypes:exactnumber",
     fieldType:    "number",
   },
+  // ---- Change-request specific fields ------------------------------------
+  {
+    key:          "crType",
+    name:         "VPMO CR Type",
+    description:  "ITIL change type (Standard / Normal / Emergency)",
+    type:         "com.atlassian.jira.plugin.system.customfieldtypes:select",
+    searcherKey:  "com.atlassian.jira.plugin.system.customfieldtypes:multiselectsearcher",
+    fieldType:    "select",
+    options:      ["Standard", "Normal", "Emergency"],
+  },
+  {
+    key:          "crImpact",
+    name:         "VPMO CR Impact",
+    description:  "Expected impact if the change is implemented (Low / Medium / High)",
+    type:         "com.atlassian.jira.plugin.system.customfieldtypes:select",
+    searcherKey:  "com.atlassian.jira.plugin.system.customfieldtypes:multiselectsearcher",
+    fieldType:    "select",
+    options:      ["Low", "Medium", "High"],
+  },
+  {
+    key:          "crAffectedSystems",
+    name:         "VPMO Affected Systems",
+    description:  "Systems, services, or environments affected by this change",
+    type:         "com.atlassian.jira.plugin.system.customfieldtypes:textfield",
+    searcherKey:  "com.atlassian.jira.plugin.system.customfieldtypes:textsearcher",
+    fieldType:    "text",
+  },
+  {
+    key:          "crRollbackPlan",
+    name:         "VPMO Rollback Plan",
+    description:  "Steps to revert the change if something goes wrong",
+    type:         "com.atlassian.jira.plugin.system.customfieldtypes:textfield",
+    searcherKey:  "com.atlassian.jira.plugin.system.customfieldtypes:textsearcher",
+    fieldType:    "text",
+  },
 ];
 
 /* ---- Helpers ------------------------------------------------------------- */
