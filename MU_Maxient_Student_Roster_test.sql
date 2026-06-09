@@ -1,14 +1,9 @@
+-- Set the target term here — change to test different terms.
+-- Pipeline uses this as a parameter (e.g. 2026FA, 2027SP).
 WITH
 
-current_term AS (
-    -- Resolves to the most recently started FA or SP term.
-    -- SU excluded: Methodist does not populate ods_student_terms for summer.
-    SELECT terms_id
-    FROM   dbo.ods_terms
-    WHERE  term_start_date <= CURRENT_DATE
-      AND  (terms_id ILIKE '%FA' OR terms_id ILIKE '%SP')
-    ORDER BY term_start_date DESC
-    LIMIT 1
+target_term (terms_id) AS (
+    VALUES ('2026FA')
 ),
 
 enrolled AS (
@@ -16,7 +11,7 @@ enrolled AS (
         sttr_student   AS person_id,
         sttr_student_load
     FROM   dbo.ods_student_terms
-    WHERE  sttr_term            = (SELECT terms_id FROM current_term)
+    WHERE  sttr_term            = (SELECT terms_id FROM target_term)
       AND  sttr_current_status <> 'X'
     ORDER BY sttr_student
 ),
@@ -36,7 +31,7 @@ housing AS (
         rmas_bldg       AS residence_hall,
         rmas_room       AS room_number
     FROM   dbo.ods_room_assignments
-    WHERE  rmas_term = (SELECT terms_id FROM current_term)
+    WHERE  rmas_term = (SELECT terms_id FROM target_term)
 )
 
 SELECT
