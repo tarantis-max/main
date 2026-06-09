@@ -1,0 +1,17 @@
+{
+  "name": "mu-permit-payment",
+  "version": "1.0.0",
+  "description": "Authorize.net Accept Hosted payment service for the MU Student Vehicle Permit registration form. Mints a hosted form token, verifies the transaction server-side, and signals the EIP / Intelligent Processes workflow.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}
