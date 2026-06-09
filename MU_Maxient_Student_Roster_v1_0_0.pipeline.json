@@ -1,0 +1,115 @@
+{
+  "name": "MU_Maxient_Student_Roster",
+  "version": "1.0.0",
+  "description": "Extracts all currently-enrolled Methodist University students from the Colleague ODS and pushes a date-stamped CSV to the Maxient SFTP import folder. The active term resolves dynamically (most recent FA/SP/SU term whose start date is on or before today). Runs on a scheduled cadence — daily or weekly recommended.\n\nColumns emitted (must match Maxient Person Field names in Admin > Import Settings):\n  person_id, first_name, last_name, middle_name, preferred_name, email,\n  date_of_birth, gender, classification, major, enrollment_type,\n  campus, residence_hall, room_number\n\nAdvisor fields (advisor_name, advisor_email) are not included by default.\nAdd a LEFT JOIN on dbo.ods_student_advisors once the column names are\nconfirmed against your ODS: the advisor CTE pattern from the Carnegie\npipeline can be reused.\n\nField verification checklist before go-live:\n  [ ] sttr_class_level   — confirm column exists in ods_student_terms\n                           (may need to derive from credits or use stpr_acad_level)\n  [ ] rmpr_building/rmpr_room — confirm column names in ods_room_assignments\n  [ ] preferred_name      — confirm column exists in ods_person\n  [ ] Maxient SFTP path   — confirm with your Maxient Customer Success contact",
+  "parameters": [
+    {
+      "name": "maxientSftpKey",
+      "type": "string",
+      "label": "Maxient SFTP Private Key",
+      "required": true,
+      "multiline": true,
+      "sensitive": true,
+      "persistent": true,
+      "description": "OpenSSH RSA 2048 private key for Maxient SFTP authentication. Public counterpart must be registered with Maxient support. Include the full -----BEGIN/END----- header and footer."
+    },
+    {
+      "name": "maxientSftpUsername",
+      "type": "string",
+      "label": "Maxient SFTP Username",
+      "required": true,
+      "sensitive": true,
+      "description": "SFTP username provided by Maxient. Typically your institution's short name or a Maxient-assigned account ID."
+    },
+    {
+      "name": "maxientSftpHost",
+      "type": "string",
+      "label": "Maxient SFTP Host",
+      "required": true,
+      "description": "Maxient SFTP hostname. Provided by your Maxient Customer Success contact (e.g. sftp.maxient.com or a dedicated subdomain)."
+    },
+    {
+      "name": "maxientSftpPath",
+      "type": "string",
+      "label": "Maxient SFTP Import Path",
+      "default": "/import/",
+      "required": true,
+      "description": "Remote directory Maxient polls for incoming student roster files. Confirm with Maxient — common values: /import/, /students/, /roster/."
+    },
+    {
+      "name": "includeHeaders",
+      "type": "boolean",
+      "default": true,
+      "description": "Maxient requires a header row whose column names match the Person Field names configured in Maxient Admin > Import Settings. Must be true."
+    },
+    {
+      "name": "quoteStrings",
+      "type": "boolean",
+      "default": true,
+      "description": "Double-quote all fields to safely handle commas and special characters in names and program descriptions."
+    },
+    {
+      "name": "delimiter",
+      "type": "string",
+      "default": "comma",
+      "required": true,
+      "enum": [
+        { "label": "Comma (,)", "value": "comma" },
+        { "label": "Tab (\\t)",  "value": "tab"   },
+        { "label": "Pipe (|)",   "value": "pipe"  }
+      ],
+      "description": "Maxient accepts CSV (comma) by default. Change only if your Maxient import profile is configured for a different delimiter."
+    }
+  ],
+  "pipeline": [
+    "Extract Enrolled Students",
+    "Construct delimited fields",
+    "Flatten payload",
+    "Construct CSV with datestamped filename",
+    "SFTP Put"
+  ],
+  "segments": {
+    "Extract Enrolled Students": {
+      "class": "extractData",
+      "config": {
+        "selectQuery": "WITH\n\ncurrent_term AS (\n    -- Most recently started FA, SP, or SU term whose start date is on or\n    -- before today. Adjust the ILIKE filters if MU uses different term suffixes.\n    SELECT terms_id\n    FROM   dbo.ods_terms\n    WHERE  term_start_date <= CURRENT_DATE\n      AND  (\n               terms_id ILIKE '%FA'\n            OR terms_id ILIKE '%SP'\n            OR terms_id ILIKE '%SU'\n           )\n    ORDER BY term_start_date DESC\n    LIMIT 1\n),\n\nenrolled AS (\n    -- One row per student who is actively registered in the current term.\n    -- DISTINCT ON guards against duplicate sttr rows for the same student.\n    SELECT DISTINCT ON (sttr_student)\n        sttr_student       AS person_id,\n        sttr_student_load,\n        sttr_class_level\n    FROM   dbo.ods_student_terms\n    WHERE  sttr_term           = (SELECT terms_id FROM current_term)\n      AND  sttr_current_status = 'A'\n    ORDER BY sttr_student\n),\n\nprogram AS (\n    -- Primary active academic program per student.\n    SELECT DISTINCT ON (stpr_student)\n        stpr_student      AS person_id,\n        stpr_acad_program AS major\n    FROM   dbo.ods_student_programs\n    WHERE  stpr_current_status = 'A'\n    ORDER BY stpr_student, stpr_acad_program\n),\n\nhousing AS (\n    -- Current-term room assignment, if any.\n    -- Verify rmpr_building and rmpr_room column names against your ODS.\n    SELECT\n        rmpr_assigned_person          AS person_id,\n        rmpr_building                 AS residence_hall,\n        rmpr_room                     AS room_number\n    FROM   dbo.ods_room_assignments\n    WHERE  rmpr_room_assignment_period = (SELECT terms_id FROM current_term)\n)\n\nSELECT\n    e.person_id,\n    TRIM(p.first_name)                                        AS first_name,\n    TRIM(p.last_name)                                         AS last_name,\n    COALESCE(TRIM(p.middle_name), '')                         AS middle_name,\n    COALESCE(TRIM(p.preferred_name), '')                      AS preferred_name,\n    COALESCE(p.preferred_email_address, '')                   AS email,\n    COALESCE(TO_CHAR(p.birth_date, 'YYYY-MM-DD'), '')         AS date_of_birth,\n    CASE p.gender\n        WHEN 'M' THEN 'Male'\n        WHEN 'F' THEN 'Female'\n        ELSE ''\n    END                                                       AS gender,\n    COALESCE(TRIM(e.sttr_class_level), '')                    AS classification,\n    COALESCE(TRIM(pr.major), '')                              AS major,\n    CASE TRIM(e.sttr_student_load)\n        WHEN 'F' THEN 'Full-Time'\n        WHEN 'P' THEN 'Part-Time'\n        ELSE COALESCE(TRIM(e.sttr_student_load), '')\n    END                                                       AS enrollment_type,\n    COALESCE(TRIM(s.stu_current_home_location), '')           AS campus,\n    COALESCE(TRIM(h.residence_hall), '')                      AS residence_hall,\n    COALESCE(TRIM(h.room_number), '')                         AS room_number\nFROM   enrolled e\nJOIN   dbo.ods_person p\n         ON p.id          = e.person_id\nJOIN   dbo.ods_students s\n         ON s.students_id = e.person_id\nLEFT JOIN program pr\n         ON pr.person_id  = e.person_id\nLEFT JOIN housing h\n         ON h.person_id   = e.person_id\nORDER BY e.person_id",
+        "bulkLoadEnabled": true,
+        "ignoreErrors": false
+      }
+    },
+    "Construct delimited fields": {
+      "class": "JavaScriptTransform",
+      "config": {
+        "pushUndefined": true,
+        "stopOnError": false,
+        "draft": false,
+        "code": "function transform (message, context) {\n\n  var headers = Object.keys(message.payload);\n  var vals    = Object.values(message.payload);\n\n  vals = vals.map(String);\n\n  if (context.quoteStrings) {\n    headers = headers.map(v => v.replaceAll('\"', '\"\"')).map(v => `\"${v}\"`);\n    vals    = vals.map(v => v.replaceAll('\"', '\"\"')).map(v => `\"${v}\"`);\n  }\n\n  switch (context.delimiter) {\n    case 'tab':\n      vals             = vals.join('\\t');\n      context.headers  = headers.join('\\t');\n      break;\n    case 'pipe':\n      vals             = vals.join('|');\n      context.headers  = headers.join('|');\n      break;\n    case 'comma':\n    default:\n      vals             = vals.join(',');\n      context.headers  = headers.join(',');\n      break;\n  }\n\n  message.payload = vals;\n  return message;\n}\n"
+      }
+    },
+    "Flatten payload": {
+      "class": "reducer",
+      "config": {
+        "accumulator": "payload"
+      }
+    },
+    "Construct CSV with datestamped filename": {
+      "class": "JavaScriptTransform",
+      "config": {
+        "pushUndefined": true,
+        "stopOnError": false,
+        "draft": false,
+        "code": "function transform (message, context) {\n\n  if (context.includeHeaders) {\n    message.payload = Array.prototype.concat(context.headers, message.payload);\n  }\n\n  message.payload = message.payload.join('\\r\\n');\n\n  // Build date-stamped remote path: <sftpPath>/MU_Students_YYYYMMDD.csv\n  var now   = new Date();\n  var stamp = String(now.getFullYear())\n            + String(now.getMonth() + 1).padStart(2, '0')\n            + String(now.getDate()).padStart(2, '0');\n  var base  = context.maxientSftpPath.replace(/\\/?$/, '/');\n  context.resolvedFileName = base + 'MU_Students_' + stamp + '.csv';\n\n  return message;\n}\n"
+      }
+    },
+    "SFTP Put": {
+      "class": "sftpPut",
+      "config": {
+        "privateKey": "maxientSftpKey",
+        "username":   "maxientSftpUsername",
+        "host":       "maxientSftpHost",
+        "fileName":   "{{{context.resolvedFileName}}}",
+        "push": false
+      }
+    }
+  }
+}
