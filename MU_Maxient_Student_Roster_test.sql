@@ -1,18 +1,3 @@
--- STEP 1: Run this first to find the correct column names in ods_room_assignments
--- Then replace the housing CTE below with the right names and run the full query.
-
-SELECT column_name, data_type
-FROM   information_schema.columns
-WHERE  table_schema = 'dbo'
-  AND  table_name   = 'ods_room_assignments'
-ORDER BY ordinal_position;
-
--- ─────────────────────────────────────────────────────────────────────────────
--- STEP 2: Full roster query (housing columns stubbed out until Step 1 confirms
--- the real names — replace rmpr_assigned_person, rmpr_building, rmpr_room, and
--- rmpr_room_assignment_period with whatever Step 1 returns).
--- ─────────────────────────────────────────────────────────────────────────────
-
 WITH
 
 current_term AS (
@@ -45,6 +30,15 @@ program AS (
     FROM   dbo.ods_student_programs
     WHERE  stpr_current_status = 'A'
     ORDER BY stpr_student, stpr_acad_program
+),
+
+housing AS (
+    SELECT
+        rmas_person_id  AS person_id,
+        rmas_bldg       AS residence_hall,
+        rmas_room       AS room_number
+    FROM   dbo.ods_room_assignments
+    WHERE  rmas_term = (SELECT terms_id FROM current_term)
 )
 
 SELECT
@@ -68,11 +62,11 @@ SELECT
         ELSE COALESCE(TRIM(e.sttr_student_load), '')
     END                                                 AS enrollment_type,
     COALESCE(TRIM(s.stu_current_home_location), '')     AS campus,
-    -- Housing columns stubbed — fill in after Step 1 confirms real names
-    ''                                                  AS residence_hall,
-    ''                                                  AS room_number
+    COALESCE(TRIM(h.residence_hall), '')                AS residence_hall,
+    COALESCE(TRIM(h.room_number), '')                   AS room_number
 FROM   enrolled e
 JOIN   dbo.ods_person p    ON p.id          = e.person_id
 JOIN   dbo.ods_students s  ON s.students_id = e.person_id
 LEFT JOIN program pr       ON pr.person_id  = e.person_id
+LEFT JOIN housing h        ON h.person_id   = e.person_id
 ORDER BY e.person_id
