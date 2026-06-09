@@ -1,51 +1,3 @@
--- ─────────────────────────────────────────────────────────────────────────────
--- DIAGNOSTICS — run each block separately to find where the query breaks
--- ─────────────────────────────────────────────────────────────────────────────
-
--- DIAG 1: What does ods_terms look like? Check term ID format and start dates.
--- Expected: rows like "2026SP", "2026FA" with plausible start dates.
-SELECT terms_id, term_start_date
-FROM   dbo.ods_terms
-ORDER BY term_start_date DESC
-LIMIT 20;
-
--- ─────────────────────────────────────────────────────────────────────────────
-
--- DIAG 2: Does current_term resolve to anything?
--- Expected: exactly one row with the current term ID.
-SELECT terms_id
-FROM   dbo.ods_terms
-WHERE  term_start_date <= CURRENT_DATE
-  AND  (
-           terms_id ILIKE '%FA'
-        OR terms_id ILIKE '%SP'
-        OR terms_id ILIKE '%SU'
-       )
-ORDER BY term_start_date DESC
-LIMIT 1;
-
--- ─────────────────────────────────────────────────────────────────────────────
-
--- DIAG 3: What sttr_current_status values actually exist?
--- If the query is filtering for 'A' but your ODS uses a different code this
--- will show it.
-SELECT sttr_current_status, COUNT(*) AS n
-FROM   dbo.ods_student_terms
-GROUP BY sttr_current_status
-ORDER BY n DESC;
-
--- ─────────────────────────────────────────────────────────────────────────────
-
--- DIAG 4: Are there any student_terms rows for the current term at all?
--- Paste the term ID returned by DIAG 2 in place of '2026SP'.
-SELECT COUNT(*)
-FROM   dbo.ods_student_terms
-WHERE  sttr_term = '2026SP';   -- <-- replace with DIAG 2 result
-
--- ─────────────────────────────────────────────────────────────────────────────
--- FULL QUERY (run after diagnostics confirm each piece works)
--- ─────────────────────────────────────────────────────────────────────────────
-
 WITH
 
 current_term AS (
@@ -66,8 +18,8 @@ enrolled AS (
         sttr_student   AS person_id,
         sttr_student_load
     FROM   dbo.ods_student_terms
-    WHERE  sttr_term           = (SELECT terms_id FROM current_term)
-      AND  sttr_current_status = 'A'
+    WHERE  sttr_term             = (SELECT terms_id FROM current_term)
+      AND  sttr_current_status  <> 'X'
     ORDER BY sttr_student
 ),
 
@@ -76,7 +28,7 @@ program AS (
         stpr_student      AS person_id,
         stpr_acad_program AS major
     FROM   dbo.ods_student_programs
-    WHERE  stpr_current_status = 'A'
+    WHERE  stpr_current_status <> 'X'
     ORDER BY stpr_student, stpr_acad_program
 ),
 
