@@ -1,0 +1,31 @@
+{
+  "name": "MU_ImportTest",
+  "description": "Temporary import test — delete after confirming segments appear.",
+  "parameters": [],
+  "apiDefinition": {
+    "authType": "oauth",
+    "httpVerb": "POST",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  "pipeline": [
+    "Test Segment"
+  ],
+  "segments": {
+    "Test Segment": {
+      "class": "JavaScriptTransform",
+      "config": {
+        "pushUndefined": true,
+        "stopOnError": false,
+        "draft": false,
+        "code": "function transform(message, context) {\n  return { hello: 'world' };\n}\n"
+      }
+    }
+  }
+}
