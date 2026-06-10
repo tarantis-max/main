@@ -98,7 +98,6 @@ sequenceDiagram
 | `extension/src/cards/ParkingPermitPayment.jsx` | Experience teaser card (shown in dashboard task list) |
 | `extension/src/page/ParkingPermitPaymentPage.jsx` | Experience page — full payment UI; reads `?reg=` + `?permit=` from URL |
 | `extension/extension.js` | Extension manifest — registers card + page, `pageRoute` wiring |
-| `server.js`, `accept-hosted.js`, `eip-client.js`, `public/` | Earlier standalone-Node implementation — superseded, kept for reference |
 
 ## EIP workflow configuration notes
 
