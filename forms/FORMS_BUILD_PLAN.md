@@ -78,6 +78,14 @@ Forms data sources are GET-only and come from delivered sources, Ethos APIs, or 
 2. **Export discipline**: after each form is published, export the JSON (`FormName_v1.0.0.json`) and commit it under `forms/exports/` in this repo so definitions are versioned and portable between environments.
 3. **Per-form build specs** live in [`specs/`](specs/) — field-by-field designs to follow in the Forms Designer.
 
+## Legacy intake (June 10, 2026)
+
+18 legacy documents received and inventoried in [`legacy/INVENTORY.md`](legacy/INVENTORY.md) / [`legacy/uploads_manifest.csv`](legacy/uploads_manifest.csv).
+Key outcomes: 14 are myMU e-form captures (rebuild references, not SharePoint candidates); 3 Financial Aid verification
+forms (P1/P2/P3) may be obsolete under FAFSA Simplification — confirm before building; the vehicle-registration family
+(10+ tracker rows) collapses to one form pending a payment-integration decision; the OTD yr1/yr1-3 cluster shares
+templates with the DPT Wave 3 cluster — build once, deploy to both.
+
 ## Open questions
 
 - Course Overload: requirements from Keri (what rules make it Complex?)
