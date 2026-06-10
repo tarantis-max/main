@@ -494,6 +494,299 @@ async function actionCR(key, action, note) {
   return { action, key };
 }
 
+/* ============================================================
+   Generic Jira browser API — powers the React front end (app/)
+   Issues + JQL search, full issue detail/edit, transitions,
+   user search, attachments, status boards, sprints & backlog.
+   ============================================================ */
+function jget(endpoint) {
+  return fetch(`${CONFIG.baseUrl}${endpoint}`, { headers: { Authorization: authHeader(), Accept: "application/json" } });
+}
+function jsend(method, endpoint, body) {
+  return fetch(`${CONFIG.baseUrl}${endpoint}`, {
+    method,
+    headers: { Authorization: authHeader(), "Content-Type": "application/json", Accept: "application/json" },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+}
+async function jjson(p) {
+  const r = await p;
+  const t = await r.text();
+  if (!r.ok) throw new Error(`Jira ${r.status}: ${t.slice(0, 300)}`);
+  return t ? JSON.parse(t) : null;
+}
+
+const LITE_FIELDS = ["summary", "status", "issuetype", "assignee", "priority", "updated", "created", "duedate", "labels", "parent"];
+function mapLite(i) {
+  const f = i.fields || {};
+  return {
+    key: i.key,
+    summary: f.summary || "",
+    type: (f.issuetype && f.issuetype.name) || "",
+    subtask: Boolean(f.issuetype && f.issuetype.subtask),
+    status: (f.status && f.status.name) || "",
+    statusId: (f.status && f.status.id) || "",
+    statusCategory: (f.status && f.status.statusCategory && f.status.statusCategory.key) || "new",
+    assignee: (f.assignee && f.assignee.displayName) || "",
+    assigneeAvatar: (f.assignee && f.assignee.avatarUrls && f.assignee.avatarUrls["24x24"]) || "",
+    priority: (f.priority && f.priority.name) || "",
+    duedate: f.duedate || "",
+    created: f.created || "",
+    updated: f.updated || "",
+    labels: f.labels || [],
+    parent: (f.parent && f.parent.key) || "",
+    url: `${CONFIG.baseUrl}/browse/${i.key}`,
+  };
+}
+
+// One page of search results (the enhanced search API pages by token).
+async function searchIssuesPage(jql, pageToken) {
+  const data = await jjson(jsend("POST", "/rest/api/3/search/jql", {
+    jql, fields: LITE_FIELDS, maxResults: 50, nextPageToken: pageToken || undefined,
+  }));
+  return { issues: (data.issues || []).map(mapLite), nextPageToken: data.nextPageToken || null, jql };
+}
+
+// Build JQL for the issue browser: raw JQL wins, else project scope + text/key query.
+function browseJql(params) {
+  if (params.get("jql")) return params.get("jql");
+  const proj = (params.get("project") || CONFIG.project).replace(/"/g, "");
+  const q = (params.get("q") || "").trim();
+  let clause = `project = "${proj}"`;
+  if (/^[A-Za-z][A-Za-z0-9]*-\d+$/.test(q)) clause += ` AND key = "${q.toUpperCase()}"`;
+  else if (q) clause += ` AND text ~ "${q.replace(/["\\]/g, "")}*"`;
+  return clause + " ORDER BY updated DESC";
+}
+
+async function getIssueDetail(key) {
+  const [issue, trans, comments] = await Promise.all([
+    jjson(jget(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=*all`)),
+    jjson(jget(`/rest/api/3/issue/${encodeURIComponent(key)}/transitions`)),
+    getComments(key),
+  ]);
+  const f = issue.fields || {};
+  return {
+    key: issue.key,
+    summary: f.summary || "",
+    description: adfToText(f.description).trim(),
+    type: (f.issuetype && f.issuetype.name) || "",
+    subtask: Boolean(f.issuetype && f.issuetype.subtask),
+    status: (f.status && f.status.name) || "",
+    statusCategory: (f.status && f.status.statusCategory && f.status.statusCategory.key) || "new",
+    assignee: f.assignee ? { name: f.assignee.displayName, accountId: f.assignee.accountId, avatar: f.assignee.avatarUrls && f.assignee.avatarUrls["24x24"] } : null,
+    reporter: f.reporter ? { name: f.reporter.displayName } : null,
+    priority: (f.priority && f.priority.name) || "",
+    labels: f.labels || [],
+    duedate: f.duedate || "",
+    startDate: f[FIELDS.startDate] || "",
+    created: f.created || "",
+    updated: f.updated || "",
+    project: f.project ? { key: f.project.key, name: f.project.name } : null,
+    parent: f.parent ? { key: f.parent.key, summary: f.parent.fields && f.parent.fields.summary } : null,
+    subtasks: (f.subtasks || []).map(s => ({
+      key: s.key, summary: (s.fields && s.fields.summary) || "",
+      status: (s.fields && s.fields.status && s.fields.status.name) || "",
+      statusCategory: (s.fields && s.fields.status && s.fields.status.statusCategory && s.fields.status.statusCategory.key) || "new",
+    })),
+    links: (f.issuelinks || []).map(l => {
+      const o = l.outwardIssue || l.inwardIssue;
+      if (!o) return null;
+      return {
+        key: o.key, summary: (o.fields && o.fields.summary) || "",
+        status: (o.fields && o.fields.status && o.fields.status.name) || "",
+        direction: l.outwardIssue ? (l.type && l.type.outward) : (l.type && l.type.inward),
+      };
+    }).filter(Boolean),
+    attachments: (f.attachment || []).map(a => ({
+      id: a.id, filename: a.filename, size: a.size, mimeType: a.mimeType,
+      created: a.created, author: a.author && a.author.displayName,
+    })),
+    vpmo: {
+      risk: readVpmo(f, "risk") || "", portfolio: readVpmo(f, "portfolio") || "",
+      compliance: readVpmo(f, "compliance") || "", sponsor: readVpmo(f, "sponsor") || "",
+      projectId: readVpmo(f, "projectId") || "", pctComplete: readVpmo(f, "pctComplete"),
+    },
+    comments,
+    transitions: (trans.transitions || []).map(t => ({
+      id: t.id, name: t.name,
+      to: t.to && t.to.name, toId: t.to && t.to.id,
+      toCategory: t.to && t.to.statusCategory && t.to.statusCategory.key,
+    })),
+    url: `${CONFIG.baseUrl}/browse/${issue.key}`,
+  };
+}
+
+async function editIssue(key, body) {
+  const fields = {};
+  if ("summary" in body)     fields.summary            = body.summary;
+  if ("description" in body) fields.description        = textToAdf(body.description);
+  if ("duedate" in body)     fields.duedate            = body.duedate || null;
+  if ("startDate" in body)   fields[FIELDS.startDate]  = body.startDate || null;
+  if ("labels" in body)      fields.labels             = body.labels;
+  if ("priority" in body)    fields.priority           = body.priority ? { name: body.priority } : null;
+  if ("assigneeId" in body)  fields.assignee           = body.assigneeId ? { accountId: body.assigneeId } : null;
+  if (!Object.keys(fields).length) throw new Error("Nothing to update.");
+  const r = await putIssue(key, fields);
+  if (!r.ok) { const e = await r.text(); throw new Error(`Jira ${r.status}: ${e.slice(0, 300)}`); }
+  bustCache();
+  return { ok: true };
+}
+
+// Transition by explicit transition id, or by target status id/name (board drag-drop).
+async function transitionIssue(key, body) {
+  let id = body.id;
+  if (!id) {
+    const { transitions } = await jjson(jget(`/rest/api/3/issue/${encodeURIComponent(key)}/transitions`));
+    const m = (transitions || []).find(t =>
+      (body.statusId && t.to && String(t.to.id) === String(body.statusId)) ||
+      (body.status && t.to && t.to.name.toLowerCase() === String(body.status).toLowerCase()));
+    if (!m) throw new Error("No workflow transition to that status from the issue's current status.");
+    id = m.id;
+  }
+  const r = await jsend("POST", `/rest/api/3/issue/${encodeURIComponent(key)}/transitions`, { transition: { id } });
+  if (!r.ok) { const e = await r.text(); throw new Error(`Jira ${r.status}: ${e.slice(0, 300)}`); }
+  bustCache();
+  return { ok: true };
+}
+
+async function searchUsers(q) {
+  const data = await jjson(jget(`/rest/api/3/user/search?query=${encodeURIComponent(q)}&maxResults=20`));
+  return (data || [])
+    .filter(u => u.active !== false && (u.accountType === "atlassian" || !u.accountType))
+    .map(u => ({ accountId: u.accountId, name: u.displayName, avatar: u.avatarUrls && u.avatarUrls["24x24"] }));
+}
+
+/* Status board: real workflow columns for ANY project type (company- or
+   team-managed, business or software). Columns = union of the project's
+   statuses ordered by category; done issues older than 14 days are hidden
+   so the board stays readable. */
+async function getStatusBoard(projectKey) {
+  const proj = (projectKey || CONFIG.project).replace(/"/g, "");
+  const [statusesByType, issues] = await Promise.all([
+    jjson(jget(`/rest/api/3/project/${encodeURIComponent(proj)}/statuses`)),
+    jiraSearch(`project = "${proj}" AND (statusCategory != Done OR updated >= -14d) ORDER BY created DESC`, LITE_FIELDS),
+  ]);
+  const colsById = {};
+  for (const it of statusesByType || []) {
+    for (const s of it.statuses || []) {
+      colsById[s.id] = { id: s.id, name: s.name, category: (s.statusCategory && s.statusCategory.key) || "new" };
+    }
+  }
+  const order = { new: 0, indeterminate: 1, done: 2 };
+  const columns = Object.values(colsById).sort((a, b) =>
+    (order[a.category] ?? 1) - (order[b.category] ?? 1) || a.name.localeCompare(b.name));
+  return { project: proj, columns, issues: issues.map(mapLite).filter(i => !i.subtask) };
+}
+
+/* ---- Jira Software (agile) boards / sprints / backlog ----------------- */
+async function agileBoards(projectKey) {
+  const proj = projectKey || CONFIG.project;
+  const data = await jjson(jget(`/rest/agile/1.0/board?projectKeyOrId=${encodeURIComponent(proj)}&maxResults=50`));
+  return (data.values || []).map(b => ({ id: b.id, name: b.name, type: b.type }));
+}
+async function agileSprints(boardId) {
+  const data = await jjson(jget(`/rest/agile/1.0/board/${boardId}/sprint?state=active,future&maxResults=50`));
+  return (data.values || []).map(s => ({
+    id: s.id, name: s.name, state: s.state, startDate: s.startDate || "", endDate: s.endDate || "", goal: s.goal || "",
+  }));
+}
+// Paginated fetch of an agile collection: "sprint/42/issue" or "board/7/backlog"
+async function agileIssues(pathPart) {
+  const out = [];
+  let startAt = 0;
+  for (;;) {
+    const data = await jjson(jget(`/rest/agile/1.0/${pathPart}?startAt=${startAt}&maxResults=50&fields=${LITE_FIELDS.join(",")}`));
+    const batch = data.issues || [];
+    batch.forEach(i => out.push(mapLite(i)));
+    startAt += batch.length;
+    if (!batch.length || startAt >= (data.total || 0)) break;
+  }
+  return out;
+}
+async function moveIssues(target, sprintId, issues) {
+  if (!Array.isArray(issues) || !issues.length) throw new Error("No issues given.");
+  const endpoint = target === "backlog" ? "/rest/agile/1.0/backlog/issue" : `/rest/agile/1.0/sprint/${sprintId}/issue`;
+  const r = await jsend("POST", endpoint, { issues });
+  if (!r.ok) { const e = await r.text(); throw new Error(`Jira ${r.status}: ${e.slice(0, 300)}`); }
+  return { ok: true };
+}
+
+async function streamAttachment(id, res) {
+  const r = await fetch(`${CONFIG.baseUrl}/rest/api/3/attachment/content/${encodeURIComponent(id)}`, {
+    headers: { Authorization: authHeader() }, redirect: "follow",
+  });
+  if (!r.ok) { res.writeHead(502, { "Content-Type": "text/plain" }); return res.end("Attachment fetch failed"); }
+  res.writeHead(200, {
+    "Content-Type": r.headers.get("content-type") || "application/octet-stream",
+    "Content-Disposition": r.headers.get("content-disposition") || "attachment",
+  });
+  require("stream").Readable.fromWeb(r.body).pipe(res);
+}
+
+/* ---- router for the browser API --------------------------------------- */
+function sendJson(res, code, obj) {
+  res.writeHead(code, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+  res.end(JSON.stringify(obj));
+}
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.on("data", d => raw += d);
+    req.on("end", () => { try { resolve(raw ? JSON.parse(raw) : {}); } catch (e) { reject(new Error("Invalid JSON body")); } });
+    req.on("error", reject);
+  });
+}
+
+// Returns true if the request was handled here.
+async function routeBrowserApi(req, res) {
+  const u = new URL(req.url, "http://localhost");
+  const p = u.pathname;
+  const handled =
+    p === "/api/issues" || p.startsWith("/api/issues/") ||
+    p === "/api/users" || p === "/api/board" ||
+    p.startsWith("/api/agile/") || p.startsWith("/api/attachments/");
+  if (!handled) return false;
+
+  if (!CONFIG.email || !CONFIG.token) {
+    sendJson(res, 500, { error: "Set JIRA_EMAIL and JIRA_TOKEN environment variables." });
+    return true;
+  }
+  try {
+    let m;
+    if (p === "/api/issues" && req.method === "GET")
+      return sendJson(res, 200, await searchIssuesPage(browseJql(u.searchParams), u.searchParams.get("pageToken"))), true;
+    if ((m = p.match(/^\/api\/issues\/([^/]+)\/transition$/)) && req.method === "POST")
+      return sendJson(res, 200, await transitionIssue(decodeURIComponent(m[1]), await readBody(req))), true;
+    if ((m = p.match(/^\/api\/issues\/([^/]+)$/))) {
+      const key = decodeURIComponent(m[1]);
+      if (req.method === "GET") return sendJson(res, 200, await getIssueDetail(key)), true;
+      if (req.method === "PUT") return sendJson(res, 200, await editIssue(key, await readBody(req))), true;
+    }
+    if (p === "/api/users" && req.method === "GET")
+      return sendJson(res, 200, { users: await searchUsers(u.searchParams.get("q") || "") }), true;
+    if (p === "/api/board" && req.method === "GET")
+      return sendJson(res, 200, await getStatusBoard(u.searchParams.get("project") || "")), true;
+    if (p === "/api/agile/boards" && req.method === "GET")
+      return sendJson(res, 200, { boards: await agileBoards(u.searchParams.get("project") || "") }), true;
+    if ((m = p.match(/^\/api\/agile\/board\/(\d+)\/sprints$/)) && req.method === "GET")
+      return sendJson(res, 200, { sprints: await agileSprints(m[1]) }), true;
+    if ((m = p.match(/^\/api\/agile\/board\/(\d+)\/backlog$/)) && req.method === "GET")
+      return sendJson(res, 200, { issues: await agileIssues(`board/${m[1]}/backlog`) }), true;
+    if ((m = p.match(/^\/api\/agile\/sprint\/(\d+)\/issues$/))) {
+      if (req.method === "GET")  return sendJson(res, 200, { issues: await agileIssues(`sprint/${m[1]}/issue`) }), true;
+      if (req.method === "POST") return sendJson(res, 200, await moveIssues("sprint", m[1], (await readBody(req)).issues)), true;
+    }
+    if (p === "/api/agile/backlog" && req.method === "POST")
+      return sendJson(res, 200, await moveIssues("backlog", null, (await readBody(req)).issues)), true;
+    if ((m = p.match(/^\/api\/attachments\/([^/]+)/)) && req.method === "GET")
+      return await streamAttachment(decodeURIComponent(m[1]), res), true;
+    sendJson(res, 404, { error: "Not found" });
+  } catch (e) {
+    sendJson(res, 502, { error: String(e.message || e) });
+  }
+  return true;
+}
+
 let caches = {};                    // keyed by JQL so each project caches independently
 function bustCache() { caches = {}; crCaches = {}; }
 async function getProjects(projectKey) {
@@ -520,6 +813,8 @@ async function getProjects(projectKey) {
 
 /* ---- HTTP server ----------------------------------------------------- */
 const server = http.createServer(async (req, res) => {
+  // Generic Jira browser API (issues / users / boards / sprints / attachments)
+  if (req.url.startsWith("/api/") && await routeBrowserApi(req, res)) return;
   // /api/changes — change-request CRUD + approval actions
   if (req.url.startsWith("/api/changes")) {
     if (!CONFIG.email || !CONFIG.token) {
@@ -671,16 +966,29 @@ const server = http.createServer(async (req, res) => {
     }
     return;
   }
-  // static: serve index.html
-  const file = req.url === "/" || req.url.startsWith("/?") ? "index.html" : req.url.split("?")[0].replace(/^\//, "");
-  const full = path.join(__dirname, file);
-  if (!full.startsWith(__dirname) || !fs.existsSync(full) || fs.statSync(full).isDirectory()) {
-    res.writeHead(404); return res.end("Not found");
+  // static: serve the React app build (app/dist) when present, with the legacy
+  // single-file dashboard available at /legacy. Without a build, the legacy
+  // dashboard is served at / exactly as before.
+  const APP_DIST = path.join(__dirname, "..", "app", "dist");
+  const hasApp = fs.existsSync(path.join(APP_DIST, "index.html"));
+  const urlPath = decodeURIComponent(req.url.split("?")[0]);
+  const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json",
+    ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".map": "application/json",
+    ".woff": "font/woff", ".woff2": "font/woff2" };
+  const serveFile = (full) => {
+    res.writeHead(200, { "Content-Type": types[path.extname(full).toLowerCase()] || "application/octet-stream" });
+    fs.createReadStream(full).pipe(res);
+  };
+  if (urlPath === "/legacy" || urlPath === "/legacy/") return serveFile(path.join(__dirname, "index.html"));
+  const rel = urlPath === "/" ? "index.html" : urlPath.replace(/^\//, "");
+  const roots = hasApp ? [APP_DIST, __dirname] : [__dirname];
+  for (const root of roots) {
+    const full = path.join(root, rel);
+    if (full.startsWith(root) && fs.existsSync(full) && fs.statSync(full).isFile()) return serveFile(full);
   }
-  const ext = path.extname(full).toLowerCase();
-  const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
-  res.writeHead(200, { "Content-Type": types[ext] || "application/octet-stream" });
-  fs.createReadStream(full).pipe(res);
+  // SPA fallback: client-side routes (no file extension) land on the app shell
+  if (hasApp && !path.extname(urlPath)) return serveFile(path.join(APP_DIST, "index.html"));
+  res.writeHead(404); res.end("Not found");
 });
 
 if (require.main === module) {

@@ -1,5 +1,13 @@
 # MU VPMO — Program Management Dashboard
 
+> **There's now a full React front end in [`app/`](../app/README.md)** with a
+> Portfolio view (this dashboard), Change Management, an issue browser with
+> JQL, full issue detail/editing, a drag-and-drop workflow board, and
+> sprints/backlog. `server.js` serves it automatically once it's built
+> (`cd app && npm install && npm run build` — `start.bat` does this for you).
+> This single-file dashboard remains available at **`/legacy`**, and is served
+> at `/` whenever the app isn't built.
+
 An interactive, single-file dashboard for the Methodist University VPMO program
 plan. **Jira is the system of record:** the dashboard starts empty and loads
 live from any Jira project you pick, and you can edit items and create new work

@@ -60,6 +60,28 @@ if ($token) {
   Write-Host '  [!] No token - "Load from Jira" will not work, but the dashboard opens with built-in data.' -ForegroundColor Yellow
 }
 
+# --- build the React front end (app/) on first run -------------------
+# server.js serves app/dist when it exists; otherwise it falls back to the
+# legacy single-file dashboard, so a failed/skipped build is never fatal.
+$appDir  = Join-Path (Split-Path $PSScriptRoot -Parent) 'app'
+$distIdx = Join-Path $appDir 'dist\index.html'
+if ((Test-Path (Join-Path $appDir 'package.json')) -and -not (Test-Path $distIdx)) {
+  if (Get-Command npm -ErrorAction SilentlyContinue) {
+    Write-Host '  Building the web app (first run only, takes a minute)...' -ForegroundColor DarkGray
+    Push-Location $appDir
+    try {
+      npm install --no-audit --no-fund | Out-Null
+      npm run build | Out-Null
+      Write-Host '  Web app built.' -ForegroundColor DarkGray
+    } catch {
+      Write-Host '  [!] Web app build failed - falling back to the legacy dashboard.' -ForegroundColor Yellow
+    }
+    Pop-Location
+  } else {
+    Write-Host '  [!] npm not found - serving the legacy dashboard. Install Node LTS to get the full app.' -ForegroundColor Yellow
+  }
+}
+
 Write-Host ''
 Write-Host "  Starting dashboard at http://localhost:$port"
 Write-Host '  (Close this window or press Ctrl+C to stop.)'
