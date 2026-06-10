@@ -132,10 +132,44 @@ empty it reads the legacy label; if that's missing it derives a sensible default
 Green). This means the dashboard works at every stage of Jira buildout — no
 fields, labels only, or full custom fields all render correctly.
 
-### Creating the VPMO custom fields (one-time)
+### Using real custom fields instead of labels (one-time)
 
-Jira has no native Risk / Portfolio / Compliance / Sponsor / Project ID fields.
-Run the setup script **once** to create them as proper typed custom fields:
+Jira has no native Risk / Portfolio / Compliance / Sponsor / Project ID fields,
+so without setup the dashboard stores VPMO data as labels (`risk:Yellow`,
+`portfolio:Infrastructure`, …). To use proper typed fields, pick the path that
+matches your project type:
+
+**Team-managed projects (ITPM is one)** — these only use fields created
+*inside* the project; global custom fields can't be attached to them, and the
+API can't create per-project fields. So it's a two-step:
+
+1. In Jira: **ITPM → Project settings → Issue types**, and for *each* issue
+   type add these custom fields (exact names matter):
+
+   | Field name | Type |
+   |---|---|
+   | `Risk` | Dropdown — Green, Yellow, Red |
+   | `Portfolio` | Short text |
+   | `Compliance Driver` | Short text |
+   | `Business Sponsor` | Short text |
+   | `Project ID` | Short text |
+   | `% Complete` | Number |
+   | `Change Type` | Dropdown — Standard, Normal, Emergency |
+   | `CR Impact` | Dropdown — Low, Medium, High |
+   | `Affected Systems` | Short text |
+   | `Rollback Plan` | Paragraph |
+
+2. Then discover + map their IDs automatically:
+
+   ```bash
+   node dashboard/setup-jira-fields.js --map ITPM
+   ```
+
+   It scans the project's real fields by name, writes
+   `dashboard/vpmo-fields.json`, and tells you exactly which fields are still
+   missing (those keep using labels). Restart `server.js` to apply.
+
+**Company-managed projects** — create the fields globally in one shot:
 
 ```bash
 export JIRA_BASE_URL="https://methodist.atlassian.net"
@@ -144,18 +178,15 @@ export JIRA_TOKEN="<Atlassian API token>"
 node dashboard/setup-jira-fields.js
 ```
 
-It creates six fields (Risk as a select with Green/Yellow/Red; the rest as
-text/number), skips any that already exist, and writes `dashboard/vpmo-fields.json`
-with their IDs. Restart `server.js` to pick them up — from then on the dashboard
-reads and writes those fields directly.
+It creates the VPMO fields (skipping any that exist) and writes
+`vpmo-fields.json`. Add them to the project's screens in Jira admin.
 
-Custom-field IDs are **global to the Jira site**, so one `vpmo-fields.json` works
-across every project. What varies per project is *availability* (a global field
-must be added to a project's screens before you can write to it). The proxy
-handles this automatically: writes go to the custom field, and if a project
-rejects it (field not on screen) the proxy retries the write as a label. Without
-`vpmo-fields.json` at all, everything falls back to labels. Adjust the mapping in
-the `FIELDS` / `VPMO` / `PHASE_MAP` blocks at the top of `server.js`.
+Either way, the proxy stays safe by design: writes go to the mapped custom
+field first, and if a particular project rejects it (field not available
+there) the write automatically retries as a label. Existing label data keeps
+being read as the fallback, so nothing breaks mid-migration. Mappings can also
+be edited by hand in `vpmo-fields.json` (e.g. to point `portfolio` at ITPM's
+built-in **Category** field).
 
 ## Editing and commenting
 
