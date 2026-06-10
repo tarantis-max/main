@@ -106,7 +106,7 @@
       fetch('/api/permit/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reg: reg, transId: transId })
+        body: JSON.stringify({ transId: transId })
       })
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
         .then(function (res) {

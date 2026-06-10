@@ -46,14 +46,16 @@ app.post('/api/permit/pay', async (req, res) => {
  */
 app.post('/api/permit/verify', async (req, res) => {
   try {
-    const { reg, transId } = req.body || {};
+    const { transId } = req.body || {};
     if (!transId) return res.status(400).json({ error: 'transId required' });
 
     const txn = await anet.getTransactionDetails(transId);
     const paid = anet.assertPaid(txn, transId);
 
+    // The registration id comes from the VERIFIED transaction's invoice number,
+    // never from the browser, so a caller can't complete someone else's task.
     await completeExternalTask({
-      registrationId: reg || paid.invoiceNumber,
+      registrationId: paid.invoiceNumber,
       transId: paid.transId,
       invoiceNumber: paid.invoiceNumber,
       amount: paid.amount,
@@ -111,7 +113,8 @@ app.post('/api/anet/webhook', async (req, res) => {
 /**
  * Verify the Authorize.net webhook signature.
  * Header format: "X-ANET-Signature: sha512=HEXDIGEST".
- * The Signature Key is a hex string; its decoded BYTES are the HMAC key.
+ * The Signature Key (the 128-char hex string) is used AS-IS as the HMAC key —
+ * do NOT hex-decode it; that rule applies to transHashSha2, not webhooks.
  */
 function verifySignature(rawBody, header) {
   const key = process.env.ANET_SIGNATURE_KEY;
@@ -123,7 +126,7 @@ function verifySignature(rawBody, header) {
 
   const provided = (header.split('=')[1] || '').toLowerCase();
   const computed = crypto
-    .createHmac('sha512', Buffer.from(key, 'hex'))
+    .createHmac('sha512', key)
     .update(rawBody, 'utf8')
     .digest('hex')
     .toLowerCase();
