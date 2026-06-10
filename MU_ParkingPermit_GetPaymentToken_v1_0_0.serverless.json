@@ -1,77 +1,43 @@
 {
   "name": "MU_ParkingPermit_GetPaymentToken",
-  "description": "Serverless API. Receives a registrationId and permitType, looks up the fee server-side, calls Authorize.net getHostedPaymentPageRequest, and returns the one-time hosted payment form token plus the form URL. The caller (Experience card / EIP task) POSTs the token to the form URL to open the Authorize.net hosted payment page. Default is redirect mode (new tab, A.net shows the receipt); pass the communicatorUrl parameter to switch to embedded-iframe mode instead.",
+  "description": "Serverless API. Receives a registrationId and permitType, looks up the fee server-side, calls Authorize.net getHostedPaymentPageRequest, and returns the one-time hosted payment form token plus the form URL. The caller (Experience card) POSTs the token to the form URL to open the Authorize.net hosted payment page in a new tab (redirect mode — Authorize.net shows the receipt).",
   "parameters": [
     {
       "name": "authNetLoginId",
       "type": "string",
-      "label": "Authorize.net API Login ID",
-      "required": true,
-      "sensitive": true,
-      "persistent": true,
-      "description": "Authorize.net API Login ID (Account > Security Settings > API Credentials & Keys)."
+      "sensitive": true
     },
     {
       "name": "authNetTransactionKey",
       "type": "string",
-      "label": "Authorize.net Transaction Key",
-      "required": true,
-      "sensitive": true,
-      "persistent": true,
-      "description": "Authorize.net Transaction Key. Stored here so it never reaches the browser."
+      "sensitive": true
     },
     {
       "name": "environment",
-      "type": "string",
-      "label": "Environment",
-      "default": "sandbox",
-      "required": true,
-      "persistent": true,
-      "description": "'sandbox' (apitest.authorize.net / test.authorize.net) or 'production' (api.authorize.net / accept.authorize.net)."
+      "type": "string"
     },
     {
       "name": "merchantName",
-      "type": "string",
-      "label": "Merchant Name",
-      "default": "Methodist University",
-      "required": true,
-      "persistent": true,
-      "description": "Merchant name displayed on the hosted payment page."
-    },
-    {
-      "name": "communicatorUrl",
-      "type": "string",
-      "label": "IFrame Communicator URL (optional)",
-      "required": false,
-      "persistent": true,
-      "description": "Leave blank for redirect mode (recommended for Experience cards: the hosted page opens in a new tab and shows the Authorize.net receipt). If you can host an IFrameCommunicator.html on the same origin as the embedding page, set its URL here to switch to embedded-iframe mode (sets showReceipt=false)."
+      "type": "string"
     }
   ],
   "apiDefinition": {
     "authType": "oauth",
     "httpVerb": "POST",
     "inputSchema": {
-      "$schema": "http://json-schema.org/draft-04/schema#",
       "type": "object",
       "properties": {
         "registrationId": {
           "type": "string",
-          "title": "Registration ID",
-          "description": "Parking registration id; becomes the Authorize.net invoiceNumber (max 20 chars)."
+          "title": "Registration ID"
         },
         "permitType": {
           "type": "string",
-          "title": "Permit Type",
-          "description": "Key into the server-side fee schedule (e.g. full-year, fall, spring, summer, motorcycle)."
+          "title": "Permit Type"
         }
-      },
-      "required": [
-        "registrationId",
-        "permitType"
-      ]
+      }
     },
     "outputSchema": {
-      "$schema": "http://json-schema.org/draft-04/schema#",
       "type": "object",
       "properties": {
         "token": {
@@ -110,7 +76,7 @@
         "pushUndefined": false,
         "stopOnError": true,
         "draft": false,
-        "code": "function transform(message, context) {\n  var p = message.payload || {};\n  var registrationId = p.registrationId;\n  var permitType = p.permitType;\n\n  if (!registrationId) {\n    throw new Error('registrationId is required');\n  }\n  // Authorize.net invoiceNumber is limited to 20 characters.\n  if (String(registrationId).length > 20) {\n    throw new Error('registrationId must be 20 characters or fewer');\n  }\n  if (!permitType) {\n    throw new Error('permitType is required');\n  }\n\n  context.set('registrationId', String(registrationId));\n  context.set('permitType', String(permitType));\n  return message;\n}\n"
+        "code": "function transform(message, context) {\n  var p = message.payload || {};\n  var registrationId = p.registrationId;\n  var permitType = p.permitType;\n\n  if (!registrationId) {\n    throw new Error('registrationId is required');\n  }\n  if (String(registrationId).length > 20) {\n    throw new Error('registrationId must be 20 characters or fewer (Authorize.net invoiceNumber limit)');\n  }\n  if (!permitType) {\n    throw new Error('permitType is required');\n  }\n\n  context.set('registrationId', String(registrationId));\n  context.set('permitType', String(permitType));\n  return message;\n}\n"
       }
     },
     "Build Token Request": {
@@ -119,7 +85,7 @@
         "pushUndefined": false,
         "stopOnError": true,
         "draft": false,
-        "code": "function transform(message, context) {\n  // Server-side fee schedule: the amount is never taken from the caller,\n  // so a student cannot tamper with the price.\n  // TODO: replace with the real permit types and prices before go-live.\n  var FEE_SCHEDULE = {\n    'full-year':  { amount: '125.00', label: 'Full-Year Permit' },\n    'fall':       { amount: '75.00',  label: 'Fall Semester Permit' },\n    'spring':     { amount: '75.00',  label: 'Spring Semester Permit' },\n    'summer':     { amount: '40.00',  label: 'Summer Permit' },\n    'motorcycle': { amount: '50.00',  label: 'Motorcycle Permit' }\n  };\n\n  var permitType = context.get ? context.get('permitType') : context.permitType;\n  var registrationId = context.get ? context.get('registrationId') : context.registrationId;\n\n  var fee = FEE_SCHEDULE[permitType];\n  if (!fee) {\n    throw new Error('Unknown permit type: ' + permitType);\n  }\n\n  var production = context.environment === 'production';\n  context.set('apiUrl', production\n    ? 'https://api.authorize.net/xml/v1/request.api'\n    : 'https://apitest.authorize.net/xml/v1/request.api');\n  context.set('formUrl', production\n    ? 'https://accept.authorize.net/payment/payment'\n    : 'https://test.authorize.net/payment/payment');\n  context.set('amount', fee.amount);\n  context.set('feeLabel', fee.label);\n\n  var settings = [];\n  if (context.communicatorUrl) {\n    // Embedded-iframe mode: result is relayed via the IFrameCommunicator,\n    // so the Authorize.net receipt must be suppressed.\n    settings.push({\n      settingName: 'hostedPaymentReturnOptions',\n      settingValue: JSON.stringify({ showReceipt: false })\n    });\n    settings.push({\n      settingName: 'hostedPaymentIFrameCommunicatorUrl',\n      settingValue: JSON.stringify({ url: context.communicatorUrl })\n    });\n  } else {\n    // Redirect mode: hosted page opens in its own tab and shows the receipt.\n    settings.push({\n      settingName: 'hostedPaymentReturnOptions',\n      settingValue: JSON.stringify({ showReceipt: true })\n    });\n  }\n  settings.push({\n    settingName: 'hostedPaymentButtonOptions',\n    settingValue: JSON.stringify({ text: 'Pay' })\n  });\n  settings.push({\n    settingName: 'hostedPaymentOrderOptions',\n    settingValue: JSON.stringify({ show: true, merchantName: context.merchantName })\n  });\n  settings.push({\n    settingName: 'hostedPaymentBillingAddressOptions',\n    settingValue: JSON.stringify({ show: true, required: false })\n  });\n\n  // Field order matters to the Authorize.net JSON API (XML schema underneath).\n  message.payload = {\n    getHostedPaymentPageRequest: {\n      merchantAuthentication: {\n        name: context.authNetLoginId,\n        transactionKey: context.authNetTransactionKey\n      },\n      transactionRequest: {\n        transactionType: 'authCaptureTransaction',\n        amount: fee.amount,\n        order: {\n          invoiceNumber: registrationId,\n          description: fee.label\n        }\n      },\n      hostedPaymentSettings: { setting: settings }\n    }\n  };\n  return message;\n}\n"
+        "code": "function transform(message, context) {\n  // Server-side fee schedule — amount is never taken from the caller.\n  // TODO: replace placeholder amounts with real permit fees before go-live.\n  var FEE_SCHEDULE = {\n    'full-year':  { amount: '125.00', label: 'Full-Year Permit' },\n    'fall':       { amount: '75.00',  label: 'Fall Semester Permit' },\n    'spring':     { amount: '75.00',  label: 'Spring Semester Permit' },\n    'summer':     { amount: '40.00',  label: 'Summer Permit' },\n    'motorcycle': { amount: '50.00',  label: 'Motorcycle Permit' }\n  };\n\n  var permitType     = context.get('permitType');\n  var registrationId = context.get('registrationId');\n  var fee = FEE_SCHEDULE[permitType];\n  if (!fee) {\n    throw new Error('Unknown permit type: ' + permitType);\n  }\n\n  var production = (context.environment === 'production');\n  context.set('apiUrl', production\n    ? 'https://api.authorize.net/xml/v1/request.api'\n    : 'https://apitest.authorize.net/xml/v1/request.api');\n  context.set('formUrl', production\n    ? 'https://accept.authorize.net/payment/payment'\n    : 'https://test.authorize.net/payment/payment');\n  context.set('amount', fee.amount);\n  context.set('feeLabel', fee.label);\n\n  // Redirect mode: hosted page opens in its own tab and shows the Authorize.net receipt.\n  message.payload = {\n    getHostedPaymentPageRequest: {\n      merchantAuthentication: {\n        name: context.authNetLoginId,\n        transactionKey: context.authNetTransactionKey\n      },\n      transactionRequest: {\n        transactionType: 'authCaptureTransaction',\n        amount: fee.amount,\n        order: {\n          invoiceNumber: registrationId,\n          description: fee.label\n        }\n      },\n      hostedPaymentSettings: {\n        setting: [\n          {\n            settingName: 'hostedPaymentReturnOptions',\n            settingValue: JSON.stringify({ showReceipt: true })\n          },\n          {\n            settingName: 'hostedPaymentButtonOptions',\n            settingValue: JSON.stringify({ text: 'Pay' })\n          },\n          {\n            settingName: 'hostedPaymentOrderOptions',\n            settingValue: JSON.stringify({ show: true, merchantName: context.merchantName || 'Methodist University' })\n          },\n          {\n            settingName: 'hostedPaymentBillingAddressOptions',\n            settingValue: JSON.stringify({ show: true, required: false })\n          }\n        ]\n      }\n    }\n  };\n  return message;\n}\n"
       }
     },
     "Call Authorize.net": {
@@ -137,9 +103,9 @@
       "class": "JavaScriptTransform",
       "config": {
         "pushUndefined": true,
-        "stopOnError": false,
+        "stopOnError": true,
         "draft": false,
-        "code": "function transform(message, context) {\n  var raw = message.payload;\n  // Authorize.net prepends a UTF-8 BOM on JSON responses; strip before parsing.\n  if (typeof raw === 'string') {\n    raw = JSON.parse(raw.replace(/^\\uFEFF/, '').trim());\n  }\n\n  var msgs = (raw && raw.messages) ? raw.messages : {};\n  if ((msgs.resultCode || '').toLowerCase() !== 'ok' || !raw.token) {\n    var m = (msgs.message && msgs.message[0]) || {};\n    throw new Error('getHostedPaymentPage failed: [' + m.code + '] ' + m.text);\n  }\n\n  return {\n    token: raw.token,\n    formUrl: context.get ? context.get('formUrl') : context.formUrl,\n    amount: context.get ? context.get('amount') : context.amount,\n    description: context.get ? context.get('feeLabel') : context.feeLabel,\n    environment: context.environment\n  };\n}\n"
+        "code": "function transform(message, context) {\n  var raw = message.payload;\n  // Authorize.net prepends a UTF-8 BOM on JSON responses; strip before parsing.\n  if (typeof raw === 'string') {\n    raw = JSON.parse(raw.replace(/^\\uFEFF/, '').trim());\n  }\n\n  var msgs = (raw && raw.messages) ? raw.messages : {};\n  if ((msgs.resultCode || '').toLowerCase() !== 'ok' || !raw.token) {\n    var m = (msgs.message && msgs.message[0]) || {};\n    throw new Error('getHostedPaymentPage failed: [' + m.code + '] ' + m.text);\n  }\n\n  return {\n    token:       raw.token,\n    formUrl:     context.get('formUrl'),\n    amount:      context.get('amount'),\n    description: context.get('feeLabel'),\n    environment: context.environment\n  };\n}\n"
       }
     }
   }

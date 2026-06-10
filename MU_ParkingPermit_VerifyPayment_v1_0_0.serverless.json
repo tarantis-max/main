@@ -1,59 +1,39 @@
 {
   "name": "MU_ParkingPermit_VerifyPayment",
-  "description": "Serverless API. Confirms a parking-permit payment server-side with Authorize.net before the EIP workflow advances. If transId is provided (e.g. relayed by the iframe communicator), it calls getTransactionDetailsRequest directly. If only registrationId is provided (redirect mode, where the browser never learns the transId), it searches recent unsettled transactions for a matching invoiceNumber. NOTE: search mode only covers unsettled transactions (roughly the last day, before the nightly settlement batch); verify promptly after payment, or pass transId for older transactions. Returns paid=true only for an approved, captured transaction. Never trusts the caller's claim of payment.",
+  "description": "Serverless API. Confirms a parking-permit payment server-side with Authorize.net before the EIP workflow advances. If transId is provided it calls getTransactionDetailsRequest directly. If only registrationId is provided it searches recent unsettled transactions for a matching invoiceNumber. Returns paid=true only for an approved, captured transaction. Never trusts the caller's claim of payment.",
   "parameters": [
     {
       "name": "authNetLoginId",
       "type": "string",
-      "label": "Authorize.net API Login ID",
-      "required": true,
-      "sensitive": true,
-      "persistent": true,
-      "description": "Authorize.net API Login ID (Account > Security Settings > API Credentials & Keys)."
+      "sensitive": true
     },
     {
       "name": "authNetTransactionKey",
       "type": "string",
-      "label": "Authorize.net Transaction Key",
-      "required": true,
-      "sensitive": true,
-      "persistent": true,
-      "description": "Authorize.net Transaction Key. Stored here so it never reaches the browser."
+      "sensitive": true
     },
     {
       "name": "environment",
-      "type": "string",
-      "label": "Environment",
-      "default": "sandbox",
-      "required": true,
-      "persistent": true,
-      "description": "'sandbox' (apitest.authorize.net) or 'production' (api.authorize.net). Must match the token pipeline."
+      "type": "string"
     }
   ],
   "apiDefinition": {
     "authType": "oauth",
     "httpVerb": "POST",
     "inputSchema": {
-      "$schema": "http://json-schema.org/draft-04/schema#",
       "type": "object",
       "properties": {
         "registrationId": {
           "type": "string",
-          "title": "Registration ID",
-          "description": "Parking registration id; matched against the Authorize.net invoiceNumber."
+          "title": "Registration ID"
         },
         "transId": {
           "type": "string",
-          "title": "Transaction ID (optional)",
-          "description": "Authorize.net transaction id, if known. When omitted, recent unsettled transactions are searched by invoiceNumber."
+          "title": "Transaction ID (optional)"
         }
-      },
-      "required": [
-        "registrationId"
-      ]
+      }
     },
     "outputSchema": {
-      "$schema": "http://json-schema.org/draft-04/schema#",
       "type": "object",
       "properties": {
         "paid": {
@@ -105,7 +85,7 @@
         "pushUndefined": false,
         "stopOnError": true,
         "draft": false,
-        "code": "function transform(message, context) {\n  context.set('apiUrl', context.environment === 'production'\n    ? 'https://api.authorize.net/xml/v1/request.api'\n    : 'https://apitest.authorize.net/xml/v1/request.api');\n\n  var auth = {\n    name: context.authNetLoginId,\n    transactionKey: context.authNetTransactionKey\n  };\n\n  var transId = context.get ? context.get('transId') : context.transId;\n\n  // All Authorize.net operations POST to the same endpoint; the root element\n  // selects the operation. Field order matters (XML schema underneath).\n  if (transId) {\n    message.payload = {\n      getTransactionDetailsRequest: {\n        merchantAuthentication: auth,\n        transId: transId\n      }\n    };\n  } else {\n    message.payload = {\n      getUnsettledTransactionListRequest: {\n        merchantAuthentication: auth,\n        sorting: {\n          orderBy: 'submitTimeUTC',\n          orderDescending: true\n        },\n        paging: {\n          limit: 100,\n          offset: 1\n        }\n      }\n    };\n  }\n  return message;\n}\n"
+        "code": "function transform(message, context) {\n  context.set('apiUrl', context.environment === 'production'\n    ? 'https://api.authorize.net/xml/v1/request.api'\n    : 'https://apitest.authorize.net/xml/v1/request.api');\n\n  var auth = {\n    name: context.authNetLoginId,\n    transactionKey: context.authNetTransactionKey\n  };\n\n  var transId = context.get('transId');\n\n  if (transId) {\n    message.payload = {\n      getTransactionDetailsRequest: {\n        merchantAuthentication: auth,\n        transId: transId\n      }\n    };\n  } else {\n    message.payload = {\n      getUnsettledTransactionListRequest: {\n        merchantAuthentication: auth,\n        sorting: {\n          orderBy: 'submitTimeUTC',\n          orderDescending: true\n        },\n        paging: {\n          limit: 100,\n          offset: 1\n        }\n      }\n    };\n  }\n  return message;\n}\n"
       }
     },
     "Call Authorize.net": {
@@ -123,9 +103,9 @@
       "class": "JavaScriptTransform",
       "config": {
         "pushUndefined": true,
-        "stopOnError": false,
+        "stopOnError": true,
         "draft": false,
-        "code": "function transform(message, context) {\n  var raw = message.payload;\n  // Authorize.net prepends a UTF-8 BOM; handle string or pre-parsed object.\n  if (typeof raw === 'string') {\n    raw = JSON.parse(raw.replace(/^\\uFEFF/, '').trim());\n  }\n\n  var registrationId = context.get ? context.get('registrationId') : context.registrationId;\n  var msgs = (raw && raw.messages) ? raw.messages : {};\n  if ((msgs.resultCode || '').toLowerCase() !== 'ok') {\n    var m = (msgs.message && msgs.message[0]) || {};\n    throw new Error('Authorize.net lookup failed: [' + m.code + '] ' + m.text);\n  }\n\n  function result(paid, t, msg) {\n    return {\n      paid: paid,\n      transId: t ? String(t.transId) : '',\n      invoiceNumber: registrationId,\n      amount: t ? String(t.settleAmount != null ? t.settleAmount : t.authAmount) : '',\n      status: t ? String(t.transactionStatus) : '',\n      message: msg\n    };\n  }\n\n  var CAPTURED = { capturedPendingSettlement: true, settledSuccessfully: true };\n\n  if (raw.transaction) {\n    // getTransactionDetails path (transId was provided).\n    var t = raw.transaction;\n    var order = t.order || {};\n    if (String(order.invoiceNumber) !== registrationId) {\n      return result(false, null, 'Transaction does not belong to this registration.');\n    }\n    if (String(t.responseCode) === '1' && CAPTURED[t.transactionStatus]) {\n      return result(true, t, 'Payment confirmed.');\n    }\n    return result(false, t, 'Transaction found but not approved/captured (status: ' + t.transactionStatus + ').');\n  }\n\n  // getUnsettledTransactionList path (search by invoiceNumber).\n  var list = raw.transactions || [];\n  for (var i = 0; i < list.length; i++) {\n    if (String(list[i].invoiceNumber) === registrationId) {\n      if (CAPTURED[list[i].transactionStatus]) {\n        return result(true, list[i], 'Payment confirmed.');\n      }\n      return result(false, list[i], 'Transaction found but not captured (status: ' + list[i].transactionStatus + ').');\n    }\n  }\n  return result(false, null, 'No payment found yet for this registration. If you just paid, wait a moment and try again.');\n}\n"
+        "code": "function transform(message, context) {\n  var raw = message.payload;\n  // Authorize.net prepends a UTF-8 BOM; handle string or pre-parsed object.\n  if (typeof raw === 'string') {\n    raw = JSON.parse(raw.replace(/^\\uFEFF/, '').trim());\n  }\n\n  var registrationId = context.get('registrationId');\n  var msgs = (raw && raw.messages) ? raw.messages : {};\n  if ((msgs.resultCode || '').toLowerCase() !== 'ok') {\n    var m = (msgs.message && msgs.message[0]) || {};\n    throw new Error('Authorize.net lookup failed: [' + m.code + '] ' + m.text);\n  }\n\n  function result(paid, t, msg) {\n    return {\n      paid:          paid,\n      transId:       t ? String(t.transId) : '',\n      invoiceNumber: registrationId,\n      amount:        t ? String(t.settleAmount != null ? t.settleAmount : t.authAmount) : '',\n      status:        t ? String(t.transactionStatus) : '',\n      message:       msg\n    };\n  }\n\n  var CAPTURED = { capturedPendingSettlement: true, settledSuccessfully: true };\n\n  if (raw.transaction) {\n    // getTransactionDetails path (transId was provided).\n    var t = raw.transaction;\n    var order = t.order || {};\n    if (String(order.invoiceNumber) !== registrationId) {\n      return result(false, null, 'Transaction does not belong to this registration.');\n    }\n    if (String(t.responseCode) === '1' && CAPTURED[t.transactionStatus]) {\n      return result(true, t, 'Payment confirmed.');\n    }\n    return result(false, t, 'Transaction found but not approved/captured (status: ' + t.transactionStatus + ').');\n  }\n\n  // getUnsettledTransactionList path (search by invoiceNumber).\n  var list = raw.transactions || [];\n  for (var i = 0; i < list.length; i++) {\n    if (String(list[i].invoiceNumber) === registrationId) {\n      if (CAPTURED[list[i].transactionStatus]) {\n        return result(true, list[i], 'Payment confirmed.');\n      }\n      return result(false, list[i], 'Transaction found but not captured (status: ' + list[i].transactionStatus + ').');\n    }\n  }\n  return result(false, null, 'No payment found yet for this registration. If you just paid, wait a moment and try again.');\n}\n"
       }
     }
   }
