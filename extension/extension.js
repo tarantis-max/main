@@ -8,6 +8,12 @@ module.exports = {
             title: 'Parking Permit Payment',
             displayCardType: 'Parking Permit Payment',
             description: 'Pay the student vehicle permit fee via Authorize.net',
+            // Opens the full payment page when the student clicks "Pay now"
+            // or follows a deep link (?reg=<registrationId>&permit=<permitType>).
+            pageRoute: {
+                route: '/parking-permit-payment',
+                pageName: 'ParkingPermitPaymentPage'
+            },
             configuration: {
                 client: [
                     {
@@ -24,6 +30,13 @@ module.exports = {
                     }
                 ]
             }
+        }
+    ],
+    pages: [
+        {
+            type: 'ParkingPermitPaymentPage',
+            source: './src/page/ParkingPermitPaymentPage.jsx',
+            title: 'Parking Permit Payment'
         }
     ]
 };
