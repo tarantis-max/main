@@ -1,0 +1,21 @@
+{
+  "name": "MU_ImportTest2",
+  "apiDefinition": {
+    "authType": "userToken",
+    "httpVerb": "POST"
+  },
+  "pipeline": [
+    "Test Segment"
+  ],
+  "segments": {
+    "Test Segment": {
+      "class": "JavaScriptTransform",
+      "config": {
+        "pushUndefined": true,
+        "stopOnError": false,
+        "draft": false,
+        "code": "function transform(message, context) {\n  return { hello: 'world' };\n}\n"
+      }
+    }
+  }
+}
