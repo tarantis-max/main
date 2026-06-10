@@ -1,7 +1,7 @@
 {
   "name": "MU_ImportTest2",
   "apiDefinition": {
-    "authType": "userToken",
+    "authType": "ethosToken",
     "httpVerb": "POST"
   },
   "pipeline": [
