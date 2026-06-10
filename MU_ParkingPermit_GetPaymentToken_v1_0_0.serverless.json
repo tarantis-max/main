@@ -1,6 +1,6 @@
 {
   "name": "MU_ParkingPermit_GetPaymentToken",
-  "description": "Serverless API. Receives a registrationId and permitType, looks up the fee server-side, calls Authorize.net getHostedPaymentPageRequest, and returns the one-time hosted payment form token plus the form URL. The caller (Experience card) POSTs the token to the form URL to open the Authorize.net hosted payment page in a new tab (redirect mode — Authorize.net shows the receipt).",
+  "description": "Serverless API. Receives a registrationId and permitType, looks up the fee server-side, calls Authorize.net getHostedPaymentPageRequest, and returns the one-time hosted payment form token plus the form URL. The caller (Experience card) POSTs the token to the form URL to open the Authorize.net hosted payment page in a new tab (redirect mode \u2014 Authorize.net shows the receipt).",
   "parameters": [
     {
       "name": "authNetLoginId",
@@ -85,18 +85,22 @@
         "pushUndefined": false,
         "stopOnError": true,
         "draft": false,
-        "code": "function transform(message, context) {\n  // Server-side fee schedule — amount is never taken from the caller.\n  // TODO: replace placeholder amounts with real permit fees before go-live.\n  var FEE_SCHEDULE = {\n    'full-year':  { amount: '125.00', label: 'Full-Year Permit' },\n    'fall':       { amount: '75.00',  label: 'Fall Semester Permit' },\n    'spring':     { amount: '75.00',  label: 'Spring Semester Permit' },\n    'summer':     { amount: '40.00',  label: 'Summer Permit' },\n    'motorcycle': { amount: '50.00',  label: 'Motorcycle Permit' }\n  };\n\n  var permitType     = context.get('permitType');\n  var registrationId = context.get('registrationId');\n  var fee = FEE_SCHEDULE[permitType];\n  if (!fee) {\n    throw new Error('Unknown permit type: ' + permitType);\n  }\n\n  var production = (context.environment === 'production');\n  context.set('apiUrl', production\n    ? 'https://api.authorize.net/xml/v1/request.api'\n    : 'https://apitest.authorize.net/xml/v1/request.api');\n  context.set('formUrl', production\n    ? 'https://accept.authorize.net/payment/payment'\n    : 'https://test.authorize.net/payment/payment');\n  context.set('amount', fee.amount);\n  context.set('feeLabel', fee.label);\n\n  // Redirect mode: hosted page opens in its own tab and shows the Authorize.net receipt.\n  message.payload = {\n    getHostedPaymentPageRequest: {\n      merchantAuthentication: {\n        name: context.authNetLoginId,\n        transactionKey: context.authNetTransactionKey\n      },\n      transactionRequest: {\n        transactionType: 'authCaptureTransaction',\n        amount: fee.amount,\n        order: {\n          invoiceNumber: registrationId,\n          description: fee.label\n        }\n      },\n      hostedPaymentSettings: {\n        setting: [\n          {\n            settingName: 'hostedPaymentReturnOptions',\n            settingValue: JSON.stringify({ showReceipt: true })\n          },\n          {\n            settingName: 'hostedPaymentButtonOptions',\n            settingValue: JSON.stringify({ text: 'Pay' })\n          },\n          {\n            settingName: 'hostedPaymentOrderOptions',\n            settingValue: JSON.stringify({ show: true, merchantName: context.merchantName || 'Methodist University' })\n          },\n          {\n            settingName: 'hostedPaymentBillingAddressOptions',\n            settingValue: JSON.stringify({ show: true, required: false })\n          }\n        ]\n      }\n    }\n  };\n  return message;\n}\n"
+        "code": "function transform(message, context) {\n  // Server-side fee schedule \u2014 amount is never taken from the caller.\n  // TODO: replace placeholder amounts with real permit fees before go-live.\n  var FEE_SCHEDULE = {\n    'full-year':  { amount: '125.00', label: 'Full-Year Permit' },\n    'fall':       { amount: '75.00',  label: 'Fall Semester Permit' },\n    'spring':     { amount: '75.00',  label: 'Spring Semester Permit' },\n    'summer':     { amount: '40.00',  label: 'Summer Permit' },\n    'motorcycle': { amount: '50.00',  label: 'Motorcycle Permit' }\n  };\n\n  var permitType     = context.get('permitType');\n  var registrationId = context.get('registrationId');\n  var fee = FEE_SCHEDULE[permitType];\n  if (!fee) {\n    throw new Error('Unknown permit type: ' + permitType);\n  }\n\n  var production = (context.environment === 'production');\n  context.set('apiUrl', production\n    ? 'https://api.authorize.net/xml/v1/request.api'\n    : 'https://apitest.authorize.net/xml/v1/request.api');\n  context.set('formUrl', production\n    ? 'https://accept.authorize.net/payment/payment'\n    : 'https://test.authorize.net/payment/payment');\n  context.set('amount', fee.amount);\n  context.set('feeLabel', fee.label);\n\n  // Redirect mode: hosted page opens in its own tab and shows the Authorize.net receipt.\n  message.payload = {\n    getHostedPaymentPageRequest: {\n      merchantAuthentication: {\n        name: context.authNetLoginId,\n        transactionKey: context.authNetTransactionKey\n      },\n      transactionRequest: {\n        transactionType: 'authCaptureTransaction',\n        amount: fee.amount,\n        order: {\n          invoiceNumber: registrationId,\n          description: fee.label\n        }\n      },\n      hostedPaymentSettings: {\n        setting: [\n          {\n            settingName: 'hostedPaymentReturnOptions',\n            settingValue: JSON.stringify({ showReceipt: true })\n          },\n          {\n            settingName: 'hostedPaymentButtonOptions',\n            settingValue: JSON.stringify({ text: 'Pay' })\n          },\n          {\n            settingName: 'hostedPaymentOrderOptions',\n            settingValue: JSON.stringify({ show: true, merchantName: context.merchantName || 'Methodist University' })\n          },\n          {\n            settingName: 'hostedPaymentBillingAddressOptions',\n            settingValue: JSON.stringify({ show: true, required: false })\n          }\n        ]\n      }\n    }\n  };\n  return message;\n}\n"
       }
     },
     "Call Authorize.net": {
-      "class": "httpRequest",
+      "class": "http-fitting",
       "config": {
-        "uri": "{{{context.apiUrl}}}",
+        "url": "{{{context.apiUrl}}}",
         "method": "POST",
         "headers": {
           "Content-Type": "application/json",
           "Accept": "application/json"
-        }
+        },
+        "cache": false,
+        "stream": false,
+        "binary": false,
+        "ignoreErrors": false
       }
     },
     "Return Token": {

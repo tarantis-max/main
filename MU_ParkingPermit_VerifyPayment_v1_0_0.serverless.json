@@ -89,14 +89,18 @@
       }
     },
     "Call Authorize.net": {
-      "class": "httpRequest",
+      "class": "http-fitting",
       "config": {
-        "uri": "{{{context.apiUrl}}}",
+        "url": "{{{context.apiUrl}}}",
         "method": "POST",
         "headers": {
           "Content-Type": "application/json",
           "Accept": "application/json"
-        }
+        },
+        "cache": false,
+        "stream": false,
+        "binary": false,
+        "ignoreErrors": false
       }
     },
     "Return Verification": {
