@@ -50,6 +50,26 @@
   "apiDefinition": {
     "authType": "ethosToken",
     "httpVerb": "POST",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-04/schema#",
+      "type": "object",
+      "properties": {
+        "registrationId": {
+          "type": "string",
+          "title": "Registration ID",
+          "description": "Parking registration id; becomes the Authorize.net invoiceNumber (max 20 chars)."
+        },
+        "permitType": {
+          "type": "string",
+          "title": "Permit Type",
+          "description": "Key into the server-side fee schedule (e.g. full-year, fall, spring, summer, motorcycle)."
+        }
+      },
+      "required": [
+        "registrationId",
+        "permitType"
+      ]
+    },
     "outputSchema": {
       "$schema": "http://json-schema.org/draft-04/schema#",
       "type": "object",
@@ -105,14 +125,12 @@
     "Call Authorize.net": {
       "class": "httpRequest",
       "config": {
-        "url": "{{{context.apiUrl}}}",
+        "uri": "{{{context.apiUrl}}}",
         "method": "POST",
         "headers": {
           "Content-Type": "application/json",
           "Accept": "application/json"
-        },
-        "bodyPath": "payload",
-        "responseBodyPath": "payload"
+        }
       }
     },
     "Return Token": {
