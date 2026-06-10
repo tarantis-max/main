@@ -1,0 +1,21 @@
+{
+  "name": "mu-parking-permit-payment-extension",
+  "version": "1.0.0",
+  "description": "Ellucian Experience extension card: pay the student vehicle permit fee via Authorize.net Accept Hosted, backed by Data Connect serverless APIs.",
+  "private": true,
+  "scripts": {
+    "build": "webpack --mode production",
+    "start": "webpack serve",
+    "lint": "eslint --ext .js,.jsx src"
+  },
+  "dependencies": {
+    "@ellucian/experience-extension-utils": "^1.0.0",
+    "@ellucian/react-design-system": "^7.0.0",
+    "prop-types": "^15.8.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@ellucian/experience-extension": "^8.0.0"
+  }
+}
