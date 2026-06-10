@@ -1,0 +1,203 @@
+{
+  "name": "MU_Alma_Faculty_Demographics_Extract",
+  "description": "Alma patron load (faculty), adapted for Colleague from the Ellucian-Alma guide (Banner). Extracts faculty with a section assignment in the target term (COURSE.SEC.FACULTY), maps them to the Alma user XML layout with a configurable Faculty user group, stages the XML in S3, zips it (Alma only ingests zipped XML), and delivers the dated zip to the Alma SFTP drop directory.",
+  "parameters": [
+    {
+      "name": "userGroupCode",
+      "type": "string",
+      "label": "Faculty User Group Code",
+      "default": "Faculty",
+      "required": true,
+      "description": "Alma user_group code assigned to all faculty patrons. Must match a user group configured in Alma."
+    },
+    {
+      "name": "userGroupDesc",
+      "type": "string",
+      "label": "Faculty User Group Description",
+      "default": "Faculty",
+      "required": true,
+      "description": "Alma user_group desc attribute for faculty patrons."
+    },
+    {
+      "name": "targetTerm",
+      "type": "string",
+      "label": "Target Term (optional)",
+      "required": false,
+      "description": "Colleague term code (e.g. 2026FA). Leave blank to auto-resolve the current term: the earliest FA/SP/SU term whose end date has not passed. Drives the population selection and the expiry/purge date (term end + grace days)."
+    },
+    {
+      "name": "expiryGraceDays",
+      "type": "string",
+      "label": "Expiry Grace Days",
+      "default": "30",
+      "required": true,
+      "description": "Days added to the target term end date to compute the Alma expiry_date/purge_date. Guide baseline is 30."
+    },
+    {
+      "name": "defaultEmail",
+      "type": "string",
+      "label": "Default Email Address",
+      "default": "no_email@methodist.edu",
+      "required": true,
+      "description": "Fallback email_address when the person has no preferred or position-1 email on file (Alma requires an email element)."
+    },
+    {
+      "name": "stagingBucket",
+      "type": "string",
+      "label": "Staging S3 Bucket",
+      "required": true,
+      "persistent": true,
+      "description": "S3 bucket used to stage the XML so the ZipFile segment can package it. Alma only ingests zipped XML, and zipping in Data Connect requires S3 staging. Bucket name only, no directories."
+    },
+    {
+      "name": "stagingAccessKey",
+      "type": "string",
+      "label": "Staging S3 Access Key",
+      "required": true,
+      "persistent": true,
+      "description": "Access key ID for the staging bucket."
+    },
+    {
+      "name": "stagingSecretKey",
+      "type": "string",
+      "label": "Staging S3 Secret Access Key",
+      "required": true,
+      "sensitive": true,
+      "persistent": true,
+      "description": "Secret access key for the staging bucket."
+    },
+    {
+      "name": "almaSftpHost",
+      "type": "string",
+      "label": "Alma SFTP Host",
+      "required": true,
+      "persistent": true,
+      "description": "S/FTP host that the Alma SIS integration profile polls for user load files."
+    },
+    {
+      "name": "almaSftpUser",
+      "type": "string",
+      "label": "Alma SFTP Username",
+      "required": true,
+      "sensitive": true,
+      "persistent": true,
+      "description": "Username for the Alma SFTP endpoint."
+    },
+    {
+      "name": "almaSftpKey",
+      "type": "string",
+      "label": "Alma SFTP Private Key",
+      "required": true,
+      "multiline": true,
+      "sensitive": true,
+      "persistent": true,
+      "description": "OpenSSH private key for the Alma SFTP endpoint. Must include the BEGIN/END header and footer lines."
+    },
+    {
+      "name": "almaSftpPath",
+      "type": "string",
+      "label": "Alma SFTP Directory",
+      "required": true,
+      "default": "/alma/faculty/",
+      "persistent": true,
+      "description": "Remote directory watched by the Alma SIS integration profile; the dated zip filename is appended automatically. Must match the input directory configured on the Alma integration profile."
+    }
+  ],
+  "pipeline": [
+    "Extract Data",
+    "Build User XML",
+    "Collect Users",
+    "Assemble XML Document",
+    "Stage XML File",
+    "Prep Zip File List",
+    "Create Zip File",
+    "Read Zip File",
+    "SFTP Put"
+  ],
+  "segments": {
+    "Extract Data": {
+      "class": "extractData",
+      "config": {
+        "selectQuery": "WITH\n\ntarget_term AS (\n    SELECT t.terms_id,\n           t.term_end_date,\n           TO_CHAR((t.term_end_date + ('{{context.expiryGraceDays}}')::integer * INTERVAL '1 day')::date, 'YYYY-MM-DD') AS expiry_date\n    FROM dbo.ods_terms t\n    WHERE t.terms_id = COALESCE(NULLIF('{{context.targetTerm}}', ''), (\n            SELECT t2.terms_id\n            FROM dbo.ods_terms t2\n            WHERE t2.term_end_date >= CURRENT_DATE\n              AND (t2.terms_id LIKE '%FA' OR t2.terms_id LIKE '%SP' OR t2.terms_id LIKE '%SU')\n            ORDER BY t2.term_start_date ASC\n            LIMIT 1\n        ))\n),\n\nteaching AS (\n    SELECT DISTINCT csf.csf_faculty AS person_id\n    FROM dbo.course_sec_faculty csf\n    JOIN dbo.course_sections cs\n        ON cs.course_sections_id = csf.csf_course_section\n    WHERE cs.sec_term = (SELECT terms_id FROM target_term)\n      AND csf.csf_faculty IS NOT NULL\n),\n\naddress AS (\n    SELECT DISTINCT ON (pai.id)\n        pai.id            AS person_id,\n        a.address_line_1,\n        a.city,\n        a.state,\n        a.zip,\n        a.country\n    FROM dbo.ods_person_address_info pai\n    JOIN dbo.ods_address a\n        ON a.address_id = pai.person_addresses\n    ORDER BY pai.id ASC, pai.pos ASC\n),\n\nemail AS (\n    SELECT pe.id                     AS person_id,\n           pe.person_email_addresses AS email_address\n    FROM people_email pe\n    WHERE pe.pos = 1\n)\n\nSELECT\n    t.person_id                                     AS primary_id,\n    p.first_name                                    AS first_name,\n    LEFT(p.middle_name, 1)                          AS middle_initial,\n    p.last_name                                     AS last_name,\n    NULL                                            AS user_title,\n    TO_CHAR(p.birth_date, 'YYYY-MM-DD')             AS birth_date,\n    '{{context.userGroupCode}}'                 AS user_group_code,\n    '{{context.userGroupDesc}}'                 AS user_group_desc,\n    (SELECT expiry_date FROM target_term)           AS expiry_date,\n    t.person_id                                     AS external_id,\n    COALESCE(NULLIF(TRIM(p.preferred_email_address), ''),\n             NULLIF(TRIM(e.email_address), ''),\n             '{{context.defaultEmail}}')        AS email_address,\n    addr.address_line_1                             AS address_line_1,\n    addr.city                                       AS city,\n    addr.state                                      AS state,\n    addr.zip                                        AS zip,\n    COALESCE(NULLIF(TRIM(addr.country), ''), 'USA') AS country\nFROM teaching t\nJOIN dbo.ods_person p\n    ON p.id = t.person_id\nLEFT JOIN address addr\n    ON addr.person_id = t.person_id\nLEFT JOIN email e\n    ON e.person_id = t.person_id\nORDER BY p.last_name, p.first_name, t.person_id",
+        "bulkLoadEnabled": true,
+        "ignoreErrors": false
+      }
+    },
+    "Build User XML": {
+      "class": "JavaScriptTransform",
+      "config": {
+        "pushUndefined": true,
+        "stopOnError": false,
+        "draft": false,
+        "code": "function transform(message, context) {\n  function esc(v) {\n    if (v === null || v === undefined) return '';\n    return String(v)\n      .replace(/&/g, '&amp;')\n      .replace(/</g, '&lt;')\n      .replace(/>/g, '&gt;')\n      .replace(/\"/g, '&quot;')\n      .replace(/'/g, '&apos;');\n  }\n  var r = message.payload;\n  var x = [];\n  x.push('  <user>');\n  x.push('    <record_type>PUBLIC</record_type>');\n  x.push('    <primary_id>' + esc(r.primary_id) + '</primary_id>');\n  x.push('    <first_name>' + esc(r.first_name) + '</first_name>');\n  if (r.middle_initial) x.push('    <middle_name>' + esc(r.middle_initial) + '</middle_name>');\n  x.push('    <last_name>' + esc(r.last_name) + '</last_name>');\n  x.push('    <pin_number></pin_number>');\n  if (r.user_title) x.push('    <user_title>' + esc(r.user_title) + '</user_title>');\n  x.push('    <user_group desc=\"' + esc(r.user_group_desc) + '\">' + esc(r.user_group_code) + '</user_group>');\n  x.push('    <preferred_language desc=\"English\">en</preferred_language>');\n  if (r.birth_date) x.push('    <birth_date>' + esc(r.birth_date) + 'Z</birth_date>');\n  x.push('    <expiry_date>' + esc(r.expiry_date) + 'Z</expiry_date>');\n  x.push('    <purge_date>' + esc(r.expiry_date) + 'Z</purge_date>');\n  x.push('    <user_identifiers>');\n  x.push('      <user_identifier segment_type=\"External\">');\n  x.push('        <id_type desc=\"01\">01</id_type>');\n  x.push('        <value>' + esc(r.external_id) + '</value>');\n  x.push('        <status>ACTIVE</status>');\n  x.push('      </user_identifier>');\n  x.push('    </user_identifiers>');\n  x.push('    <contact_info>');\n  if (r.address_line_1) {\n    x.push('      <addresses>');\n    x.push('        <address preferred=\"true\">');\n    x.push('          <line1>' + esc(r.address_line_1) + '</line1>');\n    x.push('          <city>' + esc(r.city) + '</city>');\n    x.push('          <state_province>' + esc(r.state) + '</state_province>');\n    x.push('          <postal_code>' + esc(r.zip) + '</postal_code>');\n    x.push('          <country>' + esc(r.country) + '</country>');\n    x.push('          <address_types>');\n    x.push('            <address_type desc=\"home\">home</address_type>');\n    x.push('          </address_types>');\n    x.push('        </address>');\n    x.push('      </addresses>');\n  }\n  x.push('      <emails>');\n  x.push('        <email preferred=\"true\">');\n  x.push('          <email_address>' + esc(r.email_address) + '</email_address>');\n  x.push('          <email_types>');\n  x.push('            <email_type desc=\"personal\">personal</email_type>');\n  x.push('          </email_types>');\n  x.push('        </email>');\n  x.push('      </emails>');\n  x.push('    </contact_info>');\n  x.push('  </user>');\n  message.payload = x.join('\\n');\n  return message;\n}\n"
+      }
+    },
+    "Collect Users": {
+      "class": "reducer",
+      "config": {
+        "accumulator": "payload"
+      }
+    },
+    "Assemble XML Document": {
+      "class": "JavaScriptTransform",
+      "config": {
+        "pushUndefined": true,
+        "stopOnError": false,
+        "draft": false,
+        "code": "function transform(message, context) {\n  var users = Array.isArray(message.payload) ? message.payload : [message.payload];\n  var now = new Date();\n  function p2(n) { return ('0' + n).slice(-2); }\n  var ts = '' + now.getFullYear() + p2(now.getMonth() + 1) + p2(now.getDate())\n         + '_' + p2(now.getHours()) + p2(now.getMinutes()) + p2(now.getSeconds());\n  var xmlName = 'report_faculty_' + ts + '.xml';\n  var zipName = 'report_faculty_' + ts + '.zip';\n  context.set('xmlName', xmlName);\n  context.set('zipName', zipName);\n  var dir = context.almaSftpPath || '/';\n  if (dir.slice(-1) !== '/') dir += '/';\n  context.set('outfile', dir + zipName);\n  message.payload = '<?xml version=\"1.0\" encoding=\"utf-8\"?>\\n<users>\\n'\n                  + users.join('\\n')\n                  + '\\n</users>';\n  return message;\n}\n"
+      }
+    },
+    "Stage XML File": {
+      "class": "s3sink",
+      "config": {
+        "key": "{{{context.xmlName}}}",
+        "addNewlineAfterEachMessage": false,
+        "includeTotalCount": false,
+        "generatePresignedUrl": false,
+        "bucket": "stagingBucket",
+        "accessKeyId": "stagingAccessKey",
+        "secretAccessKey": "stagingSecretKey",
+        "writeImmediately": false,
+        "utfEncoding": "utf-8"
+      }
+    },
+    "Prep Zip File List": {
+      "class": "JavaScriptTransform",
+      "config": {
+        "pushUndefined": true,
+        "stopOnError": false,
+        "draft": false,
+        "code": "function transform(message, context) {\n  message.payload = {\n    files: [context.get('xmlName')]\n  };\n  return message;\n}\n"
+      }
+    },
+    "Create Zip File": {
+      "class": "ZipFile",
+      "config": {
+        "fileNamePath": "$.files",
+        "key": "{{{context.zipName}}}"
+      }
+    },
+    "Read Zip File": {
+      "class": "S3Accessor",
+      "config": {
+        "key": "{{{context.__pipelineName}}}/{{{context.__runId}}}/{{{context.zipName}}}",
+        "bucket": "stagingBucket",
+        "accessKeyId": "stagingAccessKey",
+        "secretAccessKey": "stagingSecretKey",
+        "binary": true,
+        "errorIfNoFile": true,
+        "allowConcurrent": false
+      }
+    },
+    "SFTP Put": {
+      "class": "sftpPut",
+      "config": {
+        "host": "almaSftpHost",
+        "username": "almaSftpUser",
+        "privateKey": "almaSftpKey",
+        "fileName": "{{{context.outfile}}}",
+        "push": false
+      }
+    }
+  }
+}
