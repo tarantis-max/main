@@ -91,7 +91,7 @@
     "Call Authorize.net": {
       "class": "http-fitting",
       "config": {
-        "url": "{{{context.apiUrl}}}",
+        "uri": "{{{context.apiUrl}}}",
         "method": "POST",
         "headers": {
           "Content-Type": "application/json",
