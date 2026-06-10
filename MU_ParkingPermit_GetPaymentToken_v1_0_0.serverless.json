@@ -48,7 +48,7 @@
     }
   ],
   "apiDefinition": {
-    "authType": "ethosToken",
+    "authType": "oauth",
     "httpVerb": "POST",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-04/schema#",
