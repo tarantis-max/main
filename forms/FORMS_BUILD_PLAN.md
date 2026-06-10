@@ -64,22 +64,19 @@ Forms data sources are GET-only and come from delivered sources, Ethos APIs, or 
 - **Academic period** (delivered) — term pickers: Change of Grade, VA Certification, Course Overload, Directed Study
 - **Academic program** (delivered) — Change of Academic Program, Course Substitution
 
-Likely **custom serverless pipelines** to add to this repo (confirm during Wave 1 builds):
+**Custom data sources already exist in the tenant.** Map them to fields during each build — typical bindings:
 
-| Pipeline | Used by | Pull |
-|---|---|---|
-| Student current sections/courses | Course Substitution, Course Overload, Incomplete Grade, Change of Grade | Colleague via Ethos `section-registrations` / `sections` |
-| Student advisor lookup | Course Overload, Directed Study, Transient Student | Advisor name/email for routing display |
-| Faculty sections taught | Change of Grade (faculty-facing) | Restrict course list to the respondent's sections |
+| Form need | Used by |
+|---|---|
+| Student current sections/courses | Course Substitution, Course Overload, Incomplete Grade, Change of Grade |
+| Advisor lookup | Course Overload, Directed Study, Transient Student |
+| Faculty sections taught | Change of Grade (faculty-facing) |
 
-Check the Ethos API Catalog first — if a delivered Ethos API returns what a field needs without joins, use it directly and skip the custom pipeline.
+## Build conventions
 
-## One-time prerequisites (from Ellucian Forms docs)
-
-1. **Application access**: Ethos Integration → Platform Components → Data Connect → Application Access → add Colleague as resource owner. (The Data Connect section only appears after at least one serverless API pipeline is published.)
-2. **`integration-package` tag** on the Colleague application in Ethos Integration, value = camelCased package name(s), comma-separated, no spaces. Missing tag → 403 on execution.
-3. **Forms roles/permissions** in Experience: builders need Create on forms and data sources; decide who gets "View Response Data" per department (VA and DPT forms carry sensitive data — set field sensitivity levels accordingly).
-4. **Export discipline**: after each form is published, export the JSON (`FormName_v1.0.0.json`) and commit it under `forms/` in this repo so definitions are versioned and portable between environments.
+1. **Forms roles/permissions** in Experience: decide who gets "View Response Data" per department (VA and DPT forms carry sensitive data — set field sensitivity levels accordingly).
+2. **Export discipline**: after each form is published, export the JSON (`FormName_v1.0.0.json`) and commit it under `forms/exports/` in this repo so definitions are versioned and portable between environments.
+3. **Per-form build specs** live in [`specs/`](specs/) — field-by-field designs to follow in the Forms Designer.
 
 ## Open questions
 
