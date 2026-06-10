@@ -3,7 +3,7 @@
   "description": "Temporary import test — delete after confirming segments appear.",
   "parameters": [],
   "apiDefinition": {
-    "authType": "oauth",
+    "authType": "userToken",
     "httpVerb": "POST",
     "inputSchema": {
       "type": "object",

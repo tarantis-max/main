@@ -18,7 +18,7 @@
     }
   ],
   "apiDefinition": {
-    "authType": "oauth",
+    "authType": "userToken",
     "httpVerb": "POST",
     "inputSchema": {
       "type": "object",
