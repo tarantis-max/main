@@ -8,3 +8,7 @@ dashboard/vpmo-fields.json
 # React front end — dependencies and build output
 app/node_modules/
 app/dist/
+
+# Azure relay function — dependencies and local secrets
+azure-relay/node_modules/
+azure-relay/local.settings.json
