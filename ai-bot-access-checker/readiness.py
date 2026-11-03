@@ -157,6 +157,7 @@ class PageParser(HTMLParser):
         self.lang = ""
         self.links: list[str] = []
         self.logos: list[str] = []
+        self._recent: list[str] = []
         self.anchors: list[tuple[str, str]] = []
         self.jsonld: list[str] = []
         self.words = 0
@@ -171,6 +172,8 @@ class PageParser(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         a = {k.lower(): (v or "") for k, v in attrs}
+        if tag != "img":
+            self._recent = (self._recent + [a.get("class", "") + " " + a.get("id", "")])[-3:]
         if tag == "html":
             self.lang = a.get("lang", "").strip()
         elif tag == "title":
@@ -193,7 +196,9 @@ class PageParser(HTMLParser):
             if a.get("alt", "").strip():
                 self.imgs_alt += 1
             src = a.get("src") or a.get("data-src") or ""
-            if src and "logo" in " ".join((src, a.get("alt", ""), a.get("class", ""), a.get("id", ""))).lower():
+            own = " ".join((src, a.get("alt", ""), a.get("class", ""), a.get("id", ""))).lower()
+            near = " ".join(self._recent).lower()  # class/id of the few elements just before (e.g. <a class="logo">)
+            if src and ("logo" in own or "logo" in near or "brand" in near):
                 self.logos.append(src)
         if tag == "script" and "ld+json" in a.get("type", "").lower():
             self._in_jsonld = True
