@@ -50,7 +50,7 @@ CHECKS = [
     ("ai_search_allowed", "AI search bots allowed", "robots.txt allows every AI search and user-fetch bot for this URL, except bots on the deny list.", True),
     ("indexable", "No noindex/noai", "No noindex, none, noai or noimageai in meta robots or X-Robots-Tag.", True),
     ("server_text", "Server-rendered text", "At least 150 words of visible text in the raw HTML (most AI crawlers do not run JavaScript).", True),
-    ("title", "Title", "<title> present, 10-70 characters.", False),
+    ("title", "Title", "<title> present, 10-70 characters, and does not start with a separator (\"| Site Name\" means the page name is missing).", False),
     ("meta_desc", "Meta description", "Meta description present, 50-160 characters.", False),
     ("one_h1", "Single H1", "Exactly one <h1>.", False),
     ("headings", "Subheadings", "At least one <h2> (content is structured into sections).", False),
@@ -67,10 +67,10 @@ CHECKS = [
 ]
 CHECKS += [
     ("mobile_viewport", "Mobile-friendly", "<meta name=viewport> with width=device-width (page adapts to phones).", False),
-    ("clean_url", "Clean URL", "URL path is lowercase, uses hyphens not underscores, has no query string, and is under 100 characters.", False),
-    ("readable", "Readable text", "Paragraph text reads at grade 12 or below (Flesch-Kincaid). Not applicable under 100 words of paragraph text.", False),
-    ("question_headings", "Answers questions", "On admissions, cost, aid and program pages: at least one H2/H3 phrased as a question, or FAQPage schema. Not applicable to other pages.", False),
-    ("program_schema", "Program schema", "On program pages (/program/<name>/, /degrees/<name>/, /majors/<name>/): EducationalOccupationalProgram or Course schema. Not applicable to other pages.", False),
+    ("clean_url", "Clean URL", "URL path is lowercase, uses hyphens not underscores, and is under 100 characters. Filter/query URLs are judged at site level.", False),
+    ("readable", "Readable text", "On key student pages (admissions, cost, aid, visit, program home pages): paragraph text reads at grade 12 or below (Flesch-Kincaid). Not applicable to other pages or under 100 words.", False),
+    ("question_headings", "Answers questions", "On key student pages (admissions, cost, aid, visit, program home pages): at least one H2/H3 phrased as a question, or FAQPage schema. Not applicable to other pages.", False),
+    ("program_schema", "Program schema", "On program pages (/program/<name>/, /degrees/<name>/, /majors/<name>/): EducationalOccupationalProgram or Course schema. Not applicable to other pages or noindex pages.", False),
 ]
 CATEGORY = {
     "ai_search_allowed": "AI access", "indexable": "AI access",
@@ -83,6 +83,8 @@ CATEGORY = {
     "current_dates": "Content (GEO/AEO)", "freshness": "Content (GEO/AEO)", "official_name": "Content (GEO/AEO)",
 }
 AREAS = ["AI access", "Technical SEO", "On-page SEO", "Structured data", "Content (GEO/AEO)"]
+KEY_PATH = re.compile(r"admission|apply|tuition|cost|financial[-_]?aid|scholarship|visit|tour", re.I)
+NOT_KEY_PATH = re.compile(r"/(news|event|events|blog|stories|directory|people)(/|$)", re.I)
 AEO_PATH = re.compile(r"admission|apply|tuition|cost|financial[-_]?aid|scholarship|program|degree|major|graduate|undergraduate|"
                       r"transfer|international|military|visit|housing", re.I)
 PROGRAM_PATH = re.compile(r"/(program|programs|degrees?|majors?)/[^/]+/?$", re.I)
@@ -427,7 +429,13 @@ def site_issues(c: "Crawl", pages: list[dict]) -> dict:
         t[1] += p["checks"].get("indexable") is False
     noindex = sorted(([k, n, x] for k, (n, x) in sections.items() if n >= 10 and x / n >= 0.9), key=lambda r: -r[1])
     former = [p["url"] for p in pages if p["detail"].get("former_names_found")]
-    ok = [p for p in pages if p["status"] == 200 and p["checks"].get("indexable") is not False]
+    ok_all = [p for p in pages if p["status"] == 200 and p["checks"].get("indexable") is not False]
+
+    def canonical_self(p):
+        cu = norm(p["detail"].get("canonical_url") or "") if p["detail"].get("canonical_url") else ""
+        return not cu or cu == p["url"]
+    ok = [p for p in ok_all if not urlsplit(p["url"]).query and canonical_self(p)]  # canonical pages only
+    facets = [p["url"] for p in ok_all if urlsplit(p["url"]).query and canonical_self(p)]
     start_host = urlsplit(c.start).netloc.lower()
     # sitemap coverage (start host only)
     not_in_sitemap = [p["url"] for p in ok if urlsplit(p["url"]).netloc.lower() == start_host and p["url"] not in c.sitemap_urls] if c.sitemap_urls else []
@@ -460,6 +468,8 @@ def site_issues(c: "Crawl", pages: list[dict]) -> dict:
                     "broken": len(sitemap_broken), "broken_sample": sitemap_broken[:10],
                     "noindex": len(sitemap_noindex), "noindex_sample": sitemap_noindex[:10]},
         "orphans": {"count": len(orphans), "sample": orphans[:10]},
+        "indexable_query_urls": {"count": len(facets), "sample": facets[:10],
+                                 "sections": [{"section": k, "pages": v} for k, v in Counter(urlsplit(u).path for u in facets).most_common(5)]},
         "broken_internal_links": {"count": len(broken_links), "sample": broken_links[:10]},
         "duplicate_titles": dups("title"),
         "duplicate_descriptions": dups("desc"),
@@ -533,9 +543,10 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
     objs, invalid_jsonld = parse_jsonld(p.jsonld)
     schema_types = sorted({t for o in objs for t in types_of(o)})
     has_faq = "FAQPage" in schema_types
+    key_page = (bool(PROGRAM_PATH.search(sp.path)) or bool(KEY_PATH.search(sp.path))) and not NOT_KEY_PATH.search(sp.path) and not sp.query
     grade_level = fk_grade(" ".join(p.p_main if "".join(p.p_main).strip() else p.p_other))
     title = " ".join(p.title.split())
-    desc = p.meta.get("description", "").strip()
+    desc = re.sub(r"[\ufeff\u200b\u200c\u200d\u2060]", "", p.meta.get("description", "")).strip()
     text = " ".join(" ".join(p.text).split())
     fresh = bool(_header(r["headers"], "last-modified") or p.meta.get("article:modified_time")
                  or re.search(r'"date(Modified|Published)"', jsonld_raw))
@@ -556,7 +567,7 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
         "ai_search_allowed": not blocked_search,
         "indexable": not bad_directives,
         "server_text": p.words >= 150,
-        "title": 10 <= len(title) <= 70,
+        "title": 10 <= len(title) <= 70 and not re.match(r"^\s*[|\-\u2013\u2014:\u00b7]", title),
         "meta_desc": 50 <= len(desc) <= 160,
         "one_h1": p.h1 == 1,
         "headings": p.h2 >= 1,
@@ -571,10 +582,10 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
         "freshness": fresh,
         "fast": elapsed < 2.0,
         "mobile_viewport": "width=device-width" in p.meta.get("viewport", "").replace(" ", "").lower(),
-        "clean_url": (sp.path == sp.path.lower() and "_" not in sp.path and not sp.query and len(sp.path) < 100),
-        "readable": None if grade_level is None else grade_level <= 12,
-        "question_headings": (any(QUESTION_RE.search(h) for h in p.subheads if h) or has_faq) if AEO_PATH.search(sp.path) else None,
-        "program_schema": bool(set(schema_types) & PROGRAM_TYPES) if PROGRAM_PATH.search(sp.path) else None,
+        "clean_url": (sp.path == sp.path.lower() and "_" not in sp.path and len(sp.path) < 100),
+        "readable": None if (grade_level is None or not key_page) else grade_level <= 12,
+        "question_headings": (any(QUESTION_RE.search(h) for h in p.subheads if h) or has_faq) if key_page else None,
+        "program_schema": (bool(set(schema_types) & PROGRAM_TYPES) if PROGRAM_PATH.search(sp.path) and not bad_directives else None),
     }
     if r["status"] != 200:
         res = {k: (False if k == "http_ok" else None) for k in res}  # content checks do not apply to error pages
@@ -611,6 +622,8 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
             "directives": bad_directives,
             "schema_types": schema_types,
             "desc": desc[:200],
+            "canonical_url": urljoin(url, p.canonical) if p.canonical else "",
+            "key_page": key_page,
             "reading_grade": grade_level,
             "question_headings": sum(1 for h in p.subheads if h and QUESTION_RE.search(h)),
             "faq_schema": has_faq,

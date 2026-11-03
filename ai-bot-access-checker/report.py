@@ -200,6 +200,11 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     if smap.get("urls") and smap.get("pages_not_in_sitemap"):
         actions.append(("Add missing pages to the sitemap", "Pages missing from the sitemap are found later, or not at all.",
                         "Make sure the sitemap generator includes every public, indexable page.", "Web team", f"{smap['pages_not_in_sitemap']} page(s)"))
+    fq = si.get("indexable_query_urls", {})
+    if fq.get("count"):
+        actions.append(("Stop indexing of filter URLs", "Filtered list pages (e.g. ?category=, ?department=) are near-duplicates that compete with real pages and waste crawl budget.",
+                        "Add noindex, or a canonical tag pointing to the unfiltered page, on filtered list URLs; keep them out of the sitemap.", "Web team",
+                        f"{fq['count']} URL(s)"))
     if orph.get("count"):
         actions.append(("Link to orphan pages", "Pages with no internal links get little authority and are hard for crawlers to reach.",
                         "Link to each orphan page from its parent section, or retire it.", "Content owners", f"{orph['count']} page(s)"))
@@ -331,7 +336,9 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
             ("XML sitemap lists live pages only", not smap.get("broken") and not smap.get("noindex"), f"{smap.get('urls', 0)} URLs; {smap.get('broken', 0)} broken, {smap.get('noindex', 0)} noindex"),
             ("Every indexable page is in the sitemap", bool(smap.get("urls")) and not smap.get("pages_not_in_sitemap"), f"{smap.get('pages_not_in_sitemap', 0)} page(s) missing" if smap.get("urls") else "no sitemap found"),
             ("No broken internal links", not si.get("broken_internal_links", {}).get("count"), f"{si.get('broken_internal_links', {}).get('count', 0)} broken page(s) linked"),
-            ("No orphan pages", not si.get("orphans", {}).get("count"), f"{si.get('orphans', {}).get('count', 0)} page(s) with no internal links"),
+            ("No orphan pages", not si.get("orphans", {}).get("count"), f"{si.get('orphans', {}).get('count', 0)} page(s) not linked from any crawled page"),
+            ("Filter/query URLs are not indexable", not si.get("indexable_query_urls", {}).get("count"),
+             f"{si.get('indexable_query_urls', {}).get('count', 0)} indexable filter URL(s)" + (" on " + ", ".join(x["section"] for x in si.get("indexable_query_urls", {}).get("sections", [])[:3]) if si.get("indexable_query_urls", {}).get("sections") else "")),
             ("Unique titles", not si.get("duplicate_titles", {}).get("pages"), f"{si.get('duplicate_titles', {}).get('pages', 0)} pages share a title"),
             ("Unique meta descriptions", not si.get("duplicate_descriptions", {}).get("pages"), f"{si.get('duplicate_descriptions', {}).get('pages', 0)} pages share a description"),
             ("No old or staging hosts", not si.get("legacy_hosts"), ", ".join(h["host"] for h in si.get("legacy_hosts", [])) or "none"),
