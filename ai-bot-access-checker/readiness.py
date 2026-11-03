@@ -425,7 +425,9 @@ def org_report(home: dict | None, cfg: dict, origin: str) -> dict:
         addr = org["address"][0]
     name = _str(org.get("name"))
     rows = [
-        ("Organization schema on homepage", bool(org), ", ".join(types_of(org)) if org else "none found"),
+        ("Organization schema on homepage", bool(org), ", ".join(types_of(org)) if org else (
+            "invalid JSON-LD on homepage (%d block(s)), ignored by search engines and AI" % home["invalid"]
+            if home and home.get("invalid") else "none found")),
         ("Type is CollegeOrUniversity", "CollegeOrUniversity" in types_of(org), ", ".join(types_of(org)) or "-"),
         ("name is the official name", name.strip().casefold() == cfg["official_name"].strip().casefold(), name or "-"),
         ("url present", bool(org.get("url")), _str(org.get("url")) or "-"),
@@ -467,6 +469,7 @@ def org_report(home: dict | None, cfg: dict, origin: str) -> dict:
         "passed": sum(1 for _, b, _ in rows if b),
         "total": len(rows),
         "has_org": bool(org),
+        "home_invalid": (home or {}).get("invalid", 0),
         "logo_source": "existing schema" if org.get("logo") else ("homepage <img> named logo" if (home or {}).get("logo") else "not found"),
         "snippet": '<script type="application/ld+json">\n' + json.dumps(snippet, indent=2) + "\n</script>",
     }
@@ -598,7 +601,8 @@ class Crawl:
         for t in page["detail"]["schema_types"]:
             self.schema_types[t] += 1
         if page.pop("_is_home", False):
-            self.home = {"url": page["url"], "objs": objs, "social": social, "logo": meta.get("logo", "")}
+            self.home = {"url": page["url"], "objs": objs, "social": social, "logo": meta.get("logo", ""),
+                         "invalid": page["detail"]["invalid_jsonld_blocks"]}
         for u, t in page.pop("_pdfs"):
             d = self.pdfs.setdefault(u, {"texts": set(), "pages": [], "count": 0})
             d["texts"].add(t)
