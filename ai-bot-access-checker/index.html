@@ -88,6 +88,7 @@
       <b>Site coverage</b>: the share of sampled sitemap URLs this bot may crawl under robots.txt.<br>
       <b>HTTP probe</b>: the server's actual response to the bot's User-Agent, compared to a normal browser. It cannot detect IP-verified blocks (e.g. Cloudflare bot management), so "allowed" here does not prove the real bot gets through.<br>
       <b>Directives</b>: <code>noai</code>, <code>noimageai</code>, <code>noindex</code> found in the X-Robots-Tag header or meta tags.<br>
+      <b>Policy</b>: deny = on your deny list in <code>bot_policy.json</code> (foreign-adversary operator, ignores robots.txt, or dataset builder/reseller). Denied bots are never counted as "should be allowed"; if one can still crawl, a robots.txt block is shown at the top. Edit the file to change the list, then restart the app.<br>
       <b>Purpose</b>: training = collects model training data. search = builds an AI search index. user = fetches a page live when a person asks the AI.<br>
       Click a row to see the exact robots.txt rules applied to that bot.
     </div>
@@ -142,7 +143,9 @@ let report = null, filter = "all", open = new Set();
 
 function renderAccess() {
   const r = report;
-  const bots = r.bots.filter(b => filter === "all" || b.purpose === filter);
+  const bots = r.bots.filter(b => filter === "all" || (filter === "denied" ? b.policy === "deny" : b.purpose === filter && b.policy !== "deny"));
+  const open_ = r.deny_not_blocked || [];
+  const snippet = open_.map(t => "User-agent: " + t).join("\n") + "\nDisallow: /";
   const blocked = r.bots.filter(b => b.robots_txt === "blocked").length;
   const scanned = r.pages_scanned;
   $("#out").innerHTML = `
@@ -152,14 +155,18 @@ function renderAccess() {
       <div><b>Browser response</b>${esc(r.baseline_status)}</div>
       <div><b>Blocked on this URL</b>${blocked} of ${r.bots.length} bots</div>
       <div><b>Sitemap URLs tested</b>${scanned || "none"}${r.sitemaps.length ? ` <span class="muted">(${r.sitemaps.length} sitemap(s) in robots.txt)</span>` : ""}</div>
+      <div><b>Denied bots not blocked</b><span class="${open_.length ? "err" : ""}">${open_.length} of ${r.bots.filter(b => b.policy === "deny").length}</span></div>
       <div><b>Policy files</b>${Object.entries(r.policy_files).map(([k,v]) => `${esc(k)}: ${esc(v)}`).join("<br>")}</div>
     </div>
+    ${open_.length ? `<div class="card"><h2>Policy: block these denied bots</h2>
+      <div class="note">These bots are on your deny list (bot_policy.json) but can still crawl. Add this to robots.txt, and block the same User-Agents at the CDN or firewall, because some of them ignore robots.txt.</div>
+      <pre class="snip">${esc(snippet)}</pre></div>` : ""}
     <div class="card">
       <div class="filters">
-        ${["all","training","search","user"].map(p => `<button data-p="${p}" class="${p===filter?"on":""}">${p}</button>`).join("")}
+        ${["all","training","search","user","denied"].map(p => `<button data-p="${p}" class="${p===filter?"on":""}">${p}</button>`).join("")}
       </div>
       <div class="tablewrap"><table>
-        <thead><tr><th>Bot</th><th>Operator</th><th>Purpose</th><th>robots.txt (this URL)</th>${scanned ? "<th>Site coverage</th>" : ""}<th>HTTP probe</th><th>Directives</th></tr></thead>
+        <thead><tr><th>Bot</th><th>Operator</th><th>Purpose</th><th>Policy</th><th>robots.txt (this URL)</th>${scanned ? "<th>Site coverage</th>" : ""}<th>HTTP probe</th><th>Directives</th></tr></thead>
         <tbody>${bots.map(b => {
           const cov = scanned ? Math.round(100 * b.site_allowed / scanned) : 0;
           const covCls = cov === 100 ? "ok" : cov === 0 ? "bad" : "warn";
@@ -167,11 +174,13 @@ function renderAccess() {
             <td class="nw"><b>${esc(b.bot)}</b></td>
             <td class="nw">${esc(b.operator)}</td>
             <td>${esc(b.purpose)}</td>
+            <td class="nw">${b.policy === "deny" ? `<span class="pill bad" title="${esc(b.policy_reason)}">deny</span>` : '<span class="muted">allow</span>'}</td>
             <td class="nw">${pill(b.robots_txt)} ${b.robots_group === "*" ? '<span class="muted">via *</span>' : ""}</td>
             ${scanned ? `<td class="nw"><span class="pill ${covCls}">${cov}%</span> <span class="muted">${b.site_allowed}/${scanned}</span></td>` : ""}
             <td class="nw">${pill(b.http_probe)}</td>
             <td>${b.page_directives.length ? b.page_directives.map(d => `<span class="pill bad">${esc(d)}</span>`).join("") : '<span class="muted">-</span>'}</td>
-          </tr>` + (open.has(b.bot) ? `<tr class="detail"><td colspan="7">
+          </tr>` + (open.has(b.bot) ? `<tr class="detail"><td colspan="8">
+            ${b.policy === "deny" ? `<b>Denied by policy:</b> ${esc(b.policy_reason)}<br>` : ""}
             <b>robots.txt rules applied</b> (${b.robots_group === "*" ? "catch-all group *" : "group for " + esc(b.bot)}):
             ${b.rules.length ? "<br><code>" + b.rules.map(esc).join("<br>") + "</code>" : " none, so everything is allowed"}
             ${b.site_blocked_sample && b.site_blocked_sample.length ? `<br><b>Blocked sitemap URLs (first 10)</b><br><code>${b.site_blocked_sample.map(esc).join("<br>")}</code>` : ""}

@@ -79,6 +79,32 @@ BOTS = [
 AI_DIRECTIVES = {"noai", "noimageai", "noindex", "none"}
 
 
+def load_policy() -> dict[str, str]:
+    """Deny list from bot_policy.json next to this file: {bot token: reason}."""
+    import os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot_policy.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            return dict(json.load(f).get("deny", {}))
+    except FileNotFoundError:
+        return {}
+
+
+DENY = load_policy()
+
+
+def deny_robots_snippet(tokens: list[str]) -> str:
+    """robots.txt group that blocks the given bots from the whole site."""
+    return "".join(f"User-agent: {t}\n" for t in tokens) + "Disallow: /\n" if tokens else ""
+
+
+def fully_blocked(row: dict, scanned: int) -> bool:
+    """Policy compliance: blocked on the checked URL and on every sampled sitemap page, or refused by the server."""
+    if str(row.get("http_probe", "")).startswith(("blocked", "challenged")):
+        return True
+    return row["robots_txt"] == "blocked" and (not scanned or row.get("site_allowed", 0) == 0)
+
+
 # ---------------------------------------------------------------- HTTP
 
 def _ctx() -> ssl.SSLContext:
@@ -346,6 +372,8 @@ def run(url: str, probe: bool, scan: int = 0) -> dict:
             "http_probe": http,
             "page_directives": directives_for(tok, baseline["headers"], mp.metas),
             "rules": rules_for(groups, tok),
+            "policy": "deny" if tok in DENY else "allow",
+            "policy_reason": DENY.get(tok, ""),
         })
         if scan_pages:
             blocked = [u for u in scan_pages if robots_verdict(groups, tok, _path_of(u))[0] == "blocked"]
@@ -361,6 +389,7 @@ def run(url: str, probe: bool, scan: int = 0) -> dict:
         "sitemaps_read": len(sitemaps_read),
         "pages_scanned": len(scan_pages),
         "bots": rows,
+        "deny_not_blocked": [r["bot"] for r in rows if r["policy"] == "deny" and not fully_blocked(r, len(scan_pages))],
     }
 
 
@@ -372,8 +401,8 @@ def print_table(rep: dict) -> None:
     print()
     if rep["pages_scanned"]:
         print(f"Site scan:  {rep['pages_scanned']} sitemap URLs from {rep['sitemaps_read']} sitemap(s)")
-    hdr = ("BOT", "OPERATOR", "PURPOSE", "ROBOTS.TXT", "HTTP PROBE", "DIRECTIVES", "SITE ALLOWED")
-    rows = [(r["bot"], r["operator"], r["purpose"],
+    hdr = ("BOT", "OPERATOR", "PURPOSE", "POLICY", "ROBOTS.TXT", "HTTP PROBE", "DIRECTIVES", "SITE ALLOWED")
+    rows = [(r["bot"], r["operator"], r["purpose"], r["policy"],
              r["robots_txt"] + ("" if r["robots_group"] in (r["bot"], "no matching group") else f" [{r['robots_group']}]"),
              r["http_probe"], ",".join(r["page_directives"]) or "-",
              f"{r['site_allowed']}/{rep['pages_scanned']}" if "site_allowed" in r else "-") for r in rep["bots"]]
@@ -393,6 +422,12 @@ def main() -> int:
     ap.add_argument("--scan", type=int, default=0, metavar="N", help="also check N URLs from the site's sitemaps")
     a = ap.parse_args()
     rep = run(a.url, probe=not a.no_probe, scan=a.scan)
+    if not a.json and rep["deny_not_blocked"]:
+        print_table(rep)
+        print("\nPOLICY: these denied bots are NOT fully blocked: " + ", ".join(rep["deny_not_blocked"]))
+        print("Add to robots.txt (and block the same User-Agents at the CDN/firewall, since some ignore robots.txt):\n")
+        print(deny_robots_snippet(rep["deny_not_blocked"]))
+        return 0
     if a.json:
         print(json.dumps(rep, indent=2))
     else:

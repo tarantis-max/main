@@ -25,12 +25,12 @@ from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from html.parser import HTMLParser
 from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
 
-from ai_bot_check import BOTS, Group, collect_sitemap_urls, fetch, parse_robots, parse_sitemaps, robots_verdict
+from ai_bot_check import BOTS, DENY, Group, collect_sitemap_urls, fetch, parse_robots, parse_sitemaps, robots_verdict
 
 CRAWLER_UA = "Mozilla/5.0 (compatible; AIReadinessChecker/1.0; site self-audit)"
 
 # Bots whose access is scored: AI search + user-triggered fetchers (they put pages in AI answers).
-SCORED_BOTS = [b[0] for b in BOTS if b[2] in ("search", "user")]
+SCORED_BOTS = [b[0] for b in BOTS if b[2] in ("search", "user") and b[0] not in DENY]  # denied bots never count against a page
 TRAINING_BOTS = [b[0] for b in BOTS if b[2] == "training"]
 
 SKIP_EXT = re.compile(
@@ -47,7 +47,7 @@ DEFAULTS = {
 # id, label, pass criterion, critical (critical fail => page is "Not ready")
 CHECKS = [
     ("http_ok", "HTTP 200", "Page returns HTTP 200 to a normal request.", True),
-    ("ai_search_allowed", "AI search bots allowed", "robots.txt allows every AI search and user-fetch bot for this URL.", True),
+    ("ai_search_allowed", "AI search bots allowed", "robots.txt allows every AI search and user-fetch bot for this URL, except bots on the deny list.", True),
     ("indexable", "No noindex/noai", "No noindex, none, noai or noimageai in meta robots or X-Robots-Tag.", True),
     ("server_text", "Server-rendered text", "At least 150 words of visible text in the raw HTML (most AI crawlers do not run JavaScript).", True),
     ("title", "Title", "<title> present, 10-70 characters.", False),

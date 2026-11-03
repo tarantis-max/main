@@ -15,6 +15,7 @@ import threading
 from html import escape as e
 from urllib.parse import urlsplit
 
+from ai_bot_check import deny_robots_snippet, fully_blocked
 from readiness import CHECKS, Crawl
 
 LABEL = {c[0]: c[1] for c in CHECKS}
@@ -78,8 +79,10 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     def partial(b):
         return scanned and 0 < b.get("site_allowed", scanned) < scanned
 
-    search = [b for b in bots if b["purpose"] in ("search", "user")]
-    training = [b for b in bots if b["purpose"] == "training"]
+    denied = [b for b in bots if b.get("policy") == "deny"]
+    search = [b for b in bots if b["purpose"] in ("search", "user") and b.get("policy") != "deny"]
+    training = [b for b in bots if b["purpose"] == "training" and b.get("policy") != "deny"]
+    deny_open = [b for b in denied if not fully_blocked(b, scanned)]
     search_blocked = [b for b in search if blocked(b)]
     training_blocked = [b for b in training if blocked(b)]
     search_partial = [b for b in search if not blocked(b) and partial(b)]
@@ -99,7 +102,7 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         verdict, vcls = "Not ready", "bad"
 
     # ---- key findings
-    findings = []
+    findings, other = [], []
     if access:
         if search_blocked:
             findings.append(f"<b>{len(search_blocked)} of {len(search)} AI search and answer bots are blocked</b>: "
@@ -107,8 +110,14 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         else:
             findings.append(f"<b>All {len(search)} AI search and answer bots can reach the site</b> (ChatGPT, Claude, Perplexity, Copilot and others).")
         if search_partial:
-            findings.append(f"{len(search_partial)} AI search bots are blocked from part of the site by robots.txt.")
-        findings.append(f"{len(training_blocked)} of {len(training)} AI training bots are blocked. This is a policy choice, not a readiness defect.")
+            other.append(f"{len(search_partial)} AI search bots are blocked from part of the site by robots.txt.")
+        other.append(f"{len(training_blocked)} of {len(training)} AI training bots are blocked. This is a policy choice, not a readiness defect.")
+        if denied:
+            if deny_open:
+                findings.append(f"<b>Policy: {len(deny_open)} of {len(denied)} denied bots are not fully blocked</b>: "
+                                + e(", ".join(b["bot"] for b in deny_open)) + ".")
+            else:
+                other.append(f"Policy: all {len(denied)} denied bots are fully blocked.")
     else:
         findings.append("Bot access was not checked.")
     findings.append(f"<b>{pct_ready}% of {n} pages are Ready</b> for AI search. {g['Needs work']} need work and {g['Not ready']} are not ready.")
@@ -118,16 +127,20 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         findings.append("Critical issues: " + "; ".join(f"{e(c['label'])} on {c['failed']} page(s)" for c in crit) + ".")
     top = sorted(fails, key=lambda c: -c["failed"])[:1]
     if top:
-        findings.append(f"Most common issue: <b>{e(top[0]['label'])}</b>, failing on {top[0]['pct']}% of pages.")
+        other.append(f"Most common issue: <b>{e(top[0]['label'])}</b>, failing on {top[0]['pct']}% of pages.")
     if prio:
         findings.append(f"<b>{prio_ready} of {len(prio)} priority pages</b> (admissions, tuition, aid, programs, contact) are Ready.")
-    findings.append(f"Homepage organization schema: <b>{org['passed']} of {org['total']}</b> checks pass." if org["total"] else "Homepage organization schema was not checked.")
+    other.append(f"Homepage organization schema: <b>{org['passed']} of {org['total']}</b> checks pass." if org["total"] else "Homepage organization schema was not checked.")
     pc = s["pdf_counts"]
     if pc["total"]:
         findings.append(f"{pc['total']} PDFs are linked. {pc['key_facts']} hold key facts that AI crawlers may not read; {pc['past_terms']} name past terms.")
 
     # ---- actions (ranked: bot access, critical, then by pages affected)
     actions = []
+    if deny_open:
+        actions.append(("Block policy-denied bots", f"{len(deny_open)} denied bots can still crawl: {', '.join(b['bot'] for b in deny_open)}.",
+                        "Add the robots.txt group in Appendix D, and block the same User-Agents at the CDN/firewall, because some of these bots ignore robots.txt.",
+                        "Web team", "Site-wide"))
     if search_blocked:
         actions.append(("Unblock AI search and answer bots", f"{len(search_blocked)} bots blocked: {', '.join(b['bot'] for b in search_blocked)}.",
                         "Remove the robots.txt rules or firewall/CDN rules that block them.", "Web team", "Site-wide"))
@@ -183,9 +196,28 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     checks_html = "".join(check_row(c) for c in s["check_failures"])
     org_html = "".join(org_row(r) for r in org["rows"] if not r["pass"]) or '<tr><td colspan="3">All checks pass.</td></tr>'
     pdf_html = "".join(pdf_row(p) for p in [x for x in pdfs if x["topics"] or x["past_terms"]][:10]) or '<tr><td colspan="4">None flagged.</td></tr>'
-    actions_html = "".join(action_row(i, a) for i, a in enumerate(actions, 1)) or '<tr><td colspan="6">No actions needed.</td></tr>'
+    def exec_row(i, a):
+        act, why, _fix, owner, scope = a
+        return "<tr><td>%d</td><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td></tr>" % (i, e(act), e(why), e(owner), e(scope))
+
+    actions_html = "".join(exec_row(i, a) for i, a in enumerate(actions[:5], 1)) or '<tr><td colspan="5">No actions needed.</td></tr>'
+    more_note = ('<p class="note">%d more action(s) and the steps for each are in the Action plan.</p>' % (len(actions) - 5)) if len(actions) > 5 else (
+        '<p class="note">Steps for each action are in the Action plan.</p>' if actions else "")
+    more_actions_html = ""
+    if actions:
+        more_actions_html = ('<h2>Action plan</h2><table><thead><tr><th>#</th><th>Action</th><th>What to do</th>'
+                             '<th>Owner</th><th>Scope</th></tr></thead><tbody>%s</tbody></table>'
+                             % "".join("<tr><td>%d</td><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td></tr>" % (i, e(a[0]), e(a[2]), e(a[3]), e(a[4]))
+                                       for i, a in enumerate(actions, 1)))
+    if other:
+        more_actions_html += '<h2>Other findings</h2><ul class="f">%s</ul>' % "".join("<li>%s</li>" % x for x in other)
     findings_html = "".join("<li>%s</li>" % x for x in findings)
     snippet_html = ('<p class="note">A ready-to-paste fix is generated on the Site Readiness tab of the app (Structured data card).</p>') if org["total"] and not org_ok else ""
+    deny_appendix = ""
+    if deny_open:
+        deny_appendix = ('<h2>Appendix D: Block denied bots</h2><p class="note">Add to robots.txt. Also block these User-Agents at the CDN or firewall, '
+                         'because robots.txt is voluntary.</p><pre>%s</pre>' % e(deny_robots_snippet([b["bot"] for b in deny_open])))
+        deny_appendix += '<p class="note"><b>Reasons:</b> %s.</p>' % "; ".join("%s: %s" % (e(b["bot"]), e(b.get("policy_reason", ""))) for b in deny_open)
     org_passed_txt = "%d of %d checks pass." % (org["passed"], org["total"])
     skipped_txt = ", ".join("%s (%d)" % (k, v) for k, v in s["skipped"].items()) or "none"
     stopped_txt = "crawl stopped early; " if s["state"] == "stopped" else ""
@@ -201,6 +233,10 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         tb = ", ".join(b["bot"] for b in training_blocked) or "none"
         training_line = ('<p><b>Training bots:</b> %d of %d blocked (%s). Blocking training is a policy choice and does not affect AI search visibility.</p>'
                          % (len(training_blocked), len(training), e(tb)))
+        deny_line = ""
+        if denied:
+            deny_line = ('<p><b>Denied by policy</b> (bot_policy.json): %d of %d fully blocked. Not blocked: %s.</p>'
+                         % (len(denied) - len(deny_open), len(denied), e(", ".join(b["bot"] for b in deny_open)) or "none"))
         def names(lst, cls):
             return "".join('<span class="pill %s">%s</span>' % (cls, e(x["bot"] + " (" + x["operator"] + ")")) for x in lst) or '<span class="note">none</span>'
         allowed = [b for b in search if not blocked(b) and not partial(b)]
@@ -211,7 +247,7 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
             '<tr><td class="nw"><b>Allowed</b><br><span class="note">%d bots</span></td><td>%s</td></tr>'
             '</tbody></table>' % (len(search_blocked), names(search_blocked, "bad"), len(search_partial), names(search_partial, "warn"),
                                   len(allowed), names(allowed, "ok"))
-            + training_line
+            + training_line + deny_line
             + '<p class="note">AI search and answer bots only. Blocked: robots.txt blocks the homepage, robots.txt blocks every sampled sitemap page, '
               'or a live request using the bot&#39;s identity was refused. %s '
               'Blocks that verify the bot&#39;s network address (e.g. Cloudflare bot management) cannot be detected this way. '
@@ -251,6 +287,8 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
   pre {{ background:#f5f5f7; border:1px solid var(--line); border-radius:6px; padding:10px; font-size:11px; white-space:pre-wrap; word-break:break-all; }}
   .bar {{ position:sticky; top:0; background:#fff; border-bottom:1px solid var(--line); padding:10px 24px; text-align:right; }}
   .bar button {{ padding:8px 16px; border:0; border-radius:6px; background:var(--accent); color:#fff; font-weight:600; cursor:pointer; }}
+  .pb {{ break-before:page; }}
+  h2.part {{ border:0; font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:36px 0 0; padding:0; }}
   .crit {{ color:var(--bad); font-weight:600; }}
   td.nw {{ white-space:nowrap; }}
   tr.sm td {{ font-size:12px; padding:4px 8px; }}
@@ -275,11 +313,15 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 <h2>Key findings</h2>
 <ul class="f">{findings_html}</ul>
 
-<h2>Recommended actions</h2>
-<table><thead><tr><th>#</th><th>Action</th><th>Why it matters</th><th>What to do</th><th>Owner</th><th>Scope</th></tr></thead><tbody>
+<h2>Top actions</h2>
+<p class="note">Ranked by impact. Owner = who does the work.</p>
+<table><thead><tr><th>#</th><th>Action</th><th>Why it matters</th><th>Owner</th><th>Scope</th></tr></thead><tbody>
 {actions_html}
 </tbody></table>
+{more_note}
 
+<h2 class="pb part">Details</h2>
+{more_actions_html}
 <h2>Priority pages</h2>
 <p class="note">Homepage plus pages whose address mentions admissions, apply, tuition, cost, financial aid, scholarships, academics, programs, majors, degrees, deadlines, calendar, visit, contact, about, graduate or undergraduate. Worst 10 shown; the Pages CSV has the full list and every failed check.</p>
 <table><thead><tr><th>Score</th><th>Grade</th><th style="width:38%">Page</th><th>Failed checks</th></tr></thead><tbody>
@@ -289,8 +331,10 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 <h2>AI bot access</h2>
 {bots_html}
 
+<h2 class="pb part">Method and appendices</h2>
 <h2>Method</h2>
 <p class="note">
+<b>Bot policy.</b> Bots in bot_policy.json are excluded from AI search counts and scoring; a denied bot counts as blocked only when robots.txt blocks it on the homepage and on every sampled sitemap page, or the server refuses it.<br>
 <b>Verdict rules.</b> Ready: at least 80% of pages Ready, no AI search bot blocked, and every homepage organization schema check passes. Partially ready: at least 50% of pages Ready and no AI search bot blocked. Not ready: anything else.<br>
 <b>Page grades.</b> Score = checks passed ÷ {len(CHECKS)} × 100. Ready: score 80 or higher and no critical fail. Needs work: score 50-79 and no critical fail. Not ready: score below 50 or any critical fail.<br>
 <b>Scope.</b> Started at {e(s['start'])}; {n} pages checked (limit {s['max_pages']}); {stopped_txt}skipped: {e(skipped_txt)}.
@@ -314,6 +358,7 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 {pdf_html}
 </tbody></table>
 
+{deny_appendix}
 </main></body></html>"""
     return html
 

@@ -59,11 +59,28 @@ The tab also includes two site-level reports.
 
 Crawler behavior: follows robots.txt for itself, 4 workers, 0.25 s delay per worker, skips non-HTML files, default 500 pages (max 20,000). Use the exclude regex to skip calendar or event pages that generate unlimited URLs. **Pages CSV** exports every page with each check marked PASS or FAIL. **PDFs CSV** exports the PDF report.
 
+## Bot policy (deny list)
+
+`bot_policy.json` lists bots the school does not allow. Current criteria:
+1. Operator based in a U.S. Commerce Dept. foreign-adversary country (15 CFR 791.4).
+2. Does not honor robots.txt by default, or is publicly reported to evade blocks.
+3. Crawls to build or sell datasets rather than run an AI product.
+
+Rules:
+- A denied bot is never counted as "should be allowed" and never fails a page check.
+- A denied bot counts as blocked only when robots.txt blocks it on the homepage and every sampled sitemap page, or the server refuses it.
+- If a denied bot is not blocked, the Bot Access tab and the report show a robots.txt block to add. Also block it at the CDN or firewall, because robots.txt is voluntary.
+
+Edit the file to change the list, then restart the app.
+
 ## Executive report
 
-After a crawl finishes (or is stopped), click **Executive report** on the Site Readiness tab. It opens a printable report; use **Print / Save as PDF** to share it. Length: 2-4 printed pages.
+After a crawl finishes (or is stopped), click **Executive report** on the Site Readiness tab. It opens a printable report; use **Print / Save as PDF** to share it.
 
-Contents: overall verdict, key numbers, key findings, ranked actions with owners, priority pages (worst 10), AI bot access, method, and appendices (all checks, homepage schema failures, PDFs to review, up to 10).
+Structure:
+- **Page 1, executive summary:** verdict, four key numbers, key findings, top 5 actions with owner and scope.
+- **Details:** full action plan with steps, other findings, priority pages (worst 10), AI bot access including denied bots.
+- **Method and appendices:** all checks, homepage schema failures, PDFs to review (up to 10), robots.txt block for denied bots.
 
 Verdict rules:
 - **Ready**: at least 80% of pages Ready, no AI search bot blocked, and every homepage organization schema check passes.

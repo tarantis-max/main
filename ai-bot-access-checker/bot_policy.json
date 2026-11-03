@@ -1,0 +1,15 @@
+{
+  "_about": "Bots listed under deny are never recommended for unblocking. If one is allowed, the tools recommend blocking it. Edit this file to change the policy. Criteria: (1) operator based in a U.S. Commerce Dept. foreign-adversary country (15 CFR 791.4); (2) does not honor robots.txt by default or is publicly reported to evade blocks; (3) crawls to build or sell datasets rather than run an AI product.",
+  "deny": {
+    "Bytespider": "ByteDance (China): foreign-adversary country; publicly reported to ignore robots.txt",
+    "PetalBot": "Huawei (China): foreign-adversary country",
+    "PanguBot": "Huawei (China): foreign-adversary country",
+    "img2dataset": "Does not honor robots.txt by default; dataset builder",
+    "Diffbot": "Dataset builder / reseller",
+    "Omgilibot": "Webz.io: dataset reseller",
+    "Webzio-Extended": "Webz.io: dataset reseller",
+    "Timpibot": "Dataset builder / reseller",
+    "ImagesiftBot": "Hive: image dataset builder",
+    "CCBot": "Common Crawl: open dataset builder used for AI training"
+  }
+}
