@@ -16,7 +16,7 @@ from html import escape as e
 from urllib.parse import urlsplit
 
 from ai_bot_check import deny_robots_snippet, fully_blocked
-from readiness import CHECKS, Crawl
+from readiness import CHECKS, CATEGORY, Crawl
 
 LABEL = {c[0]: c[1] for c in CHECKS}
 CRITICAL = {c[0] for c in CHECKS if c[3]}
@@ -42,6 +42,11 @@ ISSUES = {
     "img_alt": ("Images without alt text are invisible to AI systems and to screen readers.", "Add descriptive alt text to images.", "Content owners"),
     "freshness": ("Without a date signal, AI systems cannot tell whether information is current.", "Send a Last-Modified header or add dateModified to page structured data.", "Web team"),
     "fast": ("Slow pages may time out for crawlers.", "Improve server response time to under 2 seconds.", "Web team"),
+    "mobile_viewport": ("Search engines rank and display the mobile version of pages first.", "Add <meta name=viewport content=\"width=device-width, initial-scale=1\"> to the template.", "Web team"),
+    "clean_url": ("Short, readable URLs are easier for people and machines to understand and share.", "Use lowercase, hyphenated URLs without query strings for public pages; redirect old forms.", "Web team"),
+    "readable": ("Plain language is easier for students to read and for AI to quote accurately.", "Rewrite paragraph text to grade 12 or below: shorter sentences, everyday words.", "Content owners"),
+    "question_headings": ("AI answers and featured snippets favor content that answers the questions students ask.", "Add question-style subheadings or an FAQ section (with FAQPage schema) to admissions, cost, aid and program pages.", "Content owners"),
+    "program_schema": ("Program schema tells search engines and AI the degree, length, cost and format of each program.", "Add EducationalOccupationalProgram schema to the program page template.", "Web team"),
 }
 
 PRIORITY_RE = re.compile(
@@ -142,12 +147,28 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     if pc["total"]:
         findings.append(f"{pc['total']} PDFs are linked. {pc['key_facts']} hold key facts that AI crawlers may not read; {pc['past_terms']} name past terms.")
 
+    si = s.get("site_issues") or {}
+    legacy = si.get("legacy_hosts", [])
+    if legacy:
+        findings.append("<b>Old or staging site is publicly reachable</b>: " + e(", ".join(h["host"] for h in legacy))
+                        + ". Search engines and AI can index and cite outdated pages from it.")
+    for sec in si.get("noindex_sections", []):
+        other.append(f"Section <b>{e(sec['section'])}</b>: {sec['noindex']} of {sec['pages']} pages are marked noindex, so search engines and AI skip them.")
+    for h in si.get("hosting_links", [])[:3]:
+        other.append(f"{h['links']} links point to the hosting provider's domain <b>{e(h['host'])}</b> instead of the school's domain.")
+    if si.get("former_name_pages"):
+        other.append(f"{si['former_name_pages']} pages mention a former name. Review list only (not scored): history pages and bios are expected.")
+
     # ---- actions (ranked: bot access, critical, then by pages affected)
     actions = []
     if deny_open:
         actions.append(("Block policy-denied bots", f"{len(deny_open)} denied bots can still crawl: {', '.join(b['bot'] for b in deny_open)}.",
                         "Add the robots.txt group in Appendix D, and block the same User-Agents at the CDN/firewall, because some of these bots ignore robots.txt.",
                         "Web team", "Site-wide"))
+    if legacy:
+        actions.append(("Retire or block the old/staging site", "Outdated copies of pages can be indexed and cited as current.",
+                        "Shut it down, password-protect it, or redirect it to the live site; then remove it from search consoles.",
+                        "Web team", ", ".join(h["host"] for h in legacy)))
     if search_blocked:
         actions.append(("Unblock AI search and answer bots", f"{len(search_blocked)} bots blocked: {', '.join(b['bot'] for b in search_blocked)}.",
                         "Remove the robots.txt rules or firewall/CDN rules that block them.", "Web team", "Site-wide"))
@@ -168,6 +189,31 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     if org["total"] and not org_ok and not sd_state:
         actions.append(("Fix homepage organization schema", "AI systems use it to identify the school correctly.",
                         "Paste the generated snippet (app: Site Readiness tab, Structured data card) into the homepage after replacing every REPLACE-WITH value.", "Web team", "Homepage"))
+    smap, orph, bl = si.get("sitemap", {}), si.get("orphans", {}), si.get("broken_internal_links", {})
+    dt_, dd_ = si.get("duplicate_titles", {}), si.get("duplicate_descriptions", {})
+    if bl.get("count"):
+        actions.append(("Fix broken internal links", "Links to missing pages waste crawl budget and send students and AI to dead ends.",
+                        "Update or remove links to the pages listed in Site-level findings (each shows where it is linked from).", "Web team", f"{bl['count']} broken page(s)"))
+    if smap.get("broken") or smap.get("noindex"):
+        actions.append(("Clean the XML sitemap", "Sitemaps should list only live, indexable pages.",
+                        "Remove broken and noindex URLs from the sitemap.", "Web team", f"{smap.get('broken', 0)} broken, {smap.get('noindex', 0)} noindex"))
+    if smap.get("urls") and smap.get("pages_not_in_sitemap"):
+        actions.append(("Add missing pages to the sitemap", "Pages missing from the sitemap are found later, or not at all.",
+                        "Make sure the sitemap generator includes every public, indexable page.", "Web team", f"{smap['pages_not_in_sitemap']} page(s)"))
+    if orph.get("count"):
+        actions.append(("Link to orphan pages", "Pages with no internal links get little authority and are hard for crawlers to reach.",
+                        "Link to each orphan page from its parent section, or retire it.", "Content owners", f"{orph['count']} page(s)"))
+    if dt_.get("pages") or dd_.get("pages"):
+        actions.append(("Make titles and descriptions unique", "Duplicates make pages compete with each other in search.",
+                        "Give each page its own title and meta description.", "Content owners", f"{dt_.get('pages', 0)} titles, {dd_.get('pages', 0)} descriptions"))
+    if si.get("hosting_links"):
+        actions.append(("Replace hosting-provider links", "Search engines and AI may cite the provider's domain instead of the school's.",
+                        "Rewrite links (often PDFs) from the hosting domain to the school's domain; redirect the hosting domain.", "Web team",
+                        f"{sum(h['links'] for h in si['hosting_links'])} link(s)"))
+    if si.get("noindex_sections"):
+        actions.append(("Confirm noindex sections are intended", "Noindexed sections never appear in search or AI answers.",
+                        "Decide per section; remove noindex where students should find the content (e.g. events).", "Marketing",
+                        ", ".join(x["section"].split("/", 1)[1] or "/" for x in si["noindex_sections"][:3])))
     if pc["key_facts"]:
         actions.append(("Move key facts out of PDFs", "Most AI crawlers read PDFs poorly or not at all.",
                         "Publish tuition, aid, deadline, requirement and catalog facts as web page text.", "Content owners", f"{pc['key_facts']} PDF(s)"))
@@ -245,6 +291,60 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     org_passed_txt = "%d of %d checks pass." % (org["passed"], org["total"])
     skipped_txt = ", ".join("%s (%d)" % (k, v) for k, v in s["skipped"].items()) or "none"
     stopped_txt = "crawl stopped early; " if s["state"] == "stopped" else ""
+    coverage = [
+        ("Title tags and meta descriptions", "SEO", "Automated: Title, Meta description, unique titles/descriptions"),
+        ("Clear headings, simple content", "SEO / AEO", "Automated: Single H1, Subheadings, Readable text"),
+        ("Match real search queries (question-style content)", "AEO / GEO", "Automated: Answers questions; Manual: query research in Search Console"),
+        ("Keep content fresh", "GEO", "Automated: No past terms, Freshness signal"),
+        ("Structured data: Organization", "SEO / GEO", "Automated: homepage organization schema, Valid structured data"),
+        ("Structured data: program pages (EducationalOccupationalProgram, Course)", "SEO / GEO", "Automated: Program schema"),
+        ("Structured data: FAQPage", "AEO", "Automated: FAQ pages count"),
+        ("HowTo schema for application steps", "AEO", "Not checked: Google retired HowTo rich results in 2023"),
+        ("Mobile-responsive", "Technical SEO", "Automated: Mobile-friendly"),
+        ("Clean, accessible URLs", "Technical SEO", "Automated: Clean URL"),
+        ("Site speed", "Technical SEO", "Automated: Response time (server only; full page speed needs PageSpeed Insights)"),
+        ("Clear sitemap", "Technical SEO", "Automated: sitemap coverage, broken and noindex sitemap URLs"),
+        ("Internal linking / topical authority", "SEO / GEO", "Automated: orphan pages, broken internal links"),
+        ("Backlinks", "SEO", "Manual: needs an SEO tool (e.g. Semrush, Ahrefs)"),
+        ("Trust signals (privacy, contact info)", "GEO", "Automated: homepage trust checks"),
+        ("Accessibility (alt text, language)", "On-page", "Automated: Image alt text, Language"),
+        ("AI crawler access", "GEO", "Automated: Bot Access, AI search bots allowed, No noindex/noai"),
+        ("Keyword and competitor research", "SEO", "Manual: Search Console, keyword tools; competitor scan compares site readiness"),
+        ("Search Console analysis, organic rankings, traffic", "SEO", "Manual: needs Search Console / analytics access"),
+        ("AI prompt analysis, AI traffic, indexing across AI platforms", "GEO", "Manual: AI answer tester (planned) and analytics"),
+    ]
+    coverage_html = "".join("<tr><td>%s</td><td>%s</td><td>%s</td></tr>" % (e(a), e(b), e(c)) for a, b, c in coverage)
+    areas = s.get("areas") or []
+    def area_cls(v):
+        return "ok" if v is not None and v >= 90 else "warn" if v is not None and v >= 70 else "bad"
+    areas_html = ('<div class="areas">' + "".join(
+        '<div class="area %s"><b>%s</b><span>%s</span></div>' % (area_cls(a["score"]), "-" if a["score"] is None else a["score"], e(a["area"]))
+        for a in areas) + '</div><p class="note">Area score = share of applicable page checks passed (90+ green, 70-89 amber, below 70 red). '
+        'SEO = Technical + On-page; GEO/AEO = Content + Structured data.</p>') if areas else ""
+    # site-level findings table
+    def yn(ok):
+        return '<span class="pill ok">pass</span>' if ok else '<span class="pill bad">fail</span>'
+    site_rows = []
+    if si:
+        smap = si.get("sitemap", {})
+        site_rows += [
+            ("XML sitemap lists live pages only", not smap.get("broken") and not smap.get("noindex"), f"{smap.get('urls', 0)} URLs; {smap.get('broken', 0)} broken, {smap.get('noindex', 0)} noindex"),
+            ("Every indexable page is in the sitemap", bool(smap.get("urls")) and not smap.get("pages_not_in_sitemap"), f"{smap.get('pages_not_in_sitemap', 0)} page(s) missing" if smap.get("urls") else "no sitemap found"),
+            ("No broken internal links", not si.get("broken_internal_links", {}).get("count"), f"{si.get('broken_internal_links', {}).get('count', 0)} broken page(s) linked"),
+            ("No orphan pages", not si.get("orphans", {}).get("count"), f"{si.get('orphans', {}).get('count', 0)} page(s) with no internal links"),
+            ("Unique titles", not si.get("duplicate_titles", {}).get("pages"), f"{si.get('duplicate_titles', {}).get('pages', 0)} pages share a title"),
+            ("Unique meta descriptions", not si.get("duplicate_descriptions", {}).get("pages"), f"{si.get('duplicate_descriptions', {}).get('pages', 0)} pages share a description"),
+            ("No old or staging hosts", not si.get("legacy_hosts"), ", ".join(h["host"] for h in si.get("legacy_hosts", [])) or "none"),
+            ("No links to hosting-provider domains", not si.get("hosting_links"), ", ".join(f"{h['host']} ({h['links']})" for h in si.get("hosting_links", [])[:3]) or "none"),
+            ("FAQ structured data in use", si.get("faq_pages", 0) > 0, f"{si.get('faq_pages', 0)} page(s) with FAQPage"),
+            ("Program pages have program schema", si.get("program_pages", 0) > 0 and si.get("program_schema_pages", 0) == si.get("program_pages", 0),
+             f"{si.get('program_schema_pages', 0)} of {si.get('program_pages', 0)} program pages"),
+            ("Median reading grade 12 or below", si.get("median_reading_grade") is not None and si["median_reading_grade"] <= 12, f"grade {si.get('median_reading_grade')}"),
+        ] + [("Homepage: " + k, bool(v), "found" if v else "not found") for k, v in si.get("trust", {}).items()]
+    site_html = ('<h2>Site-level SEO and GEO findings</h2><table><thead><tr><th>Check</th><th>Result</th><th>Detail</th></tr></thead><tbody>'
+                 + "".join("<tr><td>%s</td><td>%s</td><td>%s</td></tr>" % (e(a), yn(b), e(c)) for a, b, c in site_rows)
+                 + "</tbody></table>") if site_rows else ""
+    unchecked_txt = ("; %d page(s) could not be checked (rate-limited or timed out) and are not graded" % len(si.get("unchecked", []))) if si.get("unchecked") else ""
     search_tile = ("%d/%d" % (len(search) - len(search_blocked), len(search))) if access else "-"
     prio_tile = ("%d/%d" % (prio_ready, len(prio))) if prio else "-"
     verdict_txt = {
@@ -313,6 +413,10 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
   .bar button {{ padding:8px 16px; border:0; border-radius:6px; background:var(--accent); color:#fff; font-weight:600; cursor:pointer; }}
   .pb {{ break-before:page; }}
   h2.part {{ border:0; font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:36px 0 0; padding:0; }}
+  .areas {{ display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-top:10px; }}
+  .area {{ border-radius:8px; padding:8px 10px; }}
+  .area b {{ display:block; font-size:20px; }}
+  .area span {{ font-size:11px; }}
   .crit {{ color:var(--bad); font-weight:600; }}
   td.nw {{ white-space:nowrap; }}
   tr.sm td {{ font-size:12px; padding:4px 8px; }}
@@ -334,6 +438,7 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
   <div class="tile"><b>{prio_tile}</b><span>priority pages Ready</span></div>
 </div>
 
+{areas_html}
 <h2>Key findings</h2>
 <ul class="f">{findings_html}</ul>
 
@@ -347,6 +452,7 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 <h2 class="pb part">Details</h2>
 {more_actions_html}
 {sd_html}
+{site_html}
 <h2>Priority pages</h2>
 <p class="note">Homepage plus pages whose address mentions admissions, apply, tuition, cost, financial aid, scholarships, academics, programs, majors, degrees, deadlines, calendar, visit, contact, about, graduate or undergraduate. Worst 10 shown; the Pages CSV has the full list and every failed check.</p>
 <table><thead><tr><th>Score</th><th>Grade</th><th style="width:38%">Page</th><th>Failed checks</th></tr></thead><tbody>
@@ -362,7 +468,7 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 <b>Bot policy.</b> Bots in bot_policy.json are excluded from AI search counts and scoring; a denied bot counts as blocked only when robots.txt blocks it on the homepage and on every sampled sitemap page, or the server refuses it.<br>
 <b>Verdict rules.</b> Ready: at least 80% of pages Ready, no AI search bot blocked, and every homepage organization schema check passes. Partially ready: at least 50% of pages Ready and no AI search bot blocked. Not ready: anything else.<br>
 <b>Page grades.</b> Score = checks passed ÷ {len(CHECKS)} × 100. Ready: score 80 or higher and no critical fail. Needs work: score 50-79 and no critical fail. Not ready: score below 50 or any critical fail.<br>
-<b>Scope.</b> Started at {e(s['start'])}; {n} pages checked (limit {s['max_pages']}); {stopped_txt}skipped: {e(skipped_txt)}.
+<b>Scope.</b> Started at {e(s['start'])}; {n} pages checked (limit {s['max_pages']}); {stopped_txt}skipped: {e(skipped_txt)}{e(unchecked_txt)}. Error pages (not HTTP 200) are scored only on HTTP 200. Former-name mentions are a review list and are not scored.
 "Past" means before the current academic year ({e(s['academic_year'])}), which starts July 1. PDFs are judged by file name and link text only.
 </p>
 <h2>Appendix A: All checks</h2>
@@ -384,6 +490,11 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 </tbody></table>
 
 {deny_appendix}
+<h2>Appendix E: Coverage of the EAB search visibility checklist</h2>
+<p class="note">Source: EAB, "Navigating Search Visibility in the AI Era" (2025). Automated = checked by this tool on every crawl. Manual = needs data this tool cannot crawl.</p>
+<table><thead><tr><th>Guide item</th><th>Area</th><th>Coverage</th></tr></thead><tbody>
+{coverage_html}
+</tbody></table>
 </main></body></html>"""
     return html
 

@@ -211,12 +211,12 @@ def robots_verdict(groups: list[Group], token: str, path: str) -> tuple[str, str
 
 # ---------------------------------------------------------------- sitemaps
 
-def collect_sitemap_urls(sitemaps: list[str], limit: int) -> tuple[list[str], list[str]]:
+def collect_sitemap_urls(sitemaps: list[str], limit: int, max_sitemaps: int = 25) -> tuple[list[str], list[str]]:
     """Breadth-first over sitemap indexes. Returns (page_urls, sitemaps_read)."""
     import gzip
     import xml.etree.ElementTree as ET
     queue, seen, pages, read = list(sitemaps), set(), [], []
-    while queue and len(pages) < limit and len(read) < 25:
+    while queue and len(pages) < limit and len(read) < max_sitemaps:
         sm = queue.pop(0)
         if sm in seen:
             continue

@@ -269,6 +269,8 @@ function renderReady() {
           </tr>`).join("")}</tbody>
       </table></div>
     </div>
+    ${areasCard(s)}
+    ${siteCard(s)}
     ${orgCard(s)}
     ${pdfCard(s, rdata.pdfs)}
     <div class="card">
@@ -308,6 +310,40 @@ function renderReady() {
     if (e.target.tagName === "A") return;
     const k = tr.dataset.url; ropen.has(k) ? ropen.delete(k) : ropen.add(k); renderReady();
   });
+}
+
+function areasCard(s) {
+  if (!s.areas) return "";
+  const cls = v => v == null ? "muted" : v >= 90 ? "ok" : v >= 70 ? "warn" : "bad";
+  return `<div class="card"><h2>Scores by area</h2>
+    <div class="summary">${s.areas.map(a => `<div><b>${esc(a.area)}</b><span class="big pill ${cls(a.score)}" style="font-size:22px">${a.score == null ? "-" : a.score}</span><div class="note">${a.checks.map(esc).join(", ")}</div></div>`).join("")}</div>
+    <div class="note" style="margin-top:8px">Share of applicable page checks passed. 90+ green, 70-89 amber, below 70 red. SEO = Technical + On-page. GEO/AEO = Content + Structured data.</div></div>`;
+}
+
+function siteCard(s) {
+  const si = s.site_issues; if (!si) return "";
+  const sm = si.sitemap || {}, bl = si.broken_internal_links || {}, or = si.orphans || {}, dt = si.duplicate_titles || {}, dd = si.duplicate_descriptions || {};
+  const row = (label, ok, detail, list) => `<tr><td class="nw">${esc(label)}</td><td>${ok ? '<span class="pill ok">pass</span>' : '<span class="pill bad">fail</span>'}</td><td>${esc(detail)}${list && list.length ? `<details><summary class="muted">show</summary><code>${list.map(esc).join("<br>")}</code></details>` : ""}</td></tr>`;
+  const rows = [
+    row("XML sitemap lists live pages only", !sm.broken && !sm.noindex, `${sm.urls || 0} URLs; ${sm.broken || 0} broken, ${sm.noindex || 0} noindex`, [...(sm.broken_sample || []), ...(sm.noindex_sample || [])]),
+    row("Every indexable page is in the sitemap", sm.urls && !sm.pages_not_in_sitemap, sm.urls ? `${sm.pages_not_in_sitemap} page(s) missing` : "no sitemap found", sm.not_in_sitemap_sample),
+    row("No broken internal links", !bl.count, `${bl.count || 0} broken page(s) linked from other pages`, (bl.sample || []).map(x => `${x.status} ${x.url}  ← ${x.linked_from[0] || ""}`)),
+    row("No orphan pages", !or.count, `${or.count || 0} page(s) with no internal links`, or.sample),
+    row("Unique titles", !dt.pages, `${dt.pages || 0} pages share a title (${dt.groups || 0} groups)`, (dt.top || []).map(x => `${x.pages}× ${x.text}`)),
+    row("Unique meta descriptions", !dd.pages, `${dd.pages || 0} pages share a description (${dd.groups || 0} groups)`, (dd.top || []).map(x => `${x.pages}× ${x.text}`)),
+    row("No old or staging hosts", !(si.legacy_hosts || []).length, (si.legacy_hosts || []).map(h => `${h.host} (${h.pages} pages)`).join(", ") || "none"),
+    row("No links to hosting-provider domains", !(si.hosting_links || []).length, (si.hosting_links || []).map(h => `${h.host} (${h.links})`).join(", ") || "none"),
+    row("No sections entirely noindex", !(si.noindex_sections || []).length, (si.noindex_sections || []).map(x => `${x.section} (${x.noindex}/${x.pages})`).join(", ") || "none"),
+    row("FAQ structured data in use", si.faq_pages > 0, `${si.faq_pages} page(s) with FAQPage`),
+    row("Program pages have program schema", si.program_pages > 0 && si.program_schema_pages === si.program_pages, `${si.program_schema_pages} of ${si.program_pages} program pages`),
+    row("Median reading grade 12 or below", si.median_reading_grade != null && si.median_reading_grade <= 12, `grade ${si.median_reading_grade ?? "-"}`),
+    ...Object.entries(si.trust || {}).map(([k, v]) => row("Homepage: " + k, v, v ? "found" : "not found")),
+  ].join("");
+  return `<div class="card"><h2>Site-level SEO and GEO findings</h2>
+    <div class="tablewrap"><table><thead><tr><th>Check</th><th>Result</th><th>Detail</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${si.former_name_pages ? `<div class="note" style="margin-top:8px">${si.former_name_pages} page(s) mention a former name. Review list only, not scored (history pages and bios are expected). Listed in the Pages CSV.</div>` : ""}
+    ${(si.unchecked || []).length ? `<div class="note" style="margin-top:4px">${si.unchecked.length} page(s) could not be checked (rate-limited or timed out after 4 tries) and are not graded.</div>` : ""}
+  </div>`;
 }
 
 function orgCard(s) {

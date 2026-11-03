@@ -58,25 +58,70 @@ CHECKS = [
     ("structured_data", "Structured data", "At least one JSON-LD (schema.org) block.", False),
     ("schema_valid", "Valid structured data", "Every JSON-LD block is valid JSON (passes if the page has none).", False),
     ("official_name", "Official name", "The official name appears in the <title>, og:site_name, or JSON-LD.", False),
-    ("no_former_name", "No former name", "The page text and title contain none of the former names. History pages may fail legitimately: review them.", False),
-    ("current_dates", "No past terms", "The page names no academic year or term from before the current academic year (e.g. 2024-25, Fall 2024). Exempt: pages with a publish date, and pages under /news/, /blog/, /stories/, /press/ or /archive.", False),
+    ("current_dates", "No past terms", "The latest academic year or term named on the page is not before the current academic year (e.g. a page whose newest mention is 2024-25 or Fall 2024 fails; a list that runs up to 2026-27 passes). Exempt: pages with a publish date, and pages under /news/, /blog/, /stories/, /press/ or /archive.", False),
     ("lang", "Language", "<html lang> attribute set.", False),
     ("open_graph", "Open Graph", "og:title and og:description present.", False),
     ("img_alt", "Image alt text", "At least 90% of <img> tags have non-empty alt text (passes if no images).", False),
     ("freshness", "Freshness signal", "Last-Modified header, article:modified_time, or dateModified/datePublished in JSON-LD.", False),
     ("fast", "Response time", "HTML delivered in under 2 seconds.", False),
 ]
+CHECKS += [
+    ("mobile_viewport", "Mobile-friendly", "<meta name=viewport> with width=device-width (page adapts to phones).", False),
+    ("clean_url", "Clean URL", "URL path is lowercase, uses hyphens not underscores, has no query string, and is under 100 characters.", False),
+    ("readable", "Readable text", "Paragraph text reads at grade 12 or below (Flesch-Kincaid). Not applicable under 100 words of paragraph text.", False),
+    ("question_headings", "Answers questions", "On admissions, cost, aid and program pages: at least one H2/H3 phrased as a question, or FAQPage schema. Not applicable to other pages.", False),
+    ("program_schema", "Program schema", "On program pages (/program/<name>/, /degrees/<name>/, /majors/<name>/): EducationalOccupationalProgram or Course schema. Not applicable to other pages.", False),
+]
+CATEGORY = {
+    "ai_search_allowed": "AI access", "indexable": "AI access",
+    "http_ok": "Technical SEO", "fast": "Technical SEO", "mobile_viewport": "Technical SEO", "clean_url": "Technical SEO",
+    "canonical": "Technical SEO", "lang": "Technical SEO",
+    "title": "On-page SEO", "meta_desc": "On-page SEO", "one_h1": "On-page SEO", "headings": "On-page SEO",
+    "open_graph": "On-page SEO", "img_alt": "On-page SEO",
+    "structured_data": "Structured data", "schema_valid": "Structured data", "program_schema": "Structured data",
+    "server_text": "Content (GEO/AEO)", "readable": "Content (GEO/AEO)", "question_headings": "Content (GEO/AEO)",
+    "current_dates": "Content (GEO/AEO)", "freshness": "Content (GEO/AEO)", "official_name": "Content (GEO/AEO)",
+}
+AREAS = ["AI access", "Technical SEO", "On-page SEO", "Structured data", "Content (GEO/AEO)"]
+AEO_PATH = re.compile(r"admission|apply|tuition|cost|financial[-_]?aid|scholarship|program|degree|major|graduate|undergraduate|"
+                      r"transfer|international|military|visit|housing", re.I)
+PROGRAM_PATH = re.compile(r"/(program|programs|degrees?|majors?)/[^/]+/?$", re.I)
+QUESTION_RE = re.compile(r"\?\s*$|^(who|what|when|where|why|how|which|can|do|does|is|are|will|should)\b", re.I)
+PROGRAM_TYPES = {"EducationalOccupationalProgram", "Course", "WorkBasedProgram"}
+
+
+def fk_grade(text: str) -> float | None:
+    """Flesch-Kincaid grade level; None if under 100 words."""
+    words = re.findall(r"[A-Za-z][A-Za-z'-]*", text)
+    if len(words) < 100:
+        return None
+    sentences = max(1, len(re.findall(r"[.!?]+(\s|$)", text)))
+    syl = 0
+    for w in words:
+        w = w.lower().strip("'")
+        n = len(re.findall(r"[aeiouy]+", w))
+        if w.endswith("e") and not w.endswith(("le", "ee")) and n > 1:
+            n -= 1
+        syl += max(1, n)
+    return round(0.39 * len(words) / sentences + 11.8 * syl / len(words) - 15.59, 1)
+
+
 CHECK_IDS = [c[0] for c in CHECKS]
+LABEL_OF = {c[0]: c[1] for c in CHECKS}
 CRITICAL = {c[0] for c in CHECKS if c[3]}
 
 # PDF topics: matched against the PDF's URL and link text only (PDFs are not downloaded).
 PDF_TOPICS = {
     "Tuition & fees": r"tuition|\bfees?\b|cost of attendance|\bcoa\b|pricing|\bcosts?\b",
-    "Financial aid": r"financial[\s_-]*aid|scholarship|fafsa|net[\s_-]*price",
+    "Financial aid": r"financial[\s_-]*aid|scholarships?[\s_-]*(application|request|form|guide|booklet|option)|fafsa|net[\s_-]*price",
     "Deadlines & calendar": r"deadline|academic[\s_-]*calendar|important[\s_-]*dates|\bcalendar\b",
-    "Admission requirements": r"admission|requirements|how[\s_-]*to[\s_-]*apply",
+    "Admission requirements": r"admissions?[\s_-]*(requirements?|criteria|checklist|guide)|how[\s_-]*to[\s_-]*apply|application[\s_-]*(checklist|deadline|requirements?)",
     "Catalog & programs": r"catalog|bulletin|curriculum|degree[\s_-]*(plan|map|sheet|requirements)|course[\s_-]*descriptions|program[\s_-]*of[\s_-]*study|checklist",
 }
+HOSTING_SUFFIXES = ("wpenginepowered.com", "wpengine.com", "pantheonsite.io", "kinsta.cloud", "kinsta.com", "netlify.app",
+                    "vercel.app", "herokuapp.com", "azurewebsites.net", "cloudfront.net", "amazonaws.com", "wpcomstaging.com",
+                    "flywheelsites.com", "pressable.com", "github.io")
+LEGACY_HOST = re.compile(r"^(www)?(old|legacy|staging|stage|dev|test|beta|preview|archive)[0-9]*\.|(^|\.)(old|legacy|staging|stage|dev|test)[0-9]*\.", re.I)
 NEWS_PATH = re.compile(r"/(news|blog|blogs|stories|story|press|press-releases|archive|archives)(/|$)", re.I)
 SOCIAL = ("facebook.com", "instagram.com", "twitter.com", "x.com", "linkedin.com", "youtube.com",
           "tiktok.com", "wikipedia.org", "wikidata.org", "flickr.com", "pinterest.com")
@@ -115,6 +160,19 @@ def academic_year_start(today: dt.date | None = None) -> int:
 
 AY_RE = re.compile(r"\b(20\d{2})\s*[-–—/]\s*((?:20)?\d{2})\b")
 TERM_RE = re.compile(r"\b(fall|autumn|spring|summer|winter)\s+(?:semester\s+|term\s+|session\s+)?(20\d{2})\b", re.I)
+
+
+def term_years(text: str) -> list[int]:
+    """Academic-year start of every academic year or term mentioned (past, current or future)."""
+    out = []
+    for m in AY_RE.finditer(text):
+        y1, y2 = int(m.group(1)), m.group(2)
+        if int(y2[-2:]) == (y1 + 1) % 100:
+            out.append(y1)
+    for m in TERM_RE.finditer(text):
+        season, y = m.group(1).lower(), int(m.group(2))
+        out.append(y if season in ("fall", "autumn", "winter") else y - 1)
+    return out
 
 
 def past_terms(text: str, ay: int) -> list[str]:
@@ -157,6 +215,14 @@ class PageParser(HTMLParser):
         self.lang = ""
         self.links: list[str] = []
         self.logos: list[str] = []
+        self.login_form = False
+        self.subheads: list[str] = []
+        self.p_main: list[str] = []
+        self.p_other: list[str] = []
+        self._h = None
+        self._hbuf: list[str] = []
+        self._main = 0
+        self._in_p = 0
         self._recent: list[str] = []
         self.anchors: list[tuple[str, str]] = []
         self.jsonld: list[str] = []
@@ -189,8 +255,16 @@ class PageParser(HTMLParser):
             self._a, self._a_href = [], a["href"]
         elif tag == "h1":
             self.h1 += 1
+        if tag in ("h2", "h3"):
+            self._h, self._hbuf = tag, []
+        if tag in ("main", "article"):
+            self._main += 1
+        if tag == "p":
+            self._in_p += 1
         elif tag == "h2":
             self.h2 += 1
+        elif tag == "input" and a.get("type", "").lower() == "password":
+            self.login_form = True
         elif tag == "img":
             self.imgs += 1
             if a.get("alt", "").strip():
@@ -209,6 +283,13 @@ class PageParser(HTMLParser):
     def handle_endtag(self, tag):
         if tag == "title":
             self._in_title = False
+        if tag == self._h:
+            self.subheads.append(" ".join(" ".join(self._hbuf).split()))
+            self._h = None
+        if tag in ("main", "article") and self._main:
+            self._main -= 1
+        if tag == "p" and self._in_p:
+            self._in_p -= 1
         if tag == "script" and self._in_jsonld:
             self.jsonld.append("".join(self._buf))
             self._in_jsonld = False
@@ -230,6 +311,10 @@ class PageParser(HTMLParser):
                 self._text_len += len(data)
             if self._a is not None:
                 self._a.append(data)
+            if self._h:
+                self._hbuf.append(data)
+            if self._in_p:
+                (self.p_main if self._main else self.p_other).append(data)
 
 
 # ---------------------------------------------------------------- JSON-LD
@@ -311,6 +396,80 @@ def schema_explainer(state: str, failed: int, total: int) -> list[str]:
     return [what, impact, fix]
 
 
+def area_scores(pages: list[dict]) -> list[dict]:
+    """Pass rate (0-100) per area across all applicable page checks."""
+    out = []
+    for area in AREAS:
+        ids = [c for c, a in CATEGORY.items() if a == area]
+        vals = [p["checks"].get(c) for p in pages for c in ids]
+        vals = [v for v in vals if v is not None]
+        out.append({"area": area, "score": round(100 * sum(vals) / len(vals)) if vals else None,
+                    "checks": [LABEL_OF[c] for c in ids]})
+    return out
+
+
+def site_issues(c: "Crawl", pages: list[dict]) -> dict:
+    """Site-level SEO/GEO findings that no single page can show."""
+    hosting_links, unchecked = dict(c.hosting_links), list(c.unchecked)
+    hosts = Counter(urlsplit(p["url"]).netloc.lower() for p in pages)
+    legacy = sorted(h for h in hosts if LEGACY_HOST.search(h))
+    sections: dict[str, list[int]] = {}
+    for p in pages:
+        if p["status"] != 200:
+            continue
+        sp = urlsplit(p["url"])
+        parts = [x for x in sp.path.split("/") if x]
+        key = sp.netloc.lower() + "/" + (parts[0] + "/" if parts else "")
+        t = sections.setdefault(key, [0, 0])
+        t[0] += 1
+        t[1] += p["checks"].get("indexable") is False
+    noindex = sorted(([k, n, x] for k, (n, x) in sections.items() if n >= 10 and x / n >= 0.9), key=lambda r: -r[1])
+    former = [p["url"] for p in pages if p["detail"].get("former_names_found")]
+    ok = [p for p in pages if p["status"] == 200 and p["checks"].get("indexable") is not False]
+    start_host = urlsplit(c.start).netloc.lower()
+    # sitemap coverage (start host only)
+    not_in_sitemap = [p["url"] for p in ok if urlsplit(p["url"]).netloc.lower() == start_host and p["url"] not in c.sitemap_urls] if c.sitemap_urls else []
+    crawled = {p["url"]: p for p in pages}
+    sitemap_broken = [u for u in c.sitemap_urls if u in crawled and crawled[u]["status"] != 200]
+    sitemap_noindex = [u for u in c.sitemap_urls if u in crawled and crawled[u]["checks"].get("indexable") is False]
+    # internal links
+    orphans = [p["url"] for p in ok if c.inlinks.get(p["url"], 0) == 0 and p["url"].rstrip("/") != c.start.rstrip("/")]
+    broken_links = [{"url": p["url"], "status": p["status"], "linked_from": c.referrers.get(p["url"], [])}
+                    for p in pages if p["status"] != 200 and c.inlinks.get(p["url"], 0) > 0]
+    # duplicates
+    def dups(key):
+        g: dict[str, list[str]] = {}
+        for p in ok:
+            v = (p["detail"].get(key) or "").strip().lower()
+            if v:
+                g.setdefault(v, []).append(p["url"])
+        groups = sorted((v for v in g.values() if len(v) > 1), key=len, reverse=True)
+        return {"pages": sum(len(v) for v in groups), "groups": len(groups),
+                "top": [{"text": (crawled[v[0]]["detail"].get(key) or "")[:120], "pages": len(v), "sample": v[:3]} for v in groups[:5]]}
+    trust = (c.home or {}).get("trust", {})
+    return {
+        "legacy_hosts": [{"host": h, "pages": hosts[h]} for h in legacy],
+        "hosting_links": sorted(({"host": h, "links": n} for h, n in hosting_links.items()), key=lambda r: -r["links"]),
+        "noindex_sections": [{"section": k, "pages": n, "noindex": x} for k, n, x in noindex],
+        "former_name_pages": len(former),
+        "former_name_sample": former[:25],
+        "unchecked": unchecked,
+        "sitemap": {"urls": len(c.sitemap_urls), "pages_not_in_sitemap": len(not_in_sitemap), "not_in_sitemap_sample": not_in_sitemap[:10],
+                    "broken": len(sitemap_broken), "broken_sample": sitemap_broken[:10],
+                    "noindex": len(sitemap_noindex), "noindex_sample": sitemap_noindex[:10]},
+        "orphans": {"count": len(orphans), "sample": orphans[:10]},
+        "broken_internal_links": {"count": len(broken_links), "sample": broken_links[:10]},
+        "duplicate_titles": dups("title"),
+        "duplicate_descriptions": dups("desc"),
+        "faq_pages": sum(1 for p in ok if p["detail"].get("faq_schema")),
+        "program_schema_pages": sum(1 for p in ok if p["checks"].get("program_schema") is True),
+        "program_pages": sum(1 for p in ok if p["checks"].get("program_schema") is not None),
+        "median_reading_grade": (lambda g: g[len(g) // 2] if g else None)(sorted(p["detail"]["reading_grade"] for p in ok if p["detail"].get("reading_grade") is not None)),
+        "trust": {"Privacy policy link": trust.get("privacy_link"), "Phone or contact link": trust.get("contact"),
+                  "Street address": trust.get("street_address"), "Accessibility statement link": trust.get("accessibility_link")} if trust else {},
+    }
+
+
 def schema_state(check_failures: list[dict]) -> str:
     """Site-wide structured data state: 'invalid' or 'missing' when it fails on 90%+ of pages, else ''."""
     by = {c["id"]: c for c in check_failures}
@@ -370,6 +529,9 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
 
     jsonld_raw = " ".join(p.jsonld)
     objs, invalid_jsonld = parse_jsonld(p.jsonld)
+    schema_types = sorted({t for o in objs for t in types_of(o)})
+    has_faq = "FAQPage" in schema_types
+    grade_level = fk_grade(" ".join(p.p_main or p.p_other))
     title = " ".join(p.title.split())
     desc = p.meta.get("description", "").strip()
     text = " ".join(" ".join(p.text).split())
@@ -400,15 +562,22 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
         "structured_data": bool(p.jsonld),
         "schema_valid": invalid_jsonld == 0,
         "official_name": (not official) or official.casefold() in name_haystack,
-        "no_former_name": not former_found,
-        "current_dates": dated_exempt or not stale,
+        "current_dates": dated_exempt or not stale or max(term_years(f"{title} {text}") or [0]) >= cfg["ay_start"],
         "lang": bool(p.lang),
         "open_graph": bool(p.meta.get("og:title") and p.meta.get("og:description")),
         "img_alt": p.imgs == 0 or p.imgs_alt / p.imgs >= 0.9,
         "freshness": fresh,
         "fast": elapsed < 2.0,
+        "mobile_viewport": "width=device-width" in p.meta.get("viewport", "").replace(" ", "").lower(),
+        "clean_url": (sp.path == sp.path.lower() and "_" not in sp.path and not sp.query and len(sp.path) < 100),
+        "readable": None if grade_level is None else grade_level <= 12,
+        "question_headings": (any(QUESTION_RE.search(h) for h in p.subheads if h) or has_faq) if AEO_PATH.search(sp.path) else None,
+        "program_schema": bool(set(schema_types) & PROGRAM_TYPES) if PROGRAM_PATH.search(sp.path) else None,
     }
-    score = round(100 * sum(res.values()) / len(res))
+    if r["status"] != 200:
+        res = {k: (False if k == "http_ok" else None) for k in res}  # content checks do not apply to error pages
+    applicable = [v for v in res.values() if v is not None]
+    score = 0 if r["status"] != 200 else round(100 * sum(applicable) / len(applicable))
 
     pdfs = []
     for href, atext in p.anchors:
@@ -427,7 +596,7 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
         "score": score,
         "grade": grade(score, res),
         "checks": res,
-        "failed": [c for c in CHECK_IDS if not res[c]],
+        "failed": [c for c in CHECK_IDS if res[c] is False],
         "detail": {
             "title": title[:120],
             "words": p.words,
@@ -438,11 +607,16 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
             "blocked_ai_search_bots": blocked_search,
             "blocked_training_bots": blocked_training,
             "directives": bad_directives,
-            "schema_types": sorted({t for o in objs for t in types_of(o)}),
+            "schema_types": schema_types,
+            "desc": desc[:200],
+            "reading_grade": grade_level,
+            "question_headings": sum(1 for h in p.subheads if h and QUESTION_RE.search(h)),
+            "faq_schema": has_faq,
             "invalid_jsonld_blocks": invalid_jsonld,
             "former_names_found": former_found,
             "past_terms": stale[:10],
             "dated_exempt": dated_exempt,
+            "login_form": p.login_form,
         },
         "_links": p.links,
         "_pdfs": pdfs,
@@ -450,6 +624,12 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
         "_recovered": lenient_jsonld(p.jsonld) if invalid_jsonld else [],
         "_social": social,
         "_meta": {"logo": logo},
+        "_trust": {
+            "privacy_link": any("privacy" in (h + " " + t).lower() for h, t in p.anchors),
+            "contact": any(h.lower().startswith("tel:") for h, _ in p.anchors) or bool(re.search(r"\(?\b\d{3}\)?[ .-]\d{3}[ .-]\d{4}\b", text)),
+            "street_address": bool(re.search(r"\b\d{2,6}\s+[A-Z][A-Za-z]+(\s[A-Z][A-Za-z]+)*\s(Street|St\.?|Road|Rd\.?|Avenue|Ave\.?|Boulevard|Blvd\.?|Drive|Dr\.?|Lane|Way|Highway|Hwy)\b", text)),
+            "accessibility_link": any("accessib" in (h + " " + t).lower() for h, t in p.anchors),
+        },
     }
 
 
@@ -576,7 +756,7 @@ class Crawl:
     """Breadth-first, same-site crawl. Thread-safe progress for the web UI."""
 
     def __init__(self, start: str, max_pages: int = 500, subdomains: bool = False,
-                 workers: int = 4, delay: float = 0.25, exclude: str = "",
+                 workers: int = 4, delay: float = 0.5, exclude: str = "",
                  official_name: str | None = None, city: str | None = None, region: str | None = None,
                  former_names: list[str] | None = None):
         if "://" not in start:
@@ -602,6 +782,11 @@ class Crawl:
         self.schema_types: Counter = Counter()
         self.home: dict | None = None
         self.skipped: dict[str, int] = {}
+        self.unchecked: list[str] = []
+        self.sitemap_urls: set[str] = set()
+        self.inlinks: Counter = Counter()
+        self.referrers: dict[str, list[str]] = {}
+        self.hosting_links: Counter = Counter()
         self.queued = 0
         self.state = "pending"
         self.error = ""
@@ -643,10 +828,22 @@ class Crawl:
         if robots_verdict(groups, "AIReadinessChecker", path)[0] == "blocked":
             self._skip("blocked for crawler by robots.txt")
             return None
-        t0 = time.time()
-        r = fetch(url, CRAWLER_UA, max_bytes=3_000_000)
-        elapsed = time.time() - t0
-        time.sleep(self.delay)
+        for attempt in range(4):
+            t0 = time.time()
+            r = fetch(url, CRAWLER_UA, max_bytes=3_000_000)
+            elapsed = time.time() - t0
+            time.sleep(self.delay)
+            transient = r["status"] in (429, 502, 503, 504) or (r["status"] is None and "timed out" in str(r["error"]).lower())
+            if not transient:
+                break
+            ra = _header(r["headers"], "retry-after")
+            time.sleep(min(int(ra), 60) if ra.isdigit() else 2 * 2 ** attempt)
+        if transient:
+            self._skip("could not check (rate-limited or timed out after 4 tries)")
+            with self._lock:
+                if len(self.unchecked) < 200:
+                    self.unchecked.append(url)
+            return None
         final = norm(r["final_url"] or url)
         if final != url and not self.in_scope(final):
             self._skip("redirects off-site")
@@ -657,6 +854,9 @@ class Crawl:
             return None
         fs = urlsplit(final)
         page = check_page(final, r, elapsed, self.robots(f"{fs.scheme}://{fs.netloc}"), self.cfg)
+        if page["detail"]["login_form"] and url != self.start:
+            self._skip("login or app page (has a password field)")
+            return None
         if final != url:
             page["redirected_from"] = url
         if url == self.start:
@@ -669,11 +869,12 @@ class Crawl:
         recovered = page.pop("_recovered")
         social = page.pop("_social")
         meta = page.pop("_meta")
+        trust = page.pop("_trust")
         for t in page["detail"]["schema_types"]:
             self.schema_types[t] += 1
         if page.pop("_is_home", False):
             self.home = {"url": page["url"], "objs": objs, "social": social, "logo": meta.get("logo", ""),
-                         "invalid": page["detail"]["invalid_jsonld_blocks"], "recovered": recovered}
+                         "invalid": page["detail"]["invalid_jsonld_blocks"], "recovered": recovered, "trust": trust}
         for u, t in page.pop("_pdfs"):
             d = self.pdfs.setdefault(u, {"texts": set(), "pages": [], "count": 0})
             d["texts"].add(t)
@@ -689,7 +890,9 @@ class Crawl:
             frontier: list[str] = [self.start]
             self.robots(self.origin)
             sm = self._sitemaps.get(self.origin) or [self.origin + "/sitemap.xml"]
-            sm_urls, _ = collect_sitemap_urls(sm, self.max_pages * 2)
+            all_sm, _ = collect_sitemap_urls(sm, 50_000, max_sitemaps=200)
+            self.sitemap_urls = {norm(u) for u in all_sm}
+            sm_urls = all_sm[: self.max_pages * 2]
             for u in sm_urls:
                 u = norm(u)
                 if u not in seen and self.in_scope(u):
@@ -712,8 +915,17 @@ class Crawl:
                         if not page or page["url"] in done_urls:
                             continue
                         done_urls.add(page["url"])
+                        for nu in {norm(urljoin(page["url"], h.strip())) for h in page["_links"]}:
+                            if nu != page["url"] and self.in_scope(nu):
+                                self.inlinks[nu] += 1
+                                refs = self.referrers.setdefault(nu, [])
+                                if len(refs) < 3:
+                                    refs.append(page["url"])
                         for href in page.pop("_links"):
                             nu = norm(urljoin(page["url"], href.strip()))
+                            nh = urlsplit(nu).netloc.lower()
+                            if nh.endswith(HOSTING_SUFFIXES):
+                                self.hosting_links[nh] += 1
                             if nu not in seen and self.in_scope(nu):
                                 seen.add(nu)
                                 frontier.append(nu)
@@ -737,7 +949,7 @@ class Crawl:
             types = self.schema_types.most_common()
             home = self.home
         n = len(pages)
-        fails = {c: sum(1 for p in pages if not p["checks"][c]) for c in CHECK_IDS}
+        fails = {c: sum(1 for p in pages if p["checks"].get(c) is False) for c in CHECK_IDS}
         grades = {g: sum(1 for p in pages if p["grade"] == g) for g in ("Ready", "Needs work", "Not ready")}
         ay = self.cfg["ay_start"]
         return {
@@ -756,6 +968,8 @@ class Crawl:
             "check_failures": [{"id": c[0], "label": c[1], "rule": c[2], "critical": c[3],
                                 "failed": fails[c[0]], "pct": round(100 * fails[c[0]] / n) if n else 0} for c in CHECKS],
             "organization": org_report(home, self.cfg, self.origin) if home or self.state != "running" else None,
+            "site_issues": site_issues(self, pages),
+            "areas": area_scores(pages),
             "schema_state": schema_state(cf_list := [{"id": c[0], "pct": round(100 * fails[c[0]] / n) if n else 0} for c in CHECKS]),
             "schema_explainer": schema_explainer(schema_state(cf_list), fails["schema_valid"] if schema_state(cf_list) == "invalid" else fails["structured_data"], n) if n and schema_state(cf_list) else [],
             "schema_types": [{"type": t, "pages": k} for t, k in types],
@@ -783,7 +997,7 @@ class Crawl:
             w.writerow([p["url"], p["status"], p["score"], p["grade"], " ".join(p["failed"]), d["title"], d["words"], d["ms"],
                         " ".join(d["blocked_ai_search_bots"]), " ".join(d["blocked_training_bots"]), " ".join(d["directives"]),
                         " ".join(d["schema_types"]), "; ".join(d["former_names_found"]), "; ".join(d["past_terms"])]
-                       + ["PASS" if p["checks"][c] else "FAIL" for c in CHECK_IDS])
+                       + [{True: "PASS", False: "FAIL"}.get(p["checks"].get(c), "N/A") for c in CHECK_IDS])
         return buf.getvalue()
 
     def pdf_csv(self) -> str:
@@ -802,7 +1016,7 @@ def main() -> int:
     ap.add_argument("--max", type=int, default=500, help="max pages (default 500)")
     ap.add_argument("--subdomains", action="store_true", help="include subdomains of the base domain")
     ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--delay", type=float, default=0.25, help="seconds between requests per worker")
+    ap.add_argument("--delay", type=float, default=0.5, help="seconds between requests per worker")
     ap.add_argument("--exclude", default="", help="regex; matching URLs are skipped")
     ap.add_argument("--name", default=DEFAULTS["official_name"], help="official institution name")
     ap.add_argument("--city", default=DEFAULTS["city"])
