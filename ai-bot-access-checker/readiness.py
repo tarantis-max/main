@@ -266,6 +266,61 @@ def parse_jsonld(blocks: list[str]) -> tuple[list[dict], int]:
     return objs, invalid
 
 
+def lenient_jsonld(blocks: list[str]) -> list[dict]:
+    """Best-effort repair of invalid JSON-LD (single quotes, mismatched quotes, trailing commas).
+    Used only to recover values for the suggested fix; repaired blocks never count as valid."""
+    out = []
+    for b in blocks:
+        try:
+            json.loads(b.strip())
+            continue  # valid blocks are handled by parse_jsonld
+        except ValueError:
+            pass
+        t = re.sub(r"'([^'\"\n]*)\"", r"'\1'", b)                      # 'value"  -> 'value'
+        t = re.sub(r"'([^'\\\n]*)'", lambda m: json.dumps(m.group(1)), t)  # 'x' -> "x"
+        t = re.sub(r",(\s*[}\]])", r"\1", t)                              # trailing commas
+        objs, bad = parse_jsonld([t])
+        if not bad:
+            out.extend(objs)
+    return out
+
+
+def schema_explainer(state: str, failed: int, total: int) -> list[str]:
+    """Plain-language explanation of a site-wide structured data problem. state: invalid | missing."""
+    if state == "invalid":
+        what = ("Every page carries a block of hidden code (structured data, JSON-LD) meant to state the school's official facts "
+                "in a form machines read reliably: name, address, phone, logo, website and official accounts. On this site the block "
+                "exists but contains syntax errors, so Google, Bing, ChatGPT, Claude and other systems ignore it entirely. "
+                f"It fails on {failed} of {total} pages checked, which means the error is in a shared template (header or footer).")
+    else:
+        what = ("Structured data (JSON-LD) is hidden code that states the school's official facts in a form machines read reliably: "
+                f"name, address, phone, logo, website and official accounts. None was found on any of the {total} pages checked.")
+    impact = ("Impact: low to moderate. Pages are not blocked or penalized and still appear in search results and AI answers, "
+              "because those systems mostly read page text. What is lost is control of the school's identity: search engines and AI "
+              "fill in the logo, address and contact details from third-party sources, errors there go uncorrected, and it is harder "
+              "to tell this school apart from similarly named schools or its former name.")
+    if state == "invalid":
+        impact += " Google Search Console reports it as \"Unparsable structured data\" on every affected page."
+    fix = ("Fix: about one hour for a web developer. "
+           + ("Replace the broken block in the shared template with the corrected snippet (Site Readiness tab, Structured data card) "
+              "and fix any empty site-address variable in that template. " if state == "invalid" else
+              "Add the corrected snippet (Site Readiness tab, Structured data card) to the shared header template, or turn on "
+              "organization schema in an SEO plugin. ")
+           + "Then check the homepage at validator.schema.org (one CollegeOrUniversity item, no errors) and re-run this crawl. "
+             "This is also the prerequisite for program, event and FAQ structured data, where the larger visibility gains are.")
+    return [what, impact, fix]
+
+
+def schema_state(check_failures: list[dict]) -> str:
+    """Site-wide structured data state: 'invalid' or 'missing' when it fails on 90%+ of pages, else ''."""
+    by = {c["id"]: c for c in check_failures}
+    if by.get("schema_valid", {}).get("pct", 0) >= 90:
+        return "invalid"
+    if by.get("structured_data", {}).get("pct", 0) >= 90:
+        return "missing"
+    return ""
+
+
 def types_of(o: dict) -> list[str]:
     t = o.get("@type", [])
     return [str(x).rsplit("/", 1)[-1] for x in (t if isinstance(t, list) else [t])]
@@ -392,6 +447,7 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
         "_links": p.links,
         "_pdfs": pdfs,
         "_objs": objs,
+        "_recovered": lenient_jsonld(p.jsonld) if invalid_jsonld else [],
         "_social": social,
         "_meta": {"logo": logo},
     }
@@ -420,23 +476,36 @@ def org_report(home: dict | None, cfg: dict, origin: str) -> dict:
     objs = (home or {}).get("objs", [])
     orgs = [o for o in objs if set(types_of(o)) & set(ORG_TYPES)]
     org = next((o for o in orgs if "CollegeOrUniversity" in types_of(o)), orgs[0] if orgs else {})
-    addr = org.get("address") if isinstance(org.get("address"), dict) else {}
-    if isinstance(org.get("address"), list) and org["address"] and isinstance(org["address"][0], dict):
-        addr = org["address"][0]
+    rec = [o for o in (home or {}).get("recovered", []) if set(types_of(o)) & set(ORG_TYPES)]
+    rorg = {} if org else next((o for o in rec if "CollegeOrUniversity" in types_of(o)), rec[0] if rec else {})
+    src = org or rorg  # values to show and reuse; checks still pass only on valid schema
+    tag = " (in invalid block, ignored)" if rorg else ""
+
+    def get_addr(o):
+        a = o.get("address")
+        if isinstance(a, list) and a and isinstance(a[0], dict):
+            return a[0]
+        return a if isinstance(a, dict) else {}
+
+    def absolute(v: str) -> str:
+        return v if v.startswith(("http://", "https://")) else ""
+
+    addr = get_addr(org)
+    saddr = get_addr(src)
     name = _str(org.get("name"))
     rows = [
         ("Organization schema on homepage", bool(org), ", ".join(types_of(org)) if org else (
             "invalid JSON-LD on homepage (%d block(s)), ignored by search engines and AI" % home["invalid"]
             if home and home.get("invalid") else "none found")),
-        ("Type is CollegeOrUniversity", "CollegeOrUniversity" in types_of(org), ", ".join(types_of(org)) or "-"),
-        ("name is the official name", name.strip().casefold() == cfg["official_name"].strip().casefold(), name or "-"),
-        ("url present", bool(org.get("url")), _str(org.get("url")) or "-"),
-        ("logo present", bool(org.get("logo")), _str(org.get("logo")) or "-"),
+        ("Type is CollegeOrUniversity", "CollegeOrUniversity" in types_of(org), (", ".join(types_of(src)) + tag) if src else "-"),
+        ("name is the official name", name.strip().casefold() == cfg["official_name"].strip().casefold(), (_str(src.get("name")) + tag) if src.get("name") else "-"),
+        ("url present", bool(org.get("url")), (_str(src.get("url")) + tag) if src.get("url") else "-"),
+        ("logo present", bool(org.get("logo")), (_str(src.get("logo")) + tag) if src.get("logo") else "-"),
         ("address city matches", bool(addr) and _str(addr.get("addressLocality")).strip().casefold() == cfg["city"].strip().casefold(),
-         _str(addr.get("addressLocality")) or "-"),
+         (_str(saddr.get("addressLocality")) + tag) if saddr.get("addressLocality") else "-"),
         ("address state matches", bool(addr) and _region_ok(_str(addr.get("addressRegion")), cfg["region"]),
-         _str(addr.get("addressRegion")) or "-"),
-        ("sameAs (official profiles) present", bool(org.get("sameAs")), _str(org.get("sameAs")) or "-"),
+         (_str(saddr.get("addressRegion")) + tag) if saddr.get("addressRegion") else "-"),
+        ("sameAs (official profiles) present", bool(org.get("sameAs")), (_str(src.get("sameAs")) + tag) if src.get("sameAs") else "-"),
     ]
     snippet = {
         "@context": "https://schema.org",
@@ -445,19 +514,19 @@ def org_report(home: dict | None, cfg: dict, origin: str) -> dict:
         "name": cfg["official_name"],
         "url": origin + "/",
         # never the og:image: that is a social share image, not a logo
-        "logo": _str(org.get("logo")) or (home or {}).get("logo") or "REPLACE-WITH-FULL-URL-OF-LOGO-IMAGE",
+        "logo": absolute(_str(src.get("logo"))) or (home or {}).get("logo") or "REPLACE-WITH-FULL-URL-OF-LOGO-IMAGE",
         "address": {
             "@type": "PostalAddress",
-            "streetAddress": _str(addr.get("streetAddress")) or "REPLACE-WITH-STREET-ADDRESS",
+            "streetAddress": _str(saddr.get("streetAddress")) or "REPLACE-WITH-STREET-ADDRESS",
             "addressLocality": cfg["city"],
             "addressRegion": cfg["region"],
-            "postalCode": _str(addr.get("postalCode")) or "REPLACE-WITH-ZIP",
+            "postalCode": _str(saddr.get("postalCode")).strip('" ') or "REPLACE-WITH-ZIP",
             "addressCountry": "US",
         },
     }
-    tel = _str(org.get("telephone"))
+    tel = _str(src.get("telephone"))
     snippet["telephone"] = tel or "REPLACE-WITH-MAIN-PHONE"
-    same = org.get("sameAs")
+    same = src.get("sameAs")
     same = same if isinstance(same, list) else ([same] if same else [])
     same = sorted(set(map(str, same)) | set((home or {}).get("social", [])))
     snippet["sameAs"] = same or ["REPLACE-WITH-OFFICIAL-SOCIAL-PROFILE-URLS"]
@@ -470,6 +539,7 @@ def org_report(home: dict | None, cfg: dict, origin: str) -> dict:
         "total": len(rows),
         "has_org": bool(org),
         "home_invalid": (home or {}).get("invalid", 0),
+        "recovered": bool(rorg),
         "logo_source": "existing schema" if org.get("logo") else ("homepage <img> named logo" if (home or {}).get("logo") else "not found"),
         "snippet": '<script type="application/ld+json">\n' + json.dumps(snippet, indent=2) + "\n</script>",
     }
@@ -596,13 +666,14 @@ class Crawl:
     def _absorb(self, page: dict) -> None:
         """Move private per-page data into site-level aggregates."""
         objs = page.pop("_objs")
+        recovered = page.pop("_recovered")
         social = page.pop("_social")
         meta = page.pop("_meta")
         for t in page["detail"]["schema_types"]:
             self.schema_types[t] += 1
         if page.pop("_is_home", False):
             self.home = {"url": page["url"], "objs": objs, "social": social, "logo": meta.get("logo", ""),
-                         "invalid": page["detail"]["invalid_jsonld_blocks"]}
+                         "invalid": page["detail"]["invalid_jsonld_blocks"], "recovered": recovered}
         for u, t in page.pop("_pdfs"):
             d = self.pdfs.setdefault(u, {"texts": set(), "pages": [], "count": 0})
             d["texts"].add(t)
@@ -685,6 +756,8 @@ class Crawl:
             "check_failures": [{"id": c[0], "label": c[1], "rule": c[2], "critical": c[3],
                                 "failed": fails[c[0]], "pct": round(100 * fails[c[0]] / n) if n else 0} for c in CHECKS],
             "organization": org_report(home, self.cfg, self.origin) if home or self.state != "running" else None,
+            "schema_state": schema_state(cf_list := [{"id": c[0], "pct": round(100 * fails[c[0]] / n) if n else 0} for c in CHECKS]),
+            "schema_explainer": schema_explainer(schema_state(cf_list), fails["schema_valid"] if schema_state(cf_list) == "invalid" else fails["structured_data"], n) if n and schema_state(cf_list) else [],
             "schema_types": [{"type": t, "pages": k} for t, k in types],
             "pdf_counts": {
                 "total": len(pdfs),

@@ -128,6 +128,13 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     top = sorted(fails, key=lambda c: -c["failed"])[:1]
     if top:
         other.append(f"Most common issue: <b>{e(top[0]['label'])}</b>, failing on {top[0]['pct']}% of pages.")
+    sd_state = s.get("schema_state", "")
+    if sd_state == "invalid":
+        findings.append("<b>The site's official identity data is broken on every page.</b> The structured data in a shared template "
+                        "has syntax errors, so search engines and AI ignore it. Low-to-moderate impact; about one hour to fix.")
+    elif sd_state == "missing":
+        findings.append("<b>The site has no structured data.</b> Search engines and AI get no machine-readable statement of the "
+                        "school's official name, address, logo or accounts. Low-to-moderate impact; about one hour to fix.")
     if prio:
         findings.append(f"<b>{prio_ready} of {len(prio)} priority pages</b> (admissions, tuition, aid, programs, contact) are Ready.")
     other.append(f"Homepage organization schema: <b>{org['passed']} of {org['total']}</b> checks pass." if org["total"] else "Homepage organization schema was not checked.")
@@ -144,10 +151,21 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     if search_blocked:
         actions.append(("Unblock AI search and answer bots", f"{len(search_blocked)} bots blocked: {', '.join(b['bot'] for b in search_blocked)}.",
                         "Remove the robots.txt rules or firewall/CDN rules that block them.", "Web team", "Site-wide"))
-    for c in fails[:6]:
+    if sd_state:
+        sd_fail = next((c for c in s["check_failures"] if c["id"] == ("schema_valid" if sd_state == "invalid" else "structured_data")), {"failed": n})
+        actions.append(("Fix broken structured data in the site template" if sd_state == "invalid" else "Add structured data to the site template",
+                        "Search engines and AI cannot confirm the school's official name, address, logo and accounts from the site.",
+                        ("Replace the broken JSON-LD block in the shared template with the corrected snippet (app: Site Readiness tab, Structured data card), "
+                         "fix the empty site-address variable, validate the homepage at validator.schema.org, re-run this crawl."
+                         if sd_state == "invalid" else
+                         "Add the corrected snippet (app: Site Readiness tab, Structured data card) to the shared header template or enable organization "
+                         "schema in an SEO plugin, validate at validator.schema.org, re-run this crawl."),
+                        "Web team", f"{sd_fail['failed']} page(s), ~1 hour"))
+    skip_ids = {"schema_valid", "structured_data"} if sd_state else set()
+    for c in [c for c in fails if c["id"] not in skip_ids][:6]:
         why, fix, owner = ISSUES[c["id"]]
         actions.append((("Critical: " if c["critical"] else "") + c["label"], why, fix, owner, f"{c['failed']} page(s), {c['pct']}%"))
-    if org["total"] and not org_ok:
+    if org["total"] and not org_ok and not sd_state:
         actions.append(("Fix homepage organization schema", "AI systems use it to identify the school correctly.",
                         "Paste the generated snippet (app: Site Readiness tab, Structured data card) into the homepage after replacing every REPLACE-WITH value.", "Web team", "Homepage"))
     if pc["key_facts"]:
@@ -218,6 +236,12 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         deny_appendix = ('<h2>Appendix D: Block denied bots</h2><p class="note">Add to robots.txt. Also block these User-Agents at the CDN or firewall, '
                          'because robots.txt is voluntary.</p><pre>%s</pre>' % e(deny_robots_snippet([b["bot"] for b in deny_open])))
         deny_appendix += '<p class="note"><b>Reasons:</b> %s.</p>' % "; ".join("%s: %s" % (e(b["bot"]), e(b.get("policy_reason", ""))) for b in deny_open)
+    sd_html = ""
+    if s.get("schema_explainer"):
+        sd_html = ('<h2>About the structured data issue</h2>' + "".join("<p>%s</p>" % e(x) for x in s["schema_explainer"])
+                   + '<p class="note"><b>How to verify:</b> (1) validator.schema.org on the homepage shows one CollegeOrUniversity item with no errors; '
+                     '(2) Google Search Console, Enhancements, shows no "Unparsable structured data" errors after Google recrawls; '
+                     '(3) this crawl shows "Valid structured data" passing on every page and 8 of 8 homepage organization checks.</p>')
     org_passed_txt = "%d of %d checks pass." % (org["passed"], org["total"])
     skipped_txt = ", ".join("%s (%d)" % (k, v) for k, v in s["skipped"].items()) or "none"
     stopped_txt = "crawl stopped early; " if s["state"] == "stopped" else ""
@@ -322,6 +346,7 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 
 <h2 class="pb part">Details</h2>
 {more_actions_html}
+{sd_html}
 <h2>Priority pages</h2>
 <p class="note">Homepage plus pages whose address mentions admissions, apply, tuition, cost, financial aid, scholarships, academics, programs, majors, degrees, deadlines, calendar, visit, contact, about, graduate or undergraduate. Worst 10 shown; the Pages CSV has the full list and every failed check.</p>
 <table><thead><tr><th>Score</th><th>Grade</th><th style="width:38%">Page</th><th>Failed checks</th></tr></thead><tbody>

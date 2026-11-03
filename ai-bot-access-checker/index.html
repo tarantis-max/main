@@ -60,6 +60,8 @@
   details.settings summary { cursor:pointer; }
   .setgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin-top:10px; }
   .setgrid label { display:flex; flex-direction:column; gap:4px; }
+  .explain { margin:4px 0 12px; padding:12px 14px; border-left:3px solid var(--warn); background:var(--warnbg); border-radius:6px; font-size:14px; }
+  .explain p { margin:6px 0 0; }
   pre.snip { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:12px; overflow-x:auto; font-size:12px; margin:8px 0 0; }
 </style>
 </head>
@@ -314,15 +316,16 @@ function orgCard(s) {
   return `<div class="card">
     <h2>Structured data: homepage organization (${o.passed}/${o.total} pass)</h2>
     <div class="note" style="margin-bottom:8px">AI systems use this to identify the school. Checked on ${esc(o.home_url || "the homepage")} against your institution settings.</div>
+    ${(s.schema_explainer || []).length ? `<div class="explain"><b>${s.schema_state === "invalid" ? "What this issue is" : "What is missing"}</b>${s.schema_explainer.map(x => `<p>${esc(x)}</p>`).join("")}</div>` :
+      (() => { const bad = s.check_failures.find(c => c.id === "schema_valid"); return bad && bad.failed ? `<div class="note err" style="margin-top:8px"><b>Invalid structured data on ${bad.failed} of ${s.pages} pages.</b> Search engines and AI ignore invalid blocks entirely. Validate a page at validator.schema.org.</div>` : ""; })()}
     <div class="tablewrap"><table>
       <thead><tr><th>Check</th><th>Result</th><th>Found</th></tr></thead>
       <tbody>${o.rows.map(r => `<tr><td class="nw">${esc(r.label)}</td><td>${r.pass ? '<span class="pill ok">pass</span>' : '<span class="pill bad">fail</span>'}</td><td class="url">${esc(r.found)}</td></tr>`).join("")}</tbody>
     </table></div>
-    ${o.passed < o.total ? `<div style="margin-top:12px"><b>Fix:</b> ${o.home_invalid ? "replace the invalid JSON-LD block with this" : o.has_org ? "replace the existing organization schema with this" : "add this to the homepage &lt;head&gt;"}. Replace every <code>REPLACE-WITH</code> value first. Logo: ${o.logo_source === "not found" ? "not found, fill it in" : "taken from the " + esc(o.logo_source) + ", confirm it is the official logo"}. sameAs: collected from homepage links, confirm each is an official account.
+    ${o.passed < o.total ? `<div style="margin-top:12px">${o.recovered ? `<div class="note" style="margin-top:8px">Values shown as "in invalid block" were read from the broken code and reused in the fix below.</div>` : ""}<b>Fix:</b> ${o.home_invalid ? "replace the invalid JSON-LD block with this" : o.has_org ? "replace the existing organization schema with this" : "add this to the homepage &lt;head&gt;"}. Replace every <code>REPLACE-WITH</code> value first. Logo: ${o.logo_source === "not found" ? "not found, fill it in" : "taken from the " + esc(o.logo_source) + ", confirm it is the official logo"}. sameAs: collected from homepage links, confirm each is an official account.
       <button class="sec" id="copysnip" type="button" style="margin-left:8px;padding:4px 10px">Copy</button>
       <pre class="snip">${esc(o.snippet)}</pre></div>` : ""}
     <div style="margin-top:12px"><b>Schema types found across the site</b> <span class="muted">(type · pages)</span><br>${types}</div>
-    ${(() => { const bad = s.check_failures.find(c => c.id === "schema_valid"); return bad && bad.failed ? `<div class="note err" style="margin-top:8px"><b>Invalid structured data on ${bad.failed} of ${s.pages} pages.</b> Search engines and AI ignore invalid blocks entirely. If it is on every page, the error is in a shared template (header or footer). Validate a page at validator.schema.org.</div>` : ""; })()}
     ${s.schema_types.length || s.check_failures.find(c => c.id === "schema_valid")?.failed ? "" : `<div class="note" style="margin-top:8px"><b>No structured data on any crawled page.</b> To confirm: open the homepage, view the page source, and search for <code>ld+json</code>. On WordPress, an SEO plugin (e.g. Yoast SEO or Rank Math) can add organization, breadcrumb and page schema site-wide.</div>`}
   </div>`;
 }
