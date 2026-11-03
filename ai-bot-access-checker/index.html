@@ -56,6 +56,11 @@
   .progress i { display:block; height:100%; background:var(--accent); transition:width .3s; }
   code { font-size:12px; }
   [hidden] { display:none !important; }
+  details.settings { flex-basis:100%; color:var(--muted); font-size:14px; }
+  details.settings summary { cursor:pointer; }
+  .setgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin-top:10px; }
+  .setgrid label { display:flex; flex-direction:column; gap:4px; }
+  pre.snip { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:12px; overflow-x:auto; font-size:12px; margin:8px 0 0; }
 </style>
 </head>
 <body>
@@ -97,7 +102,17 @@
       <input type="text" id="rexcl" placeholder="Exclude regex, e.g. /calendar|/events/" style="flex:0 1 260px">
       <button id="rgo">Start crawl</button>
       <button id="rstop" class="sec" type="button" disabled>Stop</button>
-      <button id="rcsv" class="sec" type="button" disabled>Download CSV</button>
+      <button id="rcsv" class="sec" type="button" disabled>Pages CSV</button>
+      <button id="rpdfcsv" class="sec" type="button" disabled>PDFs CSV</button>
+      <details class="settings">
+        <summary>Institution settings (used by the name, structured data and date checks)</summary>
+        <div class="setgrid">
+          <label>Official name <input type="text" id="sname"></label>
+          <label>City <input type="text" id="scity"></label>
+          <label>State <input type="text" id="sstate"></label>
+          <label>Former names, comma-separated <input type="text" id="sformer"></label>
+        </div>
+      </details>
     </form>
     <div id="rout"></div>
     <div class="card note" id="rules"></div>
@@ -188,14 +203,20 @@ $("#f").onsubmit = async e => {
 };
 
 /* ---------------- Readiness ---------------- */
+let pfilter = "flagged";
 let CHECKS = [], job = null, timer = null, rdata = null, rfilter = "all", rcheck = "", ropen = new Set();
+
+fetch("/api/defaults").then(r => r.json()).then(d => {
+  $("#sname").value = d.official_name; $("#scity").value = d.city; $("#sstate").value = d.region; $("#sformer").value = d.former_names.join(", ");
+});
 
 fetch("/api/checks").then(r => r.json()).then(c => {
   CHECKS = c;
   $("#rules").innerHTML = `<b>Scoring rules</b><br>
     Each page gets a pass or fail on every check. <b>Score</b> = checks passed ÷ ${c.length} × 100.<br>
     <b>Ready</b>: score 80 or higher and no critical fails. <b>Needs work</b>: score 50-79 and no critical fails. <b>Not ready</b>: score below 50, or any critical fail.<br>
-    "AI search bots" means every bot with purpose search or user on the Bot Access tab. Training-bot blocks are reported but not scored, because blocking training is a policy choice.<br><br>
+    "AI search bots" means every bot with purpose search or user on the Bot Access tab. Training-bot blocks are reported but not scored, because blocking training is a policy choice.<br>
+    "Past" means before the current academic year, which starts July 1.<br><br>
     <table><thead><tr><th>Check</th><th>Pass when</th><th>Critical</th></tr></thead><tbody>
     ${c.map(x => `<tr><td class="nw">${esc(x.label)}</td><td>${esc(x.rule)}</td><td>${x.critical ? "Yes" : "No"}</td></tr>`).join("")}
     </tbody></table>
@@ -235,6 +256,8 @@ function renderReady() {
           </tr>`).join("")}</tbody>
       </table></div>
     </div>
+    ${orgCard(s)}
+    ${pdfCard(s, rdata.pdfs)}
     <div class="card">
       <div class="filters">
         ${["all","Not ready","Needs work","Ready"].map(g => `<button data-g="${g}" class="${g===rfilter?"on":""}">${g}</button>`).join("")}
@@ -256,17 +279,64 @@ function renderReady() {
             ${p.detail.directives.length ? `<br><b>Directives</b> ${p.detail.directives.map(esc).join(", ")}` : ""}
             ${p.detail.blocked_ai_search_bots.length ? `<br><b>AI search bots blocked</b> ${p.detail.blocked_ai_search_bots.map(esc).join(", ")}` : ""}
             ${p.detail.blocked_training_bots.length ? `<br><b>Training bots blocked</b> ${p.detail.blocked_training_bots.map(esc).join(", ")}` : ""}
+            <br><b>Schema types</b> ${p.detail.schema_types.length ? p.detail.schema_types.map(esc).join(", ") : "none"}${p.detail.invalid_jsonld_blocks ? ` · <span class="err">${p.detail.invalid_jsonld_blocks} invalid JSON-LD block(s)</span>` : ""}
+            ${p.detail.former_names_found.length ? `<br><b>Former names found</b> ${p.detail.former_names_found.map(esc).join(", ")}` : ""}
+            ${p.detail.past_terms.length ? `<br><b>Past terms found</b> ${p.detail.past_terms.map(esc).join(", ")}${p.detail.dated_exempt ? " <span class=\"muted\">(exempt: dated page)</span>" : ""}` : ""}
             <br><a href="${esc(p.url)}" target="_blank" rel="noopener">Open page ↗</a>
           </td></tr>` : ""}`).join("")}</tbody>
       </table></div>
     </div>`;
   document.querySelectorAll("#rout .filters button[data-g]").forEach(b => b.onclick = () => { rfilter = b.dataset.g; renderReady(); });
+  document.querySelectorAll("#rout .filters button[data-pf]").forEach(b => b.onclick = () => { pfilter = b.dataset.pf; renderReady(); });
+  const cp = $("#copysnip"); if (cp) cp.onclick = () => { navigator.clipboard.writeText(rdata.summary.organization.snippet); cp.textContent = "Copied"; };
   const clr = $("#rout [data-clear]"); if (clr) clr.onclick = () => { rcheck = ""; renderReady(); };
   document.querySelectorAll("#rout tr[data-check]").forEach(tr => tr.onclick = () => { rcheck = rcheck === tr.dataset.check ? "" : tr.dataset.check; renderReady(); });
   document.querySelectorAll("#rout tr[data-url]").forEach(tr => tr.onclick = e => {
     if (e.target.tagName === "A") return;
     const k = tr.dataset.url; ropen.has(k) ? ropen.delete(k) : ropen.add(k); renderReady();
   });
+}
+
+function orgCard(s) {
+  const o = s.organization;
+  const types = s.schema_types.length ? s.schema_types.map(t => `<span class="pill muted">${esc(t.type)} · ${t.pages}</span>`).join("") : '<span class="muted">none found</span>';
+  if (!o) return `<div class="card"><h2>Structured data</h2><span class="muted">Waiting for the homepage…</span></div>`;
+  return `<div class="card">
+    <h2>Structured data: homepage organization (${o.passed}/${o.total} pass)</h2>
+    <div class="note" style="margin-bottom:8px">AI systems use this to identify the school. Checked on ${esc(o.home_url || "the homepage")} against your institution settings.</div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Check</th><th>Result</th><th>Found</th></tr></thead>
+      <tbody>${o.rows.map(r => `<tr><td class="nw">${esc(r.label)}</td><td>${r.pass ? '<span class="pill ok">pass</span>' : '<span class="pill bad">fail</span>'}</td><td class="url">${esc(r.found)}</td></tr>`).join("")}</tbody>
+    </table></div>
+    ${o.passed < o.total ? `<div style="margin-top:12px"><b>Fix:</b> add this to the homepage &lt;head&gt;, replacing the existing organization schema. Replace every <code>REPLACE-WITH</code> value first. Review the sameAs links: they were collected from the homepage.
+      <button class="sec" id="copysnip" type="button" style="margin-left:8px;padding:4px 10px">Copy</button>
+      <pre class="snip">${esc(o.snippet)}</pre></div>` : ""}
+    <div style="margin-top:12px"><b>Schema types found across the site</b> <span class="muted">(type · pages)</span><br>${types}</div>
+  </div>`;
+}
+
+function fname(u) { const f = u.split("/").pop(); try { return decodeURIComponent(f); } catch (e) { return f; } }
+
+function pdfCard(s, pdfs) {
+  const c = s.pdf_counts;
+  const list = pdfs.filter(p => pfilter === "all" || (pfilter === "flagged" ? (p.topics.length || p.past_terms.length) : pfilter === "past" ? p.past_terms.length : p.topics.length));
+  return `<div class="card">
+    <h2>PDFs: ${c.total} linked · ${c.key_facts} with key facts · ${c.past_terms} naming past terms</h2>
+    <div class="note" style="margin-bottom:8px">Most AI crawlers read PDFs poorly or not at all. <b>Key facts</b>: the file name or link text mentions tuition, fees, financial aid, deadlines, calendar, admission requirements or catalog. Put those facts on a web page too. <b>Past terms</b>: the file name or link text names a past academic year or term. Update, replace or unlink it. PDFs are not downloaded, so only file names and link text are checked.</div>
+    <div class="filters">
+      ${[["flagged","Flagged"],["facts","Key facts"],["past","Past terms"],["all","All"]].map(([k,l]) => `<button data-pf="${k}" class="${k===pfilter?"on":""}">${l}</button>`).join("")}
+      <span class="muted">${list.length} PDF(s)${list.length > 300 ? ", showing 300. Download PDFs CSV for all." : ""}</span>
+    </div>
+    ${list.length ? `<div class="tablewrap"><table>
+      <thead><tr><th>PDF</th><th>Key facts</th><th>Past terms</th><th>Linked from</th></tr></thead>
+      <tbody>${list.slice(0, 300).map(p => `<tr>
+        <td class="url"><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(fname(p.url))}</a>${p.link_text ? `<br><span class="muted">${esc(p.link_text)}</span>` : ""}</td>
+        <td>${p.topics.map(t => `<span class="pill warn">${esc(t)}</span>`).join("") || '<span class="muted">-</span>'}</td>
+        <td>${p.past_terms.map(t => `<span class="pill bad">${esc(t)}</span>`).join("") || '<span class="muted">-</span>'}</td>
+        <td class="nw">${p.linked_from_count} page(s)<br><span class="muted" title="${esc(p.linked_from.join("\n"))}">${esc((p.linked_from[0] || "").replace(/^https?:\/\/[^/]+/, ""))}</span></td>
+      </tr>`).join("")}</tbody>
+    </table></div>` : '<span class="muted">None.</span>'}
+  </div>`;
 }
 
 async function poll() {
@@ -283,18 +353,20 @@ async function poll() {
 
 $("#rf").onsubmit = async e => {
   e.preventDefault();
-  const q = new URLSearchParams({ url: $("#rurl").value, max: $("#rmax").value || "500", subdomains: $("#rsub").checked ? "1" : "0", exclude: $("#rexcl").value });
+  const q = new URLSearchParams({ url: $("#rurl").value, max: $("#rmax").value || "500", subdomains: $("#rsub").checked ? "1" : "0", exclude: $("#rexcl").value,
+    name: $("#sname").value, city: $("#scity").value, state: $("#sstate").value, former: $("#sformer").value });
   const res = await fetch("/api/crawl/start?" + q);
   const data = await res.json();
   if (!res.ok) { $("#rout").innerHTML = `<div class="card err">Error: ${esc(data.error)}</div>`; return; }
   job = data.id; rfilter = "all"; rcheck = ""; ropen = new Set();
-  $("#rgo").disabled = true; $("#rstop").disabled = false; $("#rcsv").disabled = false;
+  $("#rgo").disabled = true; $("#rstop").disabled = false; $("#rcsv").disabled = false; $("#rpdfcsv").disabled = false;
   $("#rout").innerHTML = `<div class="card muted">Reading robots.txt and sitemaps…</div>`;
   if (timer) clearInterval(timer);
   timer = setInterval(poll, 1500);
 };
 $("#rstop").onclick = () => job && fetch("/api/crawl/stop?id=" + job);
 $("#rcsv").onclick = () => job && (location.href = "/api/crawl/csv?id=" + job);
+$("#rpdfcsv").onclick = () => job && (location.href = "/api/crawl/pdfcsv?id=" + job);
 </script>
 </body>
 </html>

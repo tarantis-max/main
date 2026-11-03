@@ -31,9 +31,9 @@ Click a row to see the exact robots.txt rules applied to that bot.
 
 ## Site Readiness tab
 
-Crawls the site (sitemaps plus links, same host) and scores every HTML page on 15 pass/fail checks.
+Crawls the site (sitemaps plus links, same host) and scores every HTML page on 19 pass/fail checks.
 
-- **Score** = checks passed ÷ 15 × 100.
+- **Score** = checks passed ÷ 19 × 100.
 - **Ready**: score ≥ 80 and no critical fails.
 - **Needs work**: score 50–79 and no critical fails.
 - **Not ready**: score < 50, or any critical fail.
@@ -42,7 +42,22 @@ Critical checks: HTTP 200, AI search bots allowed, no noindex/noai, at least 150
 
 Training-bot blocks are reported but not scored. Blocking training is a policy choice, not a readiness defect.
 
-Crawler behavior: follows robots.txt for itself, 4 workers, 0.25 s delay per worker, skips non-HTML files, default 500 pages (max 20,000). Use the exclude regex to skip calendar or event pages that generate unlimited URLs. Download CSV exports every page with each check marked PASS or FAIL.
+Name and date checks use the **Institution settings** (official name, city, state, former names). Defaults are set for Methodist University, Fayetteville, NC (former name: Methodist College). "Past" means before the current academic year, which starts July 1.
+
+The tab also includes two site-level reports.
+
+**Structured data report**
+- Checks the homepage organization schema against the institution settings: type, name, url, logo, city, state and sameAs.
+- When any check fails, it generates a ready-to-paste `CollegeOrUniversity` snippet. Replace every `REPLACE-WITH` value before using it.
+- Lists every schema type found across the site.
+
+**PDF report**
+- Lists every linked PDF.
+- **Key facts**: the file name or link text mentions tuition, fees, financial aid, deadlines, calendar, admission requirements or catalog. Put these facts on a web page too.
+- **Past terms**: the file name or link text names a past academic year or term. Update, replace or unlink the file.
+- PDFs are not downloaded. Only file names and link text are checked.
+
+Crawler behavior: follows robots.txt for itself, 4 workers, 0.25 s delay per worker, skips non-HTML files, default 500 pages (max 20,000). Use the exclude regex to skip calendar or event pages that generate unlimited URLs. **Pages CSV** exports every page with each check marked PASS or FAIL. **PDFs CSV** exports the PDF report.
 
 ## Command line
 
@@ -51,5 +66,5 @@ python3 ai_bot_check.py https://www.methodist.edu --scan 200
 ```
 
 ```bash
-python3 readiness.py https://www.methodist.edu --max 2000 --csv readiness.csv
+python3 readiness.py https://www.methodist.edu --max 2000 --csv pages.csv --pdf-csv pdfs.csv
 ```

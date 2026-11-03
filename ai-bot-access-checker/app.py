@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from ai_bot_check import run
-from readiness import CHECKS, Crawl
+from readiness import CHECKS, DEFAULTS, Crawl
 
 JOBS: dict[str, Crawl] = {}
 
@@ -58,7 +58,11 @@ class Handler(BaseHTTPRequestHandler):
                 c = Crawl(target,
                           max_pages=max(1, min(int((q.get("max") or ["500"])[0]), 20000)),
                           subdomains=(q.get("subdomains") or ["0"])[0] == "1",
-                          exclude=(q.get("exclude") or [""])[0])
+                          exclude=(q.get("exclude") or [""])[0],
+                          official_name=(q.get("name") or [""])[0],
+                          city=(q.get("city") or [""])[0],
+                          region=(q.get("state") or [""])[0],
+                          former_names=(q.get("former") or [""])[0].split(","))
             except Exception as e:
                 self._send(400, json.dumps({"error": str(e)}).encode(), "application/json")
                 return
@@ -66,7 +70,7 @@ class Handler(BaseHTTPRequestHandler):
             JOBS[jid] = c
             threading.Thread(target=c.run, daemon=True).start()
             self._send(200, json.dumps({"id": jid}).encode(), "application/json")
-        elif u.path in ("/api/crawl/status", "/api/crawl/stop", "/api/crawl/csv"):
+        elif u.path in ("/api/crawl/status", "/api/crawl/stop", "/api/crawl/csv", "/api/crawl/pdfcsv"):
             jid = (parse_qs(u.query).get("id") or [""])[0]
             c = JOBS.get(jid)
             if not c:
@@ -76,15 +80,19 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, b'{"ok":true}', "application/json")
             elif u.path.endswith("csv"):
                 self.send_response(200)
-                body = c.to_csv().encode()
+                pdf = u.path.endswith("pdfcsv")
+                body = (c.pdf_csv() if pdf else c.to_csv()).encode()
+                name = f"ai-readiness-{'pdfs' if pdf else 'pages'}-{c.host}.csv"
                 self.send_header("Content-Type", "text/csv; charset=utf-8")
-                self.send_header("Content-Disposition", f'attachment; filename="ai-readiness-{c.host}.csv"')
+                self.send_header("Content-Disposition", f'attachment; filename="{name}"')
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
             else:
-                pages = [{k: v for k, v in p.items() if k != "_links"} for p in list(c.results)]
-                self._send(200, json.dumps({"summary": c.summary(), "pages": pages}).encode(), "application/json")
+                pages = [{k: v for k, v in p.items() if not k.startswith("_")} for p in list(c.results)]
+                self._send(200, json.dumps({"summary": c.summary(), "pages": pages, "pdfs": c.pdf_report()}).encode(), "application/json")
+        elif u.path == "/api/defaults":
+            self._send(200, json.dumps(DEFAULTS).encode(), "application/json")
         elif u.path == "/api/checks":
             self._send(200, json.dumps([{"id": a, "label": b, "rule": r, "critical": k} for a, b, r, k in CHECKS]).encode(), "application/json")
         else:
