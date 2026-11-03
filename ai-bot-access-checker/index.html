@@ -73,6 +73,7 @@
   <div class="tabs">
     <button data-tab="access" class="on">Bot Access</button>
     <button data-tab="ready">Site Readiness</button>
+    <button data-tab="compare">Competitors</button>
   </div>
 
   <!-- ===================== BOT ACCESS ===================== -->
@@ -122,6 +123,23 @@
     <div id="rout"></div>
     <div class="card note" id="rules"></div>
   </section>
+  <!-- ===================== COMPETITORS ===================== -->
+  <section id="tab-compare" hidden>
+    <form id="cf">
+      <label class="chk" style="flex-basis:100%">Your site <input type="text" class="url" id="cself" value="https://www.methodist.edu" style="flex:1"></label>
+      <label class="chk" style="flex-basis:100%;align-items:flex-start">Competitors, one per line (up to 10)
+        <textarea id="csites" rows="5" style="flex:1;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);font:inherit" placeholder="https://www.campbell.edu&#10;https://www.uncfsu.edu"></textarea></label>
+      <label class="chk">Pages per site <input type="number" id="cmax" value="200" min="20" max="1000"></label>
+      <button id="cgo">Start comparison</button>
+      <button id="cstop" class="sec" type="button" disabled>Stop</button>
+      <button id="ccsv" class="sec" type="button" disabled>Comparison CSV</button>
+      <button id="creport" type="button" disabled>Comparison report</button>
+    </form>
+    <div id="cout"></div>
+    <div class="card note"><b>How this works</b><br>
+      Your site and each competitor get the same treatment: the Bot Access check plus a readiness crawl of up to the page limit (same host only, robots.txt respected, 2 workers, 0.5 s delay). Your site is re-crawled with the same limit so the comparison is fair. Competitors are scored without your institution's name checks.<br>
+      Expect about 2-4 minutes per site at 200 pages. Rank 1 = best. Bold = best value. The latest finished comparison is included in the results bundle.</div>
+  </section>
 </main>
 <script>
 const $ = s => document.querySelector(s);
@@ -131,6 +149,7 @@ document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
   $("#tab-access").hidden = b.dataset.tab !== "access";
   $("#tab-ready").hidden = b.dataset.tab !== "ready";
+  $("#tab-compare").hidden = b.dataset.tab !== "compare";
 });
 
 function pill(text) {
@@ -424,6 +443,39 @@ $("#rbundle").onclick = () => {
   location.href = "/api/bundle?id=" + job;
   setTimeout(() => { b.disabled = false; b.textContent = "Download results bundle"; }, 8000);
 };
+/* ---------------- Competitors ---------------- */
+let cjob = null, ctimer = null;
+function renderCompare(st) {
+  const rows = st.rows, ranks = st.ranks;
+  const prog = st.state === "running" ? `<div class="note">Checking ${esc(st.current)}: ${st.current_pages} of up to ${st.max_pages} pages · site ${st.done + 1} of ${st.sites.length} · ${st.elapsed_s}s</div>
+    <div class="progress"><i style="width:${Math.round(100 * (st.done + Math.min(1, st.current_pages / st.max_pages)) / st.sites.length)}%"></i></div>` : `<div class="note">Status: ${esc(st.state)} · ${st.elapsed_s}s ${st.error ? `<span class="err">${esc(st.error)}</span>` : ""}</div>`;
+  if (!rows.length) { $("#cout").innerHTML = `<div class="card">${prog}</div>`; return; }
+  const fmt = (m, v) => v == null ? "-" : (m.id.endsWith("pct") || m.id === "pct_ready" ? v + "%" : v);
+  $("#cout").innerHTML = `<div class="card">${prog}
+    <div class="tablewrap"><table><thead><tr><th>Metric</th><th>Your rank</th>${rows.map((r, i) => `<th>${esc(r.site)}${i === 0 ? " (you)" : ""}</th>`).join("")}</tr></thead>
+    <tbody>${st.metrics.map(m => { const rk = ranks[m.id]; return `<tr><td class="nw">${esc(m.label)}</td><td>${rk && rk.tie ? '<span class="muted">tie</span>' : rk && rk.rank != null ? (rk.rank === 1 ? '<span class="pill ok">1</span>' : rk.rank === rows.length && rows.length > 1 ? `<span class="pill bad">${rk.rank}</span>` : rk.rank) : '<span class="muted">-</span>'}</td>${rows.map(r => { const best = rk && rk.best.includes(r.site) && rows.length > 1; return `<td>${best ? "<b>" : ""}${esc(fmt(m, r[m.id]))}${best ? "</b>" : ""}</td>`; }).join("")}</tr>`; }).join("")}</tbody></table></div></div>`;
+}
+async function cpoll() {
+  try {
+    const st = await (await fetch("/api/compare/status?id=" + cjob)).json();
+    renderCompare(st);
+    if (st.state !== "running" && st.state !== "pending") { clearInterval(ctimer); ctimer = null; $("#cgo").disabled = false; $("#cstop").disabled = true; $("#creport").disabled = !st.rows.length; $("#ccsv").disabled = !st.rows.length; }
+  } catch (e) {}
+}
+$("#cf").onsubmit = async e => {
+  e.preventDefault();
+  const sites = [$("#cself").value, ...$("#csites").value.split(/\n|,/)].map(x => x.trim()).filter(Boolean);
+  const res = await fetch("/api/compare/start?" + new URLSearchParams({ sites: sites.join("\n"), max: $("#cmax").value || "200" }));
+  const data = await res.json();
+  if (!res.ok) { $("#cout").innerHTML = `<div class="card err">Error: ${esc(data.error)}</div>`; return; }
+  cjob = data.id; $("#cgo").disabled = true; $("#cstop").disabled = false; $("#creport").disabled = true; $("#ccsv").disabled = true;
+  $("#cout").innerHTML = `<div class="card muted">Starting…</div>`;
+  if (ctimer) clearInterval(ctimer); ctimer = setInterval(cpoll, 2000);
+};
+$("#cstop").onclick = () => cjob && fetch("/api/compare/stop?id=" + cjob);
+$("#ccsv").onclick = () => cjob && (location.href = "/api/compare/csv?id=" + cjob);
+$("#creport").onclick = () => cjob && window.open("/api/compare/report?id=" + cjob, "_blank");
+
 $("#rreport").onclick = () => job && window.open("/api/report?id=" + job, "_blank");
 $("#rpdfcsv").onclick = () => job && (location.href = "/api/crawl/pdfcsv?id=" + job);
 </script>

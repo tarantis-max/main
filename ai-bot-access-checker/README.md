@@ -31,9 +31,13 @@ Click a row to see the exact robots.txt rules applied to that bot.
 
 ## Site Readiness tab
 
-Crawls the site (sitemaps plus links, same host) and scores every HTML page on 19 pass/fail checks.
+Crawls the site (sitemaps plus links, same host) and scores every HTML page on pass/fail checks grouped into five areas: AI access, Technical SEO, On-page SEO, Structured data, and Content (GEO/AEO).
 
-- **Score** = checks passed ÷ 19 × 100.
+- **Score** = applicable checks passed ÷ applicable checks × 100. Checks that do not apply to a page (e.g. program schema on a non-program page) are N/A.
+- **Area score** = share of applicable page checks passed in that area.
+- **Error pages** (not HTTP 200) are scored only on HTTP 200.
+- **Login/app pages** (with a password field) are skipped.
+- **Rate-limited or timed-out pages** are retried 4 times, then listed as not checked and not graded.
 - **Ready**: score ≥ 80 and no critical fails.
 - **Needs work**: score 50–79 and no critical fails.
 - **Not ready**: score < 50, or any critical fail.
@@ -72,6 +76,20 @@ Rules:
 - If a denied bot is not blocked, the Bot Access tab and the report show a robots.txt block to add. Also block it at the CDN or firewall, because robots.txt is voluntary.
 
 Edit the file to change the list, then restart the app.
+
+## Site-level SEO and GEO findings
+
+Shown on the Site Readiness tab and in the report: sitemap coverage, broken and noindex sitemap URLs, orphan pages, broken internal links, duplicate titles and descriptions, old or staging hosts, links to hosting-provider domains, sections that are entirely noindex, FAQ schema use, program schema coverage, median reading grade, and homepage trust signals (privacy, contact, address, accessibility). Former-name mentions are a review list, not scored.
+
+The checks follow EAB's "Navigating Search Visibility in the AI Era" (2025). The report's Appendix E maps each guide item to the check that covers it, or marks it manual (Search Console, keyword tools, backlinks).
+
+## Competitors tab
+
+Enter your site and up to 10 competitors. Each site gets the Bot Access check and a readiness crawl of up to the page limit (default 200; same host only, robots.txt respected, 2 workers, 0.5 s delay). Your site is re-crawled with the same limit so the comparison is fair. The table ranks your site on each metric (1 = best, "tie" = all equal). **Comparison report** opens a printable page; **Comparison CSV** exports the table. The latest finished comparison is included in the results bundle.
+
+```bash
+python3 compare.py https://www.methodist.edu https://www.campbell.edu https://www.uncfsu.edu --max 200 --out compare.html
+```
 
 ## Executive report
 

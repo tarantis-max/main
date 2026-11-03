@@ -18,7 +18,7 @@ from report import build as build_report
 VERSION = "2026.11.03"
 
 
-def make_bundle(c: Crawl, access: dict | None) -> bytes:
+def make_bundle(c: Crawl, access: dict | None, comparison=None) -> bytes:
     summary = c.summary()
     pages = [{k: v for k, v in p.items() if not k.startswith("_")} for p in list(c.results)]
     manifest = {
@@ -43,6 +43,7 @@ def make_bundle(c: Crawl, access: dict | None) -> bytes:
             "pdfs.csv": "linked PDFs with key-fact and past-term flags",
             "bot-access.json": "per-bot robots.txt, sitemap coverage, live probe and policy results",
             "report.html": "executive report",
+            "comparison.json / comparison.csv / comparison.html": "latest competitor comparison, if one was run",
         },
     }
     buf = io.BytesIO()
@@ -54,4 +55,8 @@ def make_bundle(c: Crawl, access: dict | None) -> bytes:
         z.writestr("pdfs.csv", c.pdf_csv())
         z.writestr("bot-access.json", json.dumps(access, indent=2) if access else "null")
         z.writestr("report.html", build_report(summary, list(c.results), c.pdf_report(), access))
+        if comparison is not None:
+            z.writestr("comparison.json", json.dumps(comparison.status(), indent=2))
+            z.writestr("comparison.csv", comparison.to_csv())
+            z.writestr("comparison.html", comparison.report())
     return buf.getvalue()

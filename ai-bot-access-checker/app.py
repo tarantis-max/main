@@ -21,8 +21,10 @@ from ai_bot_check import run
 from readiness import CHECKS, DEFAULTS, Crawl
 from report import build as build_report
 from bundle import make_bundle
+from compare import Compare
 
 JOBS: dict[str, Crawl] = {}
+COMPARES: dict[str, Compare] = {}
 
 
 def safe_name(s: str) -> str:
@@ -79,6 +81,39 @@ class Handler(BaseHTTPRequestHandler):
             JOBS[jid] = c
             threading.Thread(target=c.run, daemon=True).start()
             self._send(200, json.dumps({"id": jid}).encode(), "application/json")
+        elif u.path == "/api/compare/start":
+            q = parse_qs(u.query)
+            sites = [x for x in (q.get("sites") or [""])[0].replace(",", "\n").splitlines() if x.strip()]
+            if len(sites) < 2:
+                self._send(400, b'{"error":"enter your site and at least one competitor"}', "application/json")
+                return
+            if len(sites) > 11:
+                self._send(400, b'{"error":"up to 10 competitors"}', "application/json")
+                return
+            cmp_ = Compare(sites, max(20, min(int((q.get("max") or ["200"])[0]), 1000)))
+            cid = uuid.uuid4().hex[:8]
+            COMPARES[cid] = cmp_
+            threading.Thread(target=cmp_.run, daemon=True).start()
+            self._send(200, json.dumps({"id": cid}).encode(), "application/json")
+        elif u.path in ("/api/compare/status", "/api/compare/stop", "/api/compare/csv", "/api/compare/report"):
+            cmp_ = COMPARES.get((parse_qs(u.query).get("id") or [""])[0])
+            if not cmp_:
+                self._send(404, b'{"error":"unknown comparison"}', "application/json")
+            elif u.path.endswith("stop"):
+                cmp_.stop()
+                self._send(200, b'{"ok":true}', "application/json")
+            elif u.path.endswith("csv"):
+                body = cmp_.to_csv().encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="competitor-comparison-{time.strftime("%Y%m%d-%H%M")}.csv"')
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            elif u.path.endswith("report"):
+                self._send(200, cmp_.report().encode(), "text/html; charset=utf-8")
+            else:
+                self._send(200, json.dumps(cmp_.status()).encode(), "application/json")
         elif u.path == "/api/bundle":
             c = JOBS.get((parse_qs(u.query).get("id") or [""])[0])
             if not c:
@@ -90,7 +125,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if getattr(c, "access", None) is None:
                     c.access = run(c.start, probe=True, scan=200)
-                body = make_bundle(c, c.access)
+                done = [x for x in COMPARES.values() if x.rows]
+                body = make_bundle(c, c.access, done[-1] if done else None)
                 stamp = time.strftime("%Y%m%d-%H%M")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/zip")

@@ -92,6 +92,7 @@ PROGRAM_TYPES = {"EducationalOccupationalProgram", "Course", "WorkBasedProgram"}
 
 def fk_grade(text: str) -> float | None:
     """Flesch-Kincaid grade level; None if under 100 words."""
+    text = re.sub(r"([^.!?\s])\s*\n", r"\1.\n", text)  # paragraphs without end punctuation still end a sentence
     words = re.findall(r"[A-Za-z][A-Za-z'-]*", text)
     if len(words) < 100:
         return None
@@ -290,6 +291,7 @@ class PageParser(HTMLParser):
             self._main -= 1
         if tag == "p" and self._in_p:
             self._in_p -= 1
+            (self.p_main if self._main else self.p_other).append("\n")  # paragraph end = sentence break
         if tag == "script" and self._in_jsonld:
             self.jsonld.append("".join(self._buf))
             self._in_jsonld = False
@@ -531,7 +533,7 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
     objs, invalid_jsonld = parse_jsonld(p.jsonld)
     schema_types = sorted({t for o in objs for t in types_of(o)})
     has_faq = "FAQPage" in schema_types
-    grade_level = fk_grade(" ".join(p.p_main or p.p_other))
+    grade_level = fk_grade(" ".join(p.p_main if "".join(p.p_main).strip() else p.p_other))
     title = " ".join(p.title.split())
     desc = p.meta.get("description", "").strip()
     text = " ".join(" ".join(p.text).split())
