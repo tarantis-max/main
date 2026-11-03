@@ -104,6 +104,7 @@
       <button id="rstop" class="sec" type="button" disabled>Stop</button>
       <button id="rcsv" class="sec" type="button" disabled>Pages CSV</button>
       <button id="rpdfcsv" class="sec" type="button" disabled>PDFs CSV</button>
+      <button id="rreport" type="button" disabled title="Available when the crawl finishes or is stopped">Executive report</button>
       <details class="settings">
         <summary>Institution settings (used by the name, structured data and date checks)</summary>
         <div class="setgrid">
@@ -346,7 +347,7 @@ async function poll() {
     renderReady();
     if (rdata.summary.state !== "running" && rdata.summary.state !== "pending") {
       clearInterval(timer); timer = null;
-      $("#rgo").disabled = false; $("#rstop").disabled = true;
+      $("#rgo").disabled = false; $("#rstop").disabled = true; $("#rreport").disabled = false;
     }
   } catch (e) { /* keep polling */ }
 }
@@ -359,13 +360,14 @@ $("#rf").onsubmit = async e => {
   const data = await res.json();
   if (!res.ok) { $("#rout").innerHTML = `<div class="card err">Error: ${esc(data.error)}</div>`; return; }
   job = data.id; rfilter = "all"; rcheck = ""; ropen = new Set();
-  $("#rgo").disabled = true; $("#rstop").disabled = false; $("#rcsv").disabled = false; $("#rpdfcsv").disabled = false;
+  $("#rgo").disabled = true; $("#rstop").disabled = false; $("#rreport").disabled = true; $("#rcsv").disabled = false; $("#rpdfcsv").disabled = false;
   $("#rout").innerHTML = `<div class="card muted">Reading robots.txt and sitemaps…</div>`;
   if (timer) clearInterval(timer);
   timer = setInterval(poll, 1500);
 };
 $("#rstop").onclick = () => job && fetch("/api/crawl/stop?id=" + job);
 $("#rcsv").onclick = () => job && (location.href = "/api/crawl/csv?id=" + job);
+$("#rreport").onclick = () => job && window.open("/api/report?id=" + job, "_blank");
 $("#rpdfcsv").onclick = () => job && (location.href = "/api/crawl/pdfcsv?id=" + job);
 </script>
 </body>

@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from ai_bot_check import run
 from readiness import CHECKS, DEFAULTS, Crawl
+from report import build as build_report
 
 JOBS: dict[str, Crawl] = {}
 
@@ -70,6 +71,21 @@ class Handler(BaseHTTPRequestHandler):
             JOBS[jid] = c
             threading.Thread(target=c.run, daemon=True).start()
             self._send(200, json.dumps({"id": jid}).encode(), "application/json")
+        elif u.path == "/api/report":
+            c = JOBS.get((parse_qs(u.query).get("id") or [""])[0])
+            if not c:
+                self._send(404, b"Unknown crawl. Run a crawl first.", "text/plain")
+                return
+            if c.state == "running":
+                self._send(409, b"The crawl is still running. Stop it or wait for it to finish, then open the report.", "text/plain")
+                return
+            try:
+                if getattr(c, "access", None) is None:
+                    c.access = run(c.start, probe=True, scan=200)
+                html = build_report(c.summary(), list(c.results), c.pdf_report(), c.access)
+                self._send(200, html.encode(), "text/html; charset=utf-8")
+            except Exception as e:
+                self._send(500, f"Report failed: {type(e).__name__}: {e}".encode(), "text/plain")
         elif u.path in ("/api/crawl/status", "/api/crawl/stop", "/api/crawl/csv", "/api/crawl/pdfcsv"):
             jid = (parse_qs(u.query).get("id") or [""])[0]
             c = JOBS.get(jid)

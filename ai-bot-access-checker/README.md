@@ -59,6 +59,17 @@ The tab also includes two site-level reports.
 
 Crawler behavior: follows robots.txt for itself, 4 workers, 0.25 s delay per worker, skips non-HTML files, default 500 pages (max 20,000). Use the exclude regex to skip calendar or event pages that generate unlimited URLs. **Pages CSV** exports every page with each check marked PASS or FAIL. **PDFs CSV** exports the PDF report.
 
+## Executive report
+
+After a crawl finishes (or is stopped), click **Executive report** on the Site Readiness tab. It opens a printable report; use **Print / Save as PDF** to share it. Length: 2-4 printed pages.
+
+Contents: overall verdict, key numbers, key findings, ranked actions with owners, priority pages (worst 10), AI bot access, method, and appendices (all checks, homepage schema failures, PDFs to review, up to 10).
+
+Verdict rules:
+- **Ready**: at least 80% of pages Ready, no AI search bot blocked, and every homepage organization schema check passes.
+- **Partially ready**: at least 50% of pages Ready and no AI search bot blocked.
+- **Not ready**: anything else.
+
 ## Command line
 
 ```bash
@@ -67,4 +78,8 @@ python3 ai_bot_check.py https://www.methodist.edu --scan 200
 
 ```bash
 python3 readiness.py https://www.methodist.edu --max 2000 --csv pages.csv --pdf-csv pdfs.csv
+```
+
+```bash
+python3 report.py https://www.methodist.edu --max 500 --out report.html
 ```

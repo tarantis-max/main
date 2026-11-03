@@ -1,0 +1,349 @@
+#!/usr/bin/env python3
+"""Executive report: turns bot-access + readiness crawl data into a printable HTML report.
+
+Web app: "Executive report" button on the Site Readiness tab (after a crawl).
+CLI:     python3 report.py https://www.methodist.edu --max 500 --out report.html
+Standard library only. Save as PDF with the browser's Print dialog.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import re
+import sys
+import threading
+from html import escape as e
+from urllib.parse import urlsplit
+
+from readiness import CHECKS, Crawl
+
+LABEL = {c[0]: c[1] for c in CHECKS}
+CRITICAL = {c[0] for c in CHECKS if c[3]}
+
+# check id -> (why it matters, what to do, owner)
+ISSUES = {
+    "http_ok": ("Broken or erroring pages cannot be read or cited.", "Fix or redirect every page that does not return HTTP 200, and update links pointing to it.", "Web team"),
+    "ai_search_allowed": ("Blocked pages cannot appear in ChatGPT, Claude, Perplexity or Copilot answers.", "Remove robots.txt rules that block AI search and user-fetch bots from these pages.", "Web team"),
+    "indexable": ("noindex or noai tags tell AI systems not to use the page.", "Remove noindex, none, noai and noimageai from pages that should be found.", "Web team"),
+    "server_text": ("Most AI crawlers do not run JavaScript, so they see these pages as nearly empty.", "Render the main page content in the HTML the server sends (server-side rendering), not only through JavaScript.", "Web team"),
+    "title": ("The title is the main label AI systems show and match on.", "Write a unique title of 10-70 characters for every page.", "Content owners"),
+    "meta_desc": ("The description is often used as the summary of the page.", "Write a unique 50-160 character description for every page.", "Content owners"),
+    "one_h1": ("A single main heading tells AI systems what the page is about.", "Use exactly one H1 per page.", "Content owners"),
+    "headings": ("Sections with subheadings are easier to extract and quote accurately.", "Break content into sections with H2 subheadings.", "Content owners"),
+    "canonical": ("Without a canonical URL, duplicate versions of a page compete with each other.", "Add a canonical link to every page in the site template.", "Web team"),
+    "structured_data": ("Structured data states facts (programs, events, contacts) in a form machines read reliably.", "Add schema.org JSON-LD to page templates (organization, programs, events, breadcrumbs).", "Web team"),
+    "schema_valid": ("Invalid structured data is ignored entirely.", "Fix the JSON-LD errors on the listed pages.", "Web team"),
+    "official_name": ("Pages that never state the official name are harder to attribute to the school.", "Include the official name in page titles or site name tags (template change).", "Web team"),
+    "no_former_name": ("The former name can cause AI answers to use an outdated identity.", "Replace the former name on current pages. Keep it only on history pages.", "Content owners"),
+    "current_dates": ("Pages naming past terms get cited as current, producing wrong answers about dates and costs.", "Update or retire pages that name past academic years or terms.", "Content owners"),
+    "lang": ("The language attribute helps AI systems process the page correctly.", "Set the lang attribute in the site template.", "Web team"),
+    "open_graph": ("Open Graph tags supply the title and summary when a page is shared or previewed.", "Add og:title and og:description to the site template.", "Web team"),
+    "img_alt": ("Images without alt text are invisible to AI systems and to screen readers.", "Add descriptive alt text to images.", "Content owners"),
+    "freshness": ("Without a date signal, AI systems cannot tell whether information is current.", "Send a Last-Modified header or add dateModified to page structured data.", "Web team"),
+    "fast": ("Slow pages may time out for crawlers.", "Improve server response time to under 2 seconds.", "Web team"),
+}
+
+PRIORITY_RE = re.compile(
+    r"admission|apply|tuition|cost|financial[-_]?aid|scholarship|academics?|programs?|majors?|degrees?|"
+    r"deadline|calendar|visit|contact|about|graduate|undergraduate", re.I)
+
+
+def _pct(a: int, b: int) -> int:
+    return round(100 * a / b) if b else 0
+
+
+def _grade_pill(g: str) -> str:
+    cls = {"Ready": "ok", "Needs work": "warn", "Not ready": "bad"}.get(g, "")
+    return f'<span class="pill {cls}">{e(g)}</span>'
+
+
+def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | None) -> str:
+    s = summary
+    n = s["pages"]
+    g = s["grades"]
+    host = urlsplit(s["start"]).netloc
+    d = dt.date.today()
+    today = f"{d:%B} {d.day}, {d.year}"
+    org = s.get("organization") or {"passed": 0, "total": 0, "rows": [], "snippet": ""}
+    org_ok = org["total"] > 0 and org["passed"] == org["total"]
+
+    # ---- bot access
+    bots = (access or {}).get("bots", [])
+    scanned = (access or {}).get("pages_scanned", 0)
+
+    def blocked(b):
+        return (b["robots_txt"] == "blocked" or (scanned and b.get("site_allowed", 1) == 0)
+                or str(b["http_probe"]).startswith(("blocked", "challenged")))
+
+    def partial(b):
+        return scanned and 0 < b.get("site_allowed", scanned) < scanned
+
+    search = [b for b in bots if b["purpose"] in ("search", "user")]
+    training = [b for b in bots if b["purpose"] == "training"]
+    search_blocked = [b for b in search if blocked(b)]
+    training_blocked = [b for b in training if blocked(b)]
+    search_partial = [b for b in search if not blocked(b) and partial(b)]
+
+    # ---- priority pages
+    prio = [p for p in pages if p["url"].rstrip("/") == s["start"].rstrip("/") or PRIORITY_RE.search(urlsplit(p["url"]).path)]
+    prio.sort(key=lambda p: (p["score"], p["url"]))
+    prio_ready = sum(1 for p in prio if p["grade"] == "Ready")
+
+    # ---- verdict (fixed rules, stated in the report)
+    pct_ready = _pct(g["Ready"], n)
+    if pct_ready >= 80 and not search_blocked and org_ok:
+        verdict, vcls = "Ready", "ok"
+    elif pct_ready >= 50 and not search_blocked:
+        verdict, vcls = "Partially ready", "warn"
+    else:
+        verdict, vcls = "Not ready", "bad"
+
+    # ---- key findings
+    findings = []
+    if access:
+        if search_blocked:
+            findings.append(f"<b>{len(search_blocked)} of {len(search)} AI search and answer bots are blocked</b>: "
+                            + e(", ".join(b["bot"] for b in search_blocked)) + ". These pages cannot appear in their answers.")
+        else:
+            findings.append(f"<b>All {len(search)} AI search and answer bots can reach the site</b> (ChatGPT, Claude, Perplexity, Copilot and others).")
+        if search_partial:
+            findings.append(f"{len(search_partial)} AI search bots are blocked from part of the site by robots.txt.")
+        findings.append(f"{len(training_blocked)} of {len(training)} AI training bots are blocked. This is a policy choice, not a readiness defect.")
+    else:
+        findings.append("Bot access was not checked.")
+    findings.append(f"<b>{pct_ready}% of {n} pages are Ready</b> for AI search. {g['Needs work']} need work and {g['Not ready']} are not ready.")
+    fails = sorted((c for c in s["check_failures"] if c["failed"]), key=lambda c: (-c["critical"], -c["failed"]))
+    crit = [c for c in fails if c["critical"]]
+    if crit:
+        findings.append("Critical issues: " + "; ".join(f"{e(c['label'])} on {c['failed']} page(s)" for c in crit) + ".")
+    top = sorted(fails, key=lambda c: -c["failed"])[:1]
+    if top:
+        findings.append(f"Most common issue: <b>{e(top[0]['label'])}</b>, failing on {top[0]['pct']}% of pages.")
+    if prio:
+        findings.append(f"<b>{prio_ready} of {len(prio)} priority pages</b> (admissions, tuition, aid, programs, contact) are Ready.")
+    findings.append(f"Homepage organization schema: <b>{org['passed']} of {org['total']}</b> checks pass." if org["total"] else "Homepage organization schema was not checked.")
+    pc = s["pdf_counts"]
+    if pc["total"]:
+        findings.append(f"{pc['total']} PDFs are linked. {pc['key_facts']} hold key facts that AI crawlers may not read; {pc['past_terms']} name past terms.")
+
+    # ---- actions (ranked: bot access, critical, then by pages affected)
+    actions = []
+    if search_blocked:
+        actions.append(("Unblock AI search and answer bots", f"{len(search_blocked)} bots blocked: {', '.join(b['bot'] for b in search_blocked)}.",
+                        "Remove the robots.txt rules or firewall/CDN rules that block them.", "Web team", "Site-wide"))
+    for c in fails[:6]:
+        why, fix, owner = ISSUES[c["id"]]
+        actions.append((("Critical: " if c["critical"] else "") + c["label"], why, fix, owner, f"{c['failed']} page(s), {c['pct']}%"))
+    if org["total"] and not org_ok:
+        actions.append(("Fix homepage organization schema", "AI systems use it to identify the school correctly.",
+                        "Paste the generated snippet (app: Site Readiness tab, Structured data card) into the homepage after replacing every REPLACE-WITH value.", "Web team", "Homepage"))
+    if pc["key_facts"]:
+        actions.append(("Move key facts out of PDFs", "Most AI crawlers read PDFs poorly or not at all.",
+                        "Publish tuition, aid, deadline, requirement and catalog facts as web page text.", "Content owners", f"{pc['key_facts']} PDF(s)"))
+    if pc["past_terms"]:
+        actions.append(("Retire outdated PDFs", "Outdated PDFs get cited as current.",
+                        "Update, replace or unlink PDFs that name past terms.", "Content owners", f"{pc['past_terms']} PDF(s)"))
+
+    def bot_row(b):
+        st = "Blocked" if blocked(b) else ("Partly blocked" if partial(b) else "Allowed")
+        cls = {"Blocked": "bad", "Partly blocked": "warn", "Allowed": "ok"}[st]
+        cov = f"{_pct(b['site_allowed'], scanned)}%" if scanned and "site_allowed" in b else "-"
+        return (f"<tr><td>{e(b['bot'])}</td><td>{e(b['operator'])}</td><td>{e(b['purpose'])}</td>"
+                f"<td><span class='pill {cls}'>{st}</span></td><td>{cov}</td><td>{e(b['http_probe'])}</td></tr>")
+
+    # ---- HTML row helpers (kept out of the template for Python 3.9 compatibility)
+    def fail_pills(p):
+        out = "".join('<span class="pill %s">%s</span>' % ("bad" if f in CRITICAL else "warn", e(LABEL[f])) for f in p["failed"])
+        return out or "none"
+
+    def prio_row(p):
+        crit = [LABEL[f] for f in p["failed"] if f in CRITICAL]
+        txt = "%d failed" % len(p["failed"]) if p["failed"] else "none"
+        if crit:
+            txt += ' · <span class="crit">critical: %s</span>' % e(", ".join(crit))
+        return "<tr><td>%d</td><td>%s</td><td class='url'>%s</td><td>%s</td></tr>" % (
+            p["score"], _grade_pill(p["grade"]), e(urlsplit(p["url"]).path or "/"), txt)
+
+    def check_row(c):
+        crit_tag = ' <span class="crit">(critical)</span>' if c["critical"] else ""
+        return "<tr class='sm'><td class='nw'><b>%s</b>%s</td><td>%s</td><td class='nw'>%d (%d%%)</td></tr>" % (e(c["label"]), crit_tag, e(c["rule"]), c["failed"], c["pct"])
+
+    def org_row(r):
+        cls, txt = ("ok", "pass") if r["pass"] else ("bad", "fail")
+        return "<tr><td>%s</td><td><span class='pill %s'>%s</span></td><td class='url'>%s</td></tr>" % (e(r["label"]), cls, txt, e(r["found"]))
+
+    def pdf_row(p):
+        return "<tr><td class='url'>%s</td><td>%s</td><td>%s</td><td>%d page(s)</td></tr>" % (
+            e(urlsplit(p["url"]).path.split("/")[-1]), e(", ".join(p["topics"])) or "-", e(", ".join(p["past_terms"])) or "-", p["linked_from_count"])
+
+    def action_row(i, a):
+        return "<tr><td>%d</td><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>" % ((i,) + tuple(e(x) for x in a))
+
+    prio_html = "".join(prio_row(p) for p in prio[:10]) or '<tr><td colspan="4">No priority pages found in this crawl.</td></tr>'
+    checks_html = "".join(check_row(c) for c in s["check_failures"])
+    org_html = "".join(org_row(r) for r in org["rows"] if not r["pass"]) or '<tr><td colspan="3">All checks pass.</td></tr>'
+    pdf_html = "".join(pdf_row(p) for p in [x for x in pdfs if x["topics"] or x["past_terms"]][:10]) or '<tr><td colspan="4">None flagged.</td></tr>'
+    actions_html = "".join(action_row(i, a) for i, a in enumerate(actions, 1)) or '<tr><td colspan="6">No actions needed.</td></tr>'
+    findings_html = "".join("<li>%s</li>" % x for x in findings)
+    snippet_html = ('<p class="note">A ready-to-paste fix is generated on the Site Readiness tab of the app (Structured data card).</p>') if org["total"] and not org_ok else ""
+    org_passed_txt = "%d of %d checks pass." % (org["passed"], org["total"])
+    skipped_txt = ", ".join("%s (%d)" % (k, v) for k, v in s["skipped"].items()) or "none"
+    stopped_txt = "crawl stopped early; " if s["state"] == "stopped" else ""
+    search_tile = ("%d/%d" % (len(search) - len(search_blocked), len(search))) if access else "-"
+    prio_tile = ("%d/%d" % (prio_ready, len(prio))) if prio else "-"
+    verdict_txt = {
+        "Ready": "The site is ready to be found and cited by AI search.",
+        "Partially ready": "The site can be found by AI search, but many pages need fixes before they are reliably cited.",
+        "Not ready": "AI search cannot reliably find or cite the site. Fix the critical items below first.",
+    }[verdict]
+    if access:
+        order = {"search": 0, "user": 1}
+        tb = ", ".join(b["bot"] for b in training_blocked) or "none"
+        training_line = ('<p><b>Training bots:</b> %d of %d blocked (%s). Blocking training is a policy choice and does not affect AI search visibility.</p>'
+                         % (len(training_blocked), len(training), e(tb)))
+        def names(lst, cls):
+            return "".join('<span class="pill %s">%s</span>' % (cls, e(x["bot"] + " (" + x["operator"] + ")")) for x in lst) or '<span class="note">none</span>'
+        allowed = [b for b in search if not blocked(b) and not partial(b)]
+        bots_html = (
+            '<table><tbody>'
+            '<tr><td class="nw"><b>Blocked</b><br><span class="note">%d bots</span></td><td>%s</td></tr>'
+            '<tr><td class="nw"><b>Partly blocked</b><br><span class="note">%d bots</span></td><td>%s</td></tr>'
+            '<tr><td class="nw"><b>Allowed</b><br><span class="note">%d bots</span></td><td>%s</td></tr>'
+            '</tbody></table>' % (len(search_blocked), names(search_blocked, "bad"), len(search_partial), names(search_partial, "warn"),
+                                  len(allowed), names(allowed, "ok"))
+            + training_line
+            + '<p class="note">AI search and answer bots only. Blocked: robots.txt blocks the homepage, robots.txt blocks every sampled sitemap page, '
+              'or a live request using the bot&#39;s identity was refused. %s '
+              'Blocks that verify the bot&#39;s network address (e.g. Cloudflare bot management) cannot be detected this way. '
+              'Per-bot detail is on the Bot Access tab of the app.</p>' % (
+                ("Partly blocked: robots.txt blocks some of the %d sampled sitemap pages." % scanned) if scanned
+                else "No sitemap pages were found, so partial blocks were not measured."))
+    else:
+        bots_html = "<p>Not checked.</p>"
+
+    html = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Readiness Report</title>
+<style>
+  :root {{ --fg:#1b1b1f; --muted:#5f6068; --line:#dcdce2; --ok:#1a7f37; --okbg:#e7f6ec; --bad:#b42318; --badbg:#fdecea; --warn:#8a5a00; --warnbg:#fff4d6; --accent:#2f5bd3; }}
+  * {{ box-sizing:border-box; }}
+  body {{ margin:0; background:#fff; color:var(--fg); font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif; }}
+  main {{ max-width:900px; margin:0 auto; padding:32px 24px 48px; }}
+  h1 {{ font-size:26px; margin:0; }}
+  h2 {{ font-size:17px; margin:28px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--fg); }}
+  .meta {{ color:var(--muted); margin:4px 0 20px; }}
+  .verdict {{ display:flex; gap:16px; align-items:center; padding:16px 18px; border-radius:10px; margin-bottom:16px; }}
+  .verdict.ok {{ background:var(--okbg); }} .verdict.warn {{ background:var(--warnbg); }} .verdict.bad {{ background:var(--badbg); }}
+  .verdict b.v {{ font-size:22px; }}
+  .verdict.ok b.v {{ color:var(--ok); }} .verdict.warn b.v {{ color:var(--warn); }} .verdict.bad b.v {{ color:var(--bad); }}
+  .tiles {{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }}
+  .tile {{ border:1px solid var(--line); border-radius:8px; padding:10px 12px; }}
+  .tile b {{ display:block; font-size:24px; }}
+  .tile span {{ color:var(--muted); font-size:12px; }}
+  ul.f li {{ margin-bottom:6px; }}
+  table {{ width:100%; border-collapse:collapse; font-size:13px; }}
+  th,td {{ text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }}
+  th {{ font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }}
+  td.url {{ word-break:break-all; }}
+  .pill {{ display:inline-block; padding:1px 7px; border-radius:999px; font-size:11px; font-weight:600; white-space:nowrap; margin:1px 2px 1px 0; }}
+  .ok {{ color:var(--ok); background:var(--okbg); }} .bad {{ color:var(--bad); background:var(--badbg); }} .warn {{ color:var(--warn); background:var(--warnbg); }}
+  .note {{ color:var(--muted); font-size:12px; }}
+  pre {{ background:#f5f5f7; border:1px solid var(--line); border-radius:6px; padding:10px; font-size:11px; white-space:pre-wrap; word-break:break-all; }}
+  .bar {{ position:sticky; top:0; background:#fff; border-bottom:1px solid var(--line); padding:10px 24px; text-align:right; }}
+  .bar button {{ padding:8px 16px; border:0; border-radius:6px; background:var(--accent); color:#fff; font-weight:600; cursor:pointer; }}
+  .crit {{ color:var(--bad); font-weight:600; }}
+  td.nw {{ white-space:nowrap; }}
+  tr.sm td {{ font-size:12px; padding:4px 8px; }}
+  @media (max-width:640px) {{ .tiles {{ grid-template-columns:repeat(2,1fr); }} }}
+  @media print {{ body {{ font-size:11.5px; }} table {{ font-size:10.5px; }} tr.sm td {{ font-size:10px; padding:3px 6px; }} th,td {{ padding:4px 6px; }} h2 {{ margin:18px 0 8px; font-size:15px; }} .bar {{ display:none; }} main {{ padding:0; max-width:none; }} h2 {{ break-after:avoid; }} tr {{ break-inside:avoid; }} @page {{ margin:0.6in; }} }}
+</style></head><body>
+<div class="bar"><button onclick="window.print()">Print / Save as PDF</button></div>
+<main>
+<h1>AI Readiness Report</h1>
+<div class="meta">{e(host)} · {e(today)} · {n} pages checked · academic year {e(s['academic_year'])}</div>
+
+<div class="verdict {vcls}"><b class="v">{verdict}</b>
+<div>{verdict_txt}</div></div>
+
+<div class="tiles">
+  <div class="tile"><b>{pct_ready}%</b><span>pages Ready</span></div>
+  <div class="tile"><b>{s['avg_score']}</b><span>average page score (of 100)</span></div>
+  <div class="tile"><b>{search_tile}</b><span>AI search bots allowed</span></div>
+  <div class="tile"><b>{prio_tile}</b><span>priority pages Ready</span></div>
+</div>
+
+<h2>Key findings</h2>
+<ul class="f">{findings_html}</ul>
+
+<h2>Recommended actions</h2>
+<table><thead><tr><th>#</th><th>Action</th><th>Why it matters</th><th>What to do</th><th>Owner</th><th>Scope</th></tr></thead><tbody>
+{actions_html}
+</tbody></table>
+
+<h2>Priority pages</h2>
+<p class="note">Homepage plus pages whose address mentions admissions, apply, tuition, cost, financial aid, scholarships, academics, programs, majors, degrees, deadlines, calendar, visit, contact, about, graduate or undergraduate. Worst 10 shown; the Pages CSV has the full list and every failed check.</p>
+<table><thead><tr><th>Score</th><th>Grade</th><th style="width:38%">Page</th><th>Failed checks</th></tr></thead><tbody>
+{prio_html}
+</tbody></table>
+
+<h2>AI bot access</h2>
+{bots_html}
+
+<h2>Method</h2>
+<p class="note">
+<b>Verdict rules.</b> Ready: at least 80% of pages Ready, no AI search bot blocked, and every homepage organization schema check passes. Partially ready: at least 50% of pages Ready and no AI search bot blocked. Not ready: anything else.<br>
+<b>Page grades.</b> Score = checks passed ÷ {len(CHECKS)} × 100. Ready: score 80 or higher and no critical fail. Needs work: score 50-79 and no critical fail. Not ready: score below 50 or any critical fail.<br>
+<b>Scope.</b> Started at {e(s['start'])}; {n} pages checked (limit {s['max_pages']}); {stopped_txt}skipped: {e(skipped_txt)}.
+"Past" means before the current academic year ({e(s['academic_year'])}), which starts July 1. PDFs are judged by file name and link text only.
+</p>
+<h2>Appendix A: All checks</h2>
+<table><thead><tr><th>Check</th><th>Pass when</th><th>Pages failing</th></tr></thead><tbody>
+{checks_html}
+</tbody></table>
+
+<h2>Appendix B: Homepage organization schema</h2>
+<p class="note">{org_passed_txt} Failing checks shown.</p>
+<table><thead><tr><th>Check</th><th>Result</th><th>Found</th></tr></thead><tbody>
+{org_html}
+</tbody></table>
+{snippet_html}
+
+<h2>Appendix C: PDFs to review</h2>
+<p class="note">Up to 10 shown, past terms first; the PDFs CSV has the full list.</p>
+<table><thead><tr><th>PDF</th><th>Key facts</th><th>Past terms</th><th>Linked from</th></tr></thead><tbody>
+{pdf_html}
+</tbody></table>
+
+</main></body></html>"""
+    return html
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Crawl a site and write an executive AI readiness report (HTML).")
+    ap.add_argument("url")
+    ap.add_argument("--max", type=int, default=500)
+    ap.add_argument("--subdomains", action="store_true")
+    ap.add_argument("--exclude", default="")
+    ap.add_argument("--out", default="ai-readiness-report.html")
+    a = ap.parse_args()
+    from ai_bot_check import run
+    c = Crawl(a.url, a.max, a.subdomains, exclude=a.exclude)
+    t = threading.Thread(target=c.run, daemon=True)
+    t.start()
+    try:
+        while t.is_alive():
+            t.join(2)
+            print(f"\rcrawled {len(c.results)}  queued {c.queued}", end="", file=sys.stderr)
+    except KeyboardInterrupt:
+        c.stop()
+        t.join()
+    print("\nchecking bot access…", file=sys.stderr)
+    access = run(c.start, probe=True, scan=200)
+    with open(a.out, "w", encoding="utf-8") as f:
+        f.write(build(c.summary(), list(c.results), c.pdf_report(), access))
+    print(f"wrote {a.out}", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
