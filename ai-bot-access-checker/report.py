@@ -395,6 +395,7 @@ def main() -> int:
     ap.add_argument("--subdomains", action="store_true")
     ap.add_argument("--exclude", default="")
     ap.add_argument("--out", default="ai-readiness-report.html")
+    ap.add_argument("--bundle", help="also write a results bundle zip to this path")
     a = ap.parse_args()
     from ai_bot_check import run
     c = Crawl(a.url, a.max, a.subdomains, exclude=a.exclude)
@@ -412,6 +413,11 @@ def main() -> int:
     with open(a.out, "w", encoding="utf-8") as f:
         f.write(build(c.summary(), list(c.results), c.pdf_report(), access))
     print(f"wrote {a.out}", file=sys.stderr)
+    if a.bundle:
+        from bundle import make_bundle
+        with open(a.bundle, "wb") as f:
+            f.write(make_bundle(c, access))
+        print(f"wrote {a.bundle}", file=sys.stderr)
     return 0
 
 

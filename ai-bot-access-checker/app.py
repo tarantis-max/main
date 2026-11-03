@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import threading
+import time
 import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -19,8 +20,15 @@ from urllib.parse import parse_qs, urlsplit
 from ai_bot_check import run
 from readiness import CHECKS, DEFAULTS, Crawl
 from report import build as build_report
+from bundle import make_bundle
 
 JOBS: dict[str, Crawl] = {}
+
+
+def safe_name(s: str) -> str:
+    """File-name-safe on Windows, macOS and Linux."""
+    import re
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", s).strip("-") or "site"
 
 HERE = Path(__file__).resolve().parent
 
@@ -60,10 +68,10 @@ class Handler(BaseHTTPRequestHandler):
                           max_pages=max(1, min(int((q.get("max") or ["500"])[0]), 20000)),
                           subdomains=(q.get("subdomains") or ["0"])[0] == "1",
                           exclude=(q.get("exclude") or [""])[0],
-                          official_name=(q.get("name") or [""])[0],
-                          city=(q.get("city") or [""])[0],
-                          region=(q.get("state") or [""])[0],
-                          former_names=(q.get("former") or [""])[0].split(","))
+                          official_name=q["name"][0] if "name" in q else None,
+                          city=q["city"][0] if "city" in q else None,
+                          region=q["state"][0] if "state" in q else None,
+                          former_names=q["former"][0].split(",") if "former" in q else None)
             except Exception as e:
                 self._send(400, json.dumps({"error": str(e)}).encode(), "application/json")
                 return
@@ -71,6 +79,27 @@ class Handler(BaseHTTPRequestHandler):
             JOBS[jid] = c
             threading.Thread(target=c.run, daemon=True).start()
             self._send(200, json.dumps({"id": jid}).encode(), "application/json")
+        elif u.path == "/api/bundle":
+            c = JOBS.get((parse_qs(u.query).get("id") or [""])[0])
+            if not c:
+                self._send(404, b"Unknown crawl. Run a crawl first.", "text/plain")
+                return
+            if c.state == "running":
+                self._send(409, b"The crawl is still running. Stop it or wait for it to finish.", "text/plain")
+                return
+            try:
+                if getattr(c, "access", None) is None:
+                    c.access = run(c.start, probe=True, scan=200)
+                body = make_bundle(c, c.access)
+                stamp = time.strftime("%Y%m%d-%H%M")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Disposition", f'attachment; filename="ai-readiness-results-{safe_name(c.host)}-{stamp}.zip"')
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception as e:
+                self._send(500, f"Bundle failed: {type(e).__name__}: {e}".encode(), "text/plain")
         elif u.path == "/api/report":
             c = JOBS.get((parse_qs(u.query).get("id") or [""])[0])
             if not c:
@@ -98,7 +127,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 pdf = u.path.endswith("pdfcsv")
                 body = (c.pdf_csv() if pdf else c.to_csv()).encode()
-                name = f"ai-readiness-{'pdfs' if pdf else 'pages'}-{c.host}.csv"
+                name = f"ai-readiness-{'pdfs' if pdf else 'pages'}-{safe_name(c.host)}.csv"
                 self.send_header("Content-Type", "text/csv; charset=utf-8")
                 self.send_header("Content-Disposition", f'attachment; filename="{name}"')
                 self.send_header("Content-Length", str(len(body)))

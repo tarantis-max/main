@@ -87,6 +87,21 @@ Verdict rules:
 - **Partially ready**: at least 50% of pages Ready and no AI search bot blocked.
 - **Not ready**: anything else.
 
+## Results bundle
+
+After a crawl finishes (or is stopped), click **Download results bundle** on the Site Readiness tab. It saves one zip:
+
+| File | Contents |
+|---|---|
+| manifest.json | Tool version, date, start URL, crawl limits, institution settings, deny list, check rules |
+| summary.json | Grades, check failure counts, organization schema, PDF counts |
+| pages.json / pages.csv | Every page with every check result |
+| pdfs.csv | Linked PDFs with key-fact and past-term flags |
+| bot-access.json | Per-bot robots.txt, sitemap coverage, live probe and policy results |
+| report.html | Executive report |
+
+The bundle contains only public website data. Use it to share results or to get help tuning the checks.
+
 ## Command line
 
 ```bash
@@ -98,5 +113,5 @@ python3 readiness.py https://www.methodist.edu --max 2000 --csv pages.csv --pdf-
 ```
 
 ```bash
-python3 report.py https://www.methodist.edu --max 500 --out report.html
+python3 report.py https://www.methodist.edu --max 500 --out report.html --bundle results.zip
 ```
