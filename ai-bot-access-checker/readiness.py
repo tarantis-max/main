@@ -156,6 +156,7 @@ class PageParser(HTMLParser):
         self.imgs_alt = 0
         self.lang = ""
         self.links: list[str] = []
+        self.logos: list[str] = []
         self.anchors: list[tuple[str, str]] = []
         self.jsonld: list[str] = []
         self.words = 0
@@ -191,6 +192,9 @@ class PageParser(HTMLParser):
             self.imgs += 1
             if a.get("alt", "").strip():
                 self.imgs_alt += 1
+            src = a.get("src") or a.get("data-src") or ""
+            if src and "logo" in " ".join((src, a.get("alt", ""), a.get("class", ""), a.get("id", ""))).lower():
+                self.logos.append(src)
         if tag == "script" and "ld+json" in a.get("type", "").lower():
             self._in_jsonld = True
             self._buf = []
@@ -351,8 +355,11 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
         absu = urljoin(url, href.strip())
         if urlsplit(absu).path.lower().endswith(".pdf"):
             pdfs.append((urlunsplit(urlsplit(absu)._replace(fragment="")), atext))
-    social = sorted({urljoin(url, h).split("?")[0] for h in p.links
-                     if any(urlsplit(urljoin(url, h)).netloc.lower().removeprefix("www.").endswith(s) for s in SOCIAL)})
+    social = sorted({clean_profile(urljoin(url, h)) for h in p.links
+                     if any(urlsplit(urljoin(url, h)).netloc.lower().removeprefix("www.").endswith(s) for s in SOCIAL)} - {""})
+    # logo: first <img> whose src/alt/class/id mentions "logo"; prefer SVG/PNG
+    logos = [urljoin(url, x) for x in p.logos]
+    logo = next((x for x in logos if urlsplit(x).path.lower().endswith((".svg", ".png"))), logos[0] if logos else "")
 
     return {
         "url": url,
@@ -381,8 +388,24 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
         "_pdfs": pdfs,
         "_objs": objs,
         "_social": social,
-        "_meta": {"og:image": p.meta.get("og:image", "")},
+        "_meta": {"logo": logo},
     }
+
+
+def clean_profile(u: str) -> str:
+    """Reduce a social link to the profile URL; drop share/intent links."""
+    sp = urlsplit(u)
+    host = sp.netloc.lower().removeprefix("www.")
+    parts = [x for x in sp.path.split("/") if x]
+    if not parts or parts[0].lower() in ("sharer", "sharer.php", "share", "intent", "home", "hashtag", "watch", "p", "reel", "status"):
+        return ""
+    if host.endswith("flickr.com") and parts[0] == "photos" and len(parts) >= 2:
+        parts = parts[:2]
+    elif host.endswith("linkedin.com") and parts[0] in ("school", "company", "in") and len(parts) >= 2:
+        parts = parts[:2]
+    elif host.endswith(("facebook.com", "instagram.com", "twitter.com", "x.com", "tiktok.com", "pinterest.com")):
+        parts = parts[:1]
+    return f"https://{sp.netloc.lower()}/" + "/".join(parts) + ("/" if host.endswith(("flickr.com", "linkedin.com")) else "")
 
 
 # ---------------------------------------------------------------- site-level reports
@@ -414,7 +437,8 @@ def org_report(home: dict | None, cfg: dict, origin: str) -> dict:
         "@id": origin + "/#organization",
         "name": cfg["official_name"],
         "url": origin + "/",
-        "logo": _str(org.get("logo")) or (home or {}).get("og_image") or "REPLACE-WITH-FULL-URL-OF-LOGO-IMAGE",
+        # never the og:image: that is a social share image, not a logo
+        "logo": _str(org.get("logo")) or (home or {}).get("logo") or "REPLACE-WITH-FULL-URL-OF-LOGO-IMAGE",
         "address": {
             "@type": "PostalAddress",
             "streetAddress": _str(addr.get("streetAddress")) or "REPLACE-WITH-STREET-ADDRESS",
@@ -437,6 +461,8 @@ def org_report(home: dict | None, cfg: dict, origin: str) -> dict:
         "rows": [{"label": a, "pass": b, "found": c} for a, b, c in rows],
         "passed": sum(1 for _, b, _ in rows if b),
         "total": len(rows),
+        "has_org": bool(org),
+        "logo_source": "existing schema" if org.get("logo") else ("homepage <img> named logo" if (home or {}).get("logo") else "not found"),
         "snippet": '<script type="application/ld+json">\n' + json.dumps(snippet, indent=2) + "\n</script>",
     }
 
@@ -567,7 +593,7 @@ class Crawl:
         for t in page["detail"]["schema_types"]:
             self.schema_types[t] += 1
         if page.pop("_is_home", False):
-            self.home = {"url": page["url"], "objs": objs, "social": social, "og_image": meta.get("og:image", "")}
+            self.home = {"url": page["url"], "objs": objs, "social": social, "logo": meta.get("logo", "")}
         for u, t in page.pop("_pdfs"):
             d = self.pdfs.setdefault(u, {"texts": set(), "pages": [], "count": 0})
             d["texts"].add(t)

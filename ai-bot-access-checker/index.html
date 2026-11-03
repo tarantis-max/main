@@ -318,10 +318,11 @@ function orgCard(s) {
       <thead><tr><th>Check</th><th>Result</th><th>Found</th></tr></thead>
       <tbody>${o.rows.map(r => `<tr><td class="nw">${esc(r.label)}</td><td>${r.pass ? '<span class="pill ok">pass</span>' : '<span class="pill bad">fail</span>'}</td><td class="url">${esc(r.found)}</td></tr>`).join("")}</tbody>
     </table></div>
-    ${o.passed < o.total ? `<div style="margin-top:12px"><b>Fix:</b> add this to the homepage &lt;head&gt;, replacing the existing organization schema. Replace every <code>REPLACE-WITH</code> value first. Review the sameAs links: they were collected from the homepage.
+    ${o.passed < o.total ? `<div style="margin-top:12px"><b>Fix:</b> add this to the homepage &lt;head&gt;${o.has_org ? ", replacing the existing organization schema" : ""}. Replace every <code>REPLACE-WITH</code> value first. Logo: ${o.logo_source === "not found" ? "not found, fill it in" : "taken from the " + esc(o.logo_source) + ", confirm it is the official logo"}. sameAs: collected from homepage links, confirm each is an official account.
       <button class="sec" id="copysnip" type="button" style="margin-left:8px;padding:4px 10px">Copy</button>
       <pre class="snip">${esc(o.snippet)}</pre></div>` : ""}
     <div style="margin-top:12px"><b>Schema types found across the site</b> <span class="muted">(type · pages)</span><br>${types}</div>
+    ${s.schema_types.length ? "" : `<div class="note" style="margin-top:8px"><b>No structured data on any crawled page.</b> To confirm: open the homepage, view the page source, and search for <code>ld+json</code>. On WordPress, an SEO plugin (e.g. Yoast SEO or Rank Math) can add organization, breadcrumb and page schema site-wide.</div>`}
   </div>`;
 }
 
