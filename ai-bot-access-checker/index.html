@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Access & Readiness</title>
+<style>
+  :root { --bg:#f7f7f8; --card:#fff; --fg:#1b1b1f; --muted:#666; --line:#e3e3e8;
+          --ok:#1a7f37; --okbg:#e7f6ec; --bad:#b42318; --badbg:#fdecea; --warn:#9a6700; --warnbg:#fff4d6; --accent:#2f5bd3; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111214; --card:#1b1c1f; --fg:#e8e8ea; --muted:#9a9aa2; --line:#2c2d31;
+            --ok:#4ac26b; --okbg:#12261a; --bad:#ff7b72; --badbg:#2d1414; --warn:#e3b341; --warnbg:#2b2210; --accent:#7aa2ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
+  main { max-width:1200px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  h2 { font-size:16px; margin:0 0 10px; }
+  p.sub { color:var(--muted); margin:0 0 16px; }
+  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:20px; }
+  .tabs button { background:none; color:var(--muted); border:0; border-bottom:2px solid transparent; border-radius:0; padding:10px 14px; font-weight:600; }
+  .tabs button.on { color:var(--fg); border-bottom-color:var(--accent); }
+  form { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:20px; }
+  input[type=text], input[type=number] { padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg); font-size:15px; }
+  input.url { flex:1 1 320px; }
+  input[type=number] { width:100px; }
+  button { padding:10px 18px; border:0; border-radius:8px; background:var(--accent); color:#fff; font-weight:600; cursor:pointer; font-size:14px; }
+  button.sec { background:transparent; color:var(--fg); border:1px solid var(--line); }
+  button:disabled { opacity:.5; cursor:default; }
+  label.chk { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  .summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; }
+  .summary div b { display:block; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:600; }
+  .big { font-size:26px; font-weight:700; }
+  .tablewrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); white-space:nowrap; cursor:default; }
+  td.nw { white-space:nowrap; }
+  td.url { max-width:420px; word-break:break-all; }
+  tr.click { cursor:pointer; }
+  tr.detail td { background:var(--bg); font-size:13px; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:600; margin:1px 2px 1px 0; white-space:nowrap; }
+  .ok { color:var(--ok); background:var(--okbg); }
+  .bad { color:var(--bad); background:var(--badbg); }
+  .warn { color:var(--warn); background:var(--warnbg); }
+  .muted { color:var(--muted); }
+  .note { color:var(--muted); font-size:13px; }
+  .err { color:var(--bad); }
+  .filters { display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; align-items:center; }
+  .filters button { background:transparent; color:var(--fg); border:1px solid var(--line); padding:5px 12px; font-weight:500; }
+  .filters button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden; min-width:80px; }
+  .bar i { display:block; height:100%; background:var(--bad); }
+  .progress { height:6px; background:var(--line); border-radius:3px; overflow:hidden; margin-top:10px; }
+  .progress i { display:block; height:100%; background:var(--accent); transition:width .3s; }
+  code { font-size:12px; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>AI Access & Readiness</h1>
+  <p class="sub">Shows which AI crawlers can reach a site, and how ready each page is to be found and cited by AI search.</p>
+
+  <div class="tabs">
+    <button data-tab="access" class="on">Bot Access</button>
+    <button data-tab="ready">Site Readiness</button>
+  </div>
+
+  <!-- ===================== BOT ACCESS ===================== -->
+  <section id="tab-access">
+    <form id="f">
+      <input type="text" class="url" id="url" value="https://www.methodist.edu" required>
+      <label class="chk">Sitemap URLs to test <input type="number" id="scan" value="200" min="0" max="500"></label>
+      <label class="chk"><input type="checkbox" id="probe" checked> HTTP probe</label>
+      <button id="go">Check</button>
+    </form>
+    <div id="out"></div>
+    <div class="card note">
+      <b>How to read this</b><br>
+      <b>robots.txt</b>: Blocked means the site asks this bot not to crawl the page. Compliant bots obey; it is not enforcement. "via *" means the site has no rule for this bot by name, so the catch-all rule applies.<br>
+      <b>Site coverage</b>: the share of sampled sitemap URLs this bot may crawl under robots.txt.<br>
+      <b>HTTP probe</b>: the server's actual response to the bot's User-Agent, compared to a normal browser. It cannot detect IP-verified blocks (e.g. Cloudflare bot management), so "allowed" here does not prove the real bot gets through.<br>
+      <b>Directives</b>: <code>noai</code>, <code>noimageai</code>, <code>noindex</code> found in the X-Robots-Tag header or meta tags.<br>
+      <b>Purpose</b>: training = collects model training data. search = builds an AI search index. user = fetches a page live when a person asks the AI.<br>
+      Click a row to see the exact robots.txt rules applied to that bot.
+    </div>
+  </section>
+
+  <!-- ===================== READINESS ===================== -->
+  <section id="tab-ready" hidden>
+    <form id="rf">
+      <input type="text" class="url" id="rurl" value="https://www.methodist.edu" required>
+      <label class="chk">Max pages <input type="number" id="rmax" value="500" min="1" max="20000"></label>
+      <label class="chk"><input type="checkbox" id="rsub"> Include subdomains</label>
+      <input type="text" id="rexcl" placeholder="Exclude regex, e.g. /calendar|/events/" style="flex:0 1 260px">
+      <button id="rgo">Start crawl</button>
+      <button id="rstop" class="sec" type="button" disabled>Stop</button>
+      <button id="rcsv" class="sec" type="button" disabled>Download CSV</button>
+    </form>
+    <div id="rout"></div>
+    <div class="card note" id="rules"></div>
+  </section>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
+  $("#tab-access").hidden = b.dataset.tab !== "access";
+  $("#tab-ready").hidden = b.dataset.tab !== "ready";
+});
+
+function pill(text) {
+  const t = String(text);
+  const cls = t.startsWith("allowed") || t === "Ready" ? "ok"
+            : t.startsWith("blocked") || t === "challenged" || t === "Not ready" ? "bad"
+            : t.startsWith("error") || t === "Needs work" ? "warn" : "muted";
+  return `<span class="pill ${cls}">${esc(t)}</span>`;
+}
+
+/* ---------------- Bot access ---------------- */
+let report = null, filter = "all", open = new Set();
+
+function renderAccess() {
+  const r = report;
+  const bots = r.bots.filter(b => filter === "all" || b.purpose === filter);
+  const blocked = r.bots.filter(b => b.robots_txt === "blocked").length;
+  const scanned = r.pages_scanned;
+  $("#out").innerHTML = `
+    <div class="card summary">
+      <div><b>URL</b>${esc(r.url)}</div>
+      <div><b>robots.txt</b>${esc(r.robots_txt)}</div>
+      <div><b>Browser response</b>${esc(r.baseline_status)}</div>
+      <div><b>Blocked on this URL</b>${blocked} of ${r.bots.length} bots</div>
+      <div><b>Sitemap URLs tested</b>${scanned || "none"}${r.sitemaps.length ? ` <span class="muted">(${r.sitemaps.length} sitemap(s) in robots.txt)</span>` : ""}</div>
+      <div><b>Policy files</b>${Object.entries(r.policy_files).map(([k,v]) => `${esc(k)}: ${esc(v)}`).join("<br>")}</div>
+    </div>
+    <div class="card">
+      <div class="filters">
+        ${["all","training","search","user"].map(p => `<button data-p="${p}" class="${p===filter?"on":""}">${p}</button>`).join("")}
+      </div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Bot</th><th>Operator</th><th>Purpose</th><th>robots.txt (this URL)</th>${scanned ? "<th>Site coverage</th>" : ""}<th>HTTP probe</th><th>Directives</th></tr></thead>
+        <tbody>${bots.map(b => {
+          const cov = scanned ? Math.round(100 * b.site_allowed / scanned) : 0;
+          const covCls = cov === 100 ? "ok" : cov === 0 ? "bad" : "warn";
+          return `<tr class="click" data-bot="${esc(b.bot)}">
+            <td class="nw"><b>${esc(b.bot)}</b></td>
+            <td class="nw">${esc(b.operator)}</td>
+            <td>${esc(b.purpose)}</td>
+            <td class="nw">${pill(b.robots_txt)} ${b.robots_group === "*" ? '<span class="muted">via *</span>' : ""}</td>
+            ${scanned ? `<td class="nw"><span class="pill ${covCls}">${cov}%</span> <span class="muted">${b.site_allowed}/${scanned}</span></td>` : ""}
+            <td class="nw">${pill(b.http_probe)}</td>
+            <td>${b.page_directives.length ? b.page_directives.map(d => `<span class="pill bad">${esc(d)}</span>`).join("") : '<span class="muted">-</span>'}</td>
+          </tr>` + (open.has(b.bot) ? `<tr class="detail"><td colspan="7">
+            <b>robots.txt rules applied</b> (${b.robots_group === "*" ? "catch-all group *" : "group for " + esc(b.bot)}):
+            ${b.rules.length ? "<br><code>" + b.rules.map(esc).join("<br>") + "</code>" : " none, so everything is allowed"}
+            ${b.site_blocked_sample && b.site_blocked_sample.length ? `<br><b>Blocked sitemap URLs (first 10)</b><br><code>${b.site_blocked_sample.map(esc).join("<br>")}</code>` : ""}
+          </td></tr>` : "");
+        }).join("")}</tbody>
+      </table></div>
+    </div>`;
+  document.querySelectorAll("#out .filters button").forEach(b => b.onclick = () => { filter = b.dataset.p; renderAccess(); });
+  document.querySelectorAll("#out tr.click").forEach(tr => tr.onclick = () => {
+    const k = tr.dataset.bot; open.has(k) ? open.delete(k) : open.add(k); renderAccess();
+  });
+}
+
+$("#f").onsubmit = async e => {
+  e.preventDefault();
+  const btn = $("#go");
+  btn.disabled = true; btn.textContent = "Checking…";
+  $("#out").innerHTML = `<div class="card muted">Checking ${esc($("#url").value)}… (sitemap scans can take up to a minute)</div>`;
+  try {
+    const q = new URLSearchParams({ url: $("#url").value, probe: $("#probe").checked ? "1" : "0", scan: $("#scan").value || "0" });
+    const res = await fetch("/api/check?" + q);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    report = data; open = new Set(); renderAccess();
+  } catch (err) {
+    $("#out").innerHTML = `<div class="card err">Error: ${esc(err.message)}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = "Check";
+  }
+};
+
+/* ---------------- Readiness ---------------- */
+let CHECKS = [], job = null, timer = null, rdata = null, rfilter = "all", rcheck = "", ropen = new Set();
+
+fetch("/api/checks").then(r => r.json()).then(c => {
+  CHECKS = c;
+  $("#rules").innerHTML = `<b>Scoring rules</b><br>
+    Each page gets a pass or fail on every check. <b>Score</b> = checks passed ÷ ${c.length} × 100.<br>
+    <b>Ready</b>: score 80 or higher and no critical fails. <b>Needs work</b>: score 50-79 and no critical fails. <b>Not ready</b>: score below 50, or any critical fail.<br>
+    "AI search bots" means every bot with purpose search or user on the Bot Access tab. Training-bot blocks are reported but not scored, because blocking training is a policy choice.<br><br>
+    <table><thead><tr><th>Check</th><th>Pass when</th><th>Critical</th></tr></thead><tbody>
+    ${c.map(x => `<tr><td class="nw">${esc(x.label)}</td><td>${esc(x.rule)}</td><td>${x.critical ? "Yes" : "No"}</td></tr>`).join("")}
+    </tbody></table>
+    <br>The crawler follows robots.txt for itself, stays on the starting host (or subdomains if checked), skips non-HTML files, waits 0.25 s between requests per worker, and uses 4 workers.`;
+});
+
+function renderReady() {
+  const { summary: s, pages } = rdata;
+  const label = Object.fromEntries(CHECKS.map(c => [c.id, c.label]));
+  let list = pages.filter(p => (rfilter === "all" || p.grade === rfilter) && (!rcheck || p.failed.includes(rcheck)));
+  list.sort((a, b) => a.score - b.score);
+  const shown = list.slice(0, 500);
+  const pct = s.state === "running" ? Math.min(100, Math.round(100 * s.pages / Math.max(1, Math.min(s.max_pages, s.pages + s.queued)))) : 100;
+  $("#rout").innerHTML = `
+    <div class="card">
+      <div class="summary">
+        <div><b>Status</b>${esc(s.state)}${s.error ? ` <span class="err">${esc(s.error)}</span>` : ""}</div>
+        <div><b>Pages checked</b><span class="big">${s.pages}</span> <span class="muted">${s.queued} queued, ${s.elapsed_s}s</span></div>
+        <div><b>Average score</b><span class="big">${s.avg_score}</span></div>
+        <div><b>Ready</b><span class="big" style="color:var(--ok)">${s.grades["Ready"]}</span></div>
+        <div><b>Needs work</b><span class="big" style="color:var(--warn)">${s.grades["Needs work"]}</span></div>
+        <div><b>Not ready</b><span class="big" style="color:var(--bad)">${s.grades["Not ready"]}</span></div>
+      </div>
+      ${s.state === "running" ? `<div class="progress"><i style="width:${pct}%"></i></div>` : ""}
+      ${Object.keys(s.skipped).length ? `<div class="note" style="margin-top:8px">Skipped: ${Object.entries(s.skipped).map(([k,v]) => `${esc(k)} (${v})`).join(", ")}</div>` : ""}
+    </div>
+    <div class="card">
+      <h2>Site-wide issues</h2>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Check</th><th>Pages failing</th><th></th><th>Critical</th></tr></thead>
+        <tbody>${[...s.check_failures].sort((a,b) => b.failed - a.failed).map(c => `
+          <tr class="click" data-check="${c.id}" title="Filter pages by this failure">
+            <td class="nw"><b>${esc(c.label)}</b>${rcheck === c.id ? ' <span class="pill warn">filtered</span>' : ""}</td>
+            <td class="nw">${c.failed} <span class="muted">(${c.pct}%)</span></td>
+            <td style="width:40%"><div class="bar"><i style="width:${c.pct}%"></i></div></td>
+            <td>${c.critical ? '<span class="pill bad">critical</span>' : ""}</td>
+          </tr>`).join("")}</tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <div class="filters">
+        ${["all","Not ready","Needs work","Ready"].map(g => `<button data-g="${g}" class="${g===rfilter?"on":""}">${g}</button>`).join("")}
+        ${rcheck ? `<button data-clear="1">Clear check filter: ${esc(label[rcheck])} ✕</button>` : ""}
+        <span class="muted">${list.length} page(s)${list.length > 500 ? ", showing worst 500. Download CSV for all." : ""}</span>
+      </div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Score</th><th>Grade</th><th>URL</th><th>Failed checks</th></tr></thead>
+        <tbody>${shown.map(p => `
+          <tr class="click" data-url="${esc(p.url)}">
+            <td class="nw"><b>${p.score}</b></td>
+            <td class="nw">${pill(p.grade)}</td>
+            <td class="url">${esc(p.url)}</td>
+            <td>${p.failed.map(f => `<span class="pill ${CHECKS.find(c => c.id === f)?.critical ? "bad" : "warn"}">${esc(label[f])}</span>`).join("") || '<span class="muted">none</span>'}</td>
+          </tr>${ropen.has(p.url) ? `<tr class="detail"><td colspan="4">
+            <b>Status</b> ${esc(p.status)} · <b>Title</b> ${esc(p.detail.title) || "<i>none</i>"} · <b>Words</b> ${p.detail.words} · <b>H1s</b> ${p.detail.h1}
+            · <b>Images</b> ${p.detail.images_with_alt}/${p.detail.images} with alt · <b>Time</b> ${p.detail.ms} ms
+            ${p.redirected_from ? `<br><b>Redirected from</b> ${esc(p.redirected_from)}` : ""}
+            ${p.detail.directives.length ? `<br><b>Directives</b> ${p.detail.directives.map(esc).join(", ")}` : ""}
+            ${p.detail.blocked_ai_search_bots.length ? `<br><b>AI search bots blocked</b> ${p.detail.blocked_ai_search_bots.map(esc).join(", ")}` : ""}
+            ${p.detail.blocked_training_bots.length ? `<br><b>Training bots blocked</b> ${p.detail.blocked_training_bots.map(esc).join(", ")}` : ""}
+            <br><a href="${esc(p.url)}" target="_blank" rel="noopener">Open page ↗</a>
+          </td></tr>` : ""}`).join("")}</tbody>
+      </table></div>
+    </div>`;
+  document.querySelectorAll("#rout .filters button[data-g]").forEach(b => b.onclick = () => { rfilter = b.dataset.g; renderReady(); });
+  const clr = $("#rout [data-clear]"); if (clr) clr.onclick = () => { rcheck = ""; renderReady(); };
+  document.querySelectorAll("#rout tr[data-check]").forEach(tr => tr.onclick = () => { rcheck = rcheck === tr.dataset.check ? "" : tr.dataset.check; renderReady(); });
+  document.querySelectorAll("#rout tr[data-url]").forEach(tr => tr.onclick = e => {
+    if (e.target.tagName === "A") return;
+    const k = tr.dataset.url; ropen.has(k) ? ropen.delete(k) : ropen.add(k); renderReady();
+  });
+}
+
+async function poll() {
+  try {
+    const res = await fetch("/api/crawl/status?id=" + job);
+    rdata = await res.json();
+    renderReady();
+    if (rdata.summary.state !== "running" && rdata.summary.state !== "pending") {
+      clearInterval(timer); timer = null;
+      $("#rgo").disabled = false; $("#rstop").disabled = true;
+    }
+  } catch (e) { /* keep polling */ }
+}
+
+$("#rf").onsubmit = async e => {
+  e.preventDefault();
+  const q = new URLSearchParams({ url: $("#rurl").value, max: $("#rmax").value || "500", subdomains: $("#rsub").checked ? "1" : "0", exclude: $("#rexcl").value });
+  const res = await fetch("/api/crawl/start?" + q);
+  const data = await res.json();
+  if (!res.ok) { $("#rout").innerHTML = `<div class="card err">Error: ${esc(data.error)}</div>`; return; }
+  job = data.id; rfilter = "all"; rcheck = ""; ropen = new Set();
+  $("#rgo").disabled = true; $("#rstop").disabled = false; $("#rcsv").disabled = false;
+  $("#rout").innerHTML = `<div class="card muted">Reading robots.txt and sitemaps…</div>`;
+  if (timer) clearInterval(timer);
+  timer = setInterval(poll, 1500);
+};
+$("#rstop").onclick = () => job && fetch("/api/crawl/stop?id=" + job);
+$("#rcsv").onclick = () => job && (location.href = "/api/crawl/csv?id=" + job);
+</script>
+</body>
+</html>
