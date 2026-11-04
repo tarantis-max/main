@@ -507,6 +507,7 @@ function siteCard(s) {
     row("Unique titles", !dt.pages, `${dt.pages || 0} pages share a title (${dt.groups || 0} groups)`, (dt.top || []).map(x => `${x.pages}× ${x.text}`)),
     row("Unique meta descriptions", !dd.pages, `${dd.pages || 0} pages share a description (${dd.groups || 0} groups)`, (dd.top || []).map(x => `${x.pages}× ${x.text}`)),
     row("No old or staging hosts", !(si.legacy_hosts || []).length, (si.legacy_hosts || []).map(h => `${h.host} (${h.pages} pages)`).join(", ") || "none"),
+    row("No links to retired hosts", !(si.dead_legacy_links || []).length, `${(si.dead_legacy_links || []).length} link target(s) on hosts that no longer exist`, (si.dead_legacy_links || []).map(x => `${x.url}  ← ${(x.linked_from || [])[0] || ""}`)),
     row("No links to hosting-provider domains", !(si.hosting_links || []).length, (si.hosting_links || []).map(h => `${h.host} (${h.links})`).join(", ") || "none"),
     row("No sections entirely noindex", !(si.noindex_sections || []).length, (si.noindex_sections || []).map(x => `${x.section} (${x.noindex}/${x.pages})`).join(", ") || "none"),
     row("FAQ structured data in use", si.faq_pages > 0, `${si.faq_pages} page(s) with FAQPage`),

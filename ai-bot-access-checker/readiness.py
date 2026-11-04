@@ -618,8 +618,11 @@ def area_scores(pages: list[dict]) -> list[dict]:
 def site_issues(c: "Crawl", pages: list[dict]) -> dict:
     """Site-level SEO/GEO findings that no single page can show."""
     hosting_links, unchecked = dict(c.hosting_links), list(c.unchecked)
-    hosts = Counter(urlsplit(p["url"]).netloc.lower() for p in pages)
+    # a legacy host only counts if it still answers; one that no longer exists is just a dead link target
+    hosts = Counter(urlsplit(p["url"]).netloc.lower() for p in pages if isinstance(p["status"], int))
     legacy = sorted(h for h in hosts if LEGACY_HOST.search(h))
+    dead_legacy = [{"url": p["url"], "linked_from": c.referrers.get(p["url"], [])} for p in pages
+                   if not isinstance(p["status"], int) and LEGACY_HOST.search(urlsplit(p["url"]).netloc.lower())]
     sections: dict[str, list[int]] = {}
     for p in pages:
         if p["status"] != 200:
@@ -674,6 +677,7 @@ def site_issues(c: "Crawl", pages: list[dict]) -> dict:
     return {
         "wordpress": wordpress,
         "legacy_hosts": [{"host": h, "pages": hosts[h]} for h in legacy],
+        "dead_legacy_links": dead_legacy[:20],
         "hosting_links": sorted(({"host": h, "links": n} for h, n in hosting_links.items()), key=lambda r: -r["links"]),
         "noindex_sections": [{"section": k, "pages": n, "noindex": x} for k, n, x in noindex],
         "former_name_pages": len(former),

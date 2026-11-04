@@ -198,6 +198,14 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         actions.append(("Retire or block the old/staging site", "Outdated copies of pages can be indexed and cited as current.",
                         "Shut it down, password-protect it, or redirect it to the live site; then remove it from search consoles.",
                         "Web team", ", ".join(h["host"] for h in legacy)))
+    dlg = si.get("dead_legacy_links", [])
+    if dlg:
+        targets = "; ".join("%s (linked from %s)" % (urlsplit(x["url"]).path + ("?" + urlsplit(x["url"]).query if urlsplit(x["url"]).query else ""),
+                                                      ", ".join(urlsplit(u).path for u in x["linked_from"][:2]) or "unknown") for x in dlg[:5])
+        actions.append(("Remove links to the retired old site",
+                        urlsplit(dlg[0]["url"]).netloc + " no longer exists, but pages still link to it. Visitors and crawlers hit a dead end.",
+                        "Point each link to the current page on the main site: " + targets + ".",
+                        "Content owners", f"{len(dlg)} link target(s)"))
     if search_blocked:
         actions.append(("Unblock AI search and answer bots", f"{len(search_blocked)} bots blocked: {', '.join(b['bot'] for b in search_blocked)}.",
                         "Remove the robots.txt rules or firewall/CDN rules that block them.", "Web team", "Site-wide"))
