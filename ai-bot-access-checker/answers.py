@@ -294,11 +294,12 @@ def _perplexity_body(q: str, model: str) -> dict:
     """Request body for POST /v1/agent (docs: api-reference/agent-post, agent-api/effort).
 
     An effort level ("low", "fast@2026-10-16.0", ...) bundles model, tools, steps and Perplexity's own system
-    prompt; anything else sent alongside overrides it, so only the question is sent, which is what a student gets.
+    prompt; anything else sent alongside overrides it. The docs say effort levels enable web search, but a live response
+    echoed "tools": [] with no sources, so web_search and fetch_url (low's documented tools) are sent explicitly.
     A provider/model id ("openai/gpt-6-luna") runs that model directly: web_search must then be listed, max_steps
     defaults to 1 (too few to search and answer), and anthropic/* models require max_output_tokens."""
-    if "/" not in model:
-        return {"effort": model, "input": q}
+    if "/" not in model:  # tools listed explicitly: the response showed "tools": [] and no search when they were omitted
+        return {"effort": model, "input": q, "tools": [{"type": "web_search"}, {"type": "fetch_url"}]}
     return {"model": model, "input": q, "instructions": SYSTEM,
             "tools": [{"type": "web_search"}], "max_steps": 5, "max_output_tokens": 8192}
 
