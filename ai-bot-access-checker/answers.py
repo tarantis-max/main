@@ -432,12 +432,13 @@ _NOT_A_NAME = re.compile(r"^(?:The|A|An|Best|Top|Private|Public|Small|Christian|
 def colleges_named(text: str, bank: dict) -> list[str]:
     """Every college an answer names: known schools by their short names (questions.json "colleges"), plus any other
     'X University' / 'X College' / 'University of X' phrase. In order of first appearance."""
-    hits = []
-    for name, rx in (bank.get("colleges") or {}).items():
-        m = re.search(rx, text)
-        if m:
-            hits.append((m.start(), name, m.end()))
-    covered = [(a, b) for a, _, b in hits]
+    hits, covered = [], []
+    for name, rx in (bank.get("colleges") or {}).items():  # earlier entries win: "Brody School of Medicine" is not also "East Carolina"
+        spans = [(m.start(), m.end()) for m in re.finditer(rx, text)]
+        free = [(a, b) for a, b in spans if not any(a < y and x < b for x, y in covered)]
+        if free:
+            hits.append((free[0][0], name, free[0][1]))
+            covered.extend(spans)
     for m in _COLLEGE_RX.finditer(text):
         if any(a < m.end() and m.start() < b for a, b in covered):
             continue

@@ -1,5 +1,5 @@
 {
-  "_about": "Question bank for the AI answer tester. Edit freely. 59 questions: 27 branded, 32 category. type: branded (names MU) or category (does not). must_contain / must_not_contain are case-insensitive regular expressions; leave must_contain empty until the approved answer is confirmed. Approved facts come from MU_Brand_Positioning_Statements; fill in anything marked CONFIRM.",
+  "_about": "Question bank for the AI answer tester. Edit freely. 83 questions: 41 branded, 42 category (M01-M24 = School of Medicine). type: branded (names MU) or category (does not). must_contain / must_not_contain are case-insensitive regular expressions; leave must_contain empty until the approved answer is confirmed. Approved facts come from MU_Brand_Positioning_Statements; fill in anything marked CONFIRM.",
   "institution": "Methodist University",
   "institution_aliases": [
     "Methodist University",
@@ -34,7 +34,10 @@
     "Nebraska Methodist",
     "Central Methodist",
     "Texas Methodist",
-    "Methodist Theological"
+    "Methodist Theological",
+    "Houston Methodist",
+    "Methodist Health(care)? System",
+    "Methodist Le Bonheur"
   ],
   "questions": [
     {
@@ -546,9 +549,246 @@
       "q": "Which colleges in North Carolina have an on-campus golf course?",
       "must_contain": [],
       "must_not_contain": []
+    },
+    {
+      "id": "M01",
+      "type": "branded",
+      "topic": "medicine",
+      "q": "Is the Methodist University Cape Fear Valley Health School of Medicine accredited?",
+      "must_contain": [
+        "LCME|Liaison Committee",
+        "preliminary"
+      ],
+      "must_not_contain": [
+        "not (yet )?accredited|applicant (school|program)|pending (LCME )?accreditation|seeking accreditation"
+      ]
+    },
+    {
+      "id": "M02",
+      "type": "branded",
+      "topic": "medicine",
+      "q": "How many students are in the first class at Methodist University's School of Medicine?",
+      "must_contain": [
+        "\\b64\\b"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "M03",
+      "type": "branded",
+      "topic": "medicine",
+      "q": "When did the Methodist University Cape Fear Valley Health School of Medicine open?",
+      "must_contain": [
+        "2026"
+      ],
+      "must_not_contain": [
+        "will open in 2027|opens? in 2027|not yet open"
+      ]
+    },
+    {
+      "id": "M04",
+      "type": "branded",
+      "topic": "medicine",
+      "q": "What is the mission of the Methodist University Cape Fear Valley Health School of Medicine?",
+      "must_contain": [
+        "rural|underserved|community|primary care"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "M05",
+      "type": "branded",
+      "topic": "medicine",
+      "q": "What MCAT score and GPA do I need for Methodist University's School of Medicine?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "M06",
+      "type": "branded",
+      "topic": "medicine",
+      "q": "What are the prerequisites for Methodist University's medical school?",
+      "must_contain": [
+        "no (required )?prerequisite|not have required prerequisite|does not require (specific )?prerequisite|suggested"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "M07",
+      "type": "branded",
+      "topic": "medicine",
+      "q": "How much is tuition at Methodist University's School of Medicine, and are there scholarships?",
+      "must_contain": [
+        "scholarship"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "M08",
+      "type": "branded",
+      "topic": "medicine",
+      "q": "What is the application deadline for Methodist University's School of Medicine?",
+      "must_contain": [
+        "AMCAS"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "M09",
+      "type": "branded",
+      "topic": "medicine",
+      "q": "Does Methodist University's medical school give preference to North Carolina residents?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "M10",
+      "type": "branded",
+      "topic": "medicine",
+      "q": "Where do Methodist University medical students do their clinical training?",
+      "must_contain": [
+        "Cape Fear Valley"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "M11",
+      "type": "branded",
+      "topic": "medicine",
+      "q": "Is Methodist University's School of Medicine an MD or a DO program?",
+      "must_contain": [
+        "\\bM\\.?D\\.?\\b|allopathic"
+      ],
+      "must_not_contain": [
+        "is an? (DO|osteopathic)|grants? (the |a )?D\\.?O\\.?\\b"
+      ]
+    },
+    {
+      "id": "M12",
+      "type": "branded",
+      "topic": "medicine",
+      "q": "Can Methodist University undergraduates get a head start on getting into its medical school?",
+      "must_contain": [
+        "Monarch Momentum"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "M13",
+      "type": "branded",
+      "topic": "medicine",
+      "q": "How is Methodist University's School of Medicine different from Campbell University's medical school?",
+      "must_contain": [
+        "\\bM\\.?D\\.?\\b|allopathic",
+        "osteopathic|\\bD\\.?O\\.?\\b"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "M14",
+      "type": "branded",
+      "topic": "medicine",
+      "q": "What residency programs can Methodist University medical students connect with through Cape Fear Valley Health?",
+      "must_contain": [
+        "residenc"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "M15",
+      "type": "category",
+      "topic": "medicine",
+      "q": "What are the newest medical schools in North Carolina?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "M16",
+      "type": "category",
+      "topic": "medicine",
+      "q": "Which new medical schools opened in 2026?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "M17",
+      "type": "category",
+      "topic": "medicine",
+      "q": "What new MD programs are accepting applications for 2027?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "M18",
+      "type": "category",
+      "topic": "medicine",
+      "q": "Which medical schools in North Carolina focus on rural or primary care medicine?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "M19",
+      "type": "category",
+      "topic": "medicine",
+      "q": "Is there a medical school in Fayetteville, North Carolina?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "M20",
+      "type": "category",
+      "topic": "medicine",
+      "q": "List all of the medical schools in North Carolina.",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "M21",
+      "type": "category",
+      "topic": "medicine",
+      "q": "Which new medical schools offer free or reduced tuition?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "M22",
+      "type": "category",
+      "topic": "medicine",
+      "q": "What medical schools are good for military families near Fort Liberty (Fort Bragg)?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "M23",
+      "type": "category",
+      "topic": "medicine",
+      "q": "Which new U.S. medical schools have preliminary LCME accreditation?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "M24",
+      "type": "category",
+      "topic": "medicine",
+      "q": "Where should I go to medical school if I want to practice in southeastern North Carolina?",
+      "must_contain": [],
+      "must_not_contain": []
     }
   ],
   "colleges": {
+    "Campbell (CUSOM)": "Campbell University School of Osteopathic Medicine|CUSOM\\b",
+    "ECU Brody": "Brody School of Medicine|\\bBrody\\b",
+    "Alice L. Walton": "Alice L\\.? Walton|Walton School of Medicine",
+    "ASU Shufeldt": "Shufeldt|ASU (School of Medicine|medical school)",
+    "D'Youville": "D.Youville",
+    "Meritus": "Meritus",
+    "Roseman": "Roseman",
+    "UGA School of Medicine": "University of Georgia School of Medicine|UGA School of Medicine",
+    "Illinois COM (Chicago School)": "Illinois College of Osteopathic Medicine",
+    "High Point (Workman)": "Workman School",
+    "Wake Forest School of Medicine": "Wake Forest (University )?School of Medicine",
+    "Duke School of Medicine": "Duke (University )?School of Medicine",
+    "UNC School of Medicine": "UNC School of Medicine|University of North Carolina School of Medicine",
     "Methodist University": "Methodist University|Methodist U\\b",
     "Duke": "\\bDuke\\b",
     "Davidson": "\\bDavidson\\b",

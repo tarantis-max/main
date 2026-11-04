@@ -178,7 +178,7 @@
   <section id="tab-answers" hidden>
     <div class="card">
       <h2>Keys</h2>
-      <div class="note" style="margin-bottom:8px">Keys are saved to <code>keys.json</code> on this computer only (never in the repo or the results bundle). Get them at console.anthropic.com, platform.openai.com, perplexity.ai (API settings) and aistudio.google.com (Gemini has a free tier). A full run of 59 questions costs roughly a dollar or two per paid provider.</div>
+      <div class="note" style="margin-bottom:8px">Keys are saved to <code>keys.json</code> on this computer only (never in the repo or the results bundle). Get them at console.anthropic.com, platform.openai.com, perplexity.ai (API settings) and aistudio.google.com (Gemini has a free tier). A full run of 83 questions costs roughly a dollar or two per paid provider.</div>
       <form id="kf" class="setgrid" style="display:grid">
         <label>Anthropic API key <span id="kanth" class="muted"></span><input type="password" id="kanthropic" placeholder="sk-ant-…" autocomplete="off"></label>
         <label>OpenAI API key <span id="koai" class="muted"></span><input type="password" id="kopenai" placeholder="sk-…" autocomplete="off"></label>
@@ -197,7 +197,7 @@
       <label class="chk"><input type="checkbox" id="po" checked> ChatGPT</label>
       <label class="chk"><input type="checkbox" id="pp" checked> Perplexity</label>
       <label class="chk"><input type="checkbox" id="pg" checked> Gemini</label>
-      <label class="chk">Questions <select id="aset"><option value="all">All</option><option value="branded">Branded only</option><option value="category">Category only</option><option value="smoke">Quick test (2)</option></select></label>
+      <label class="chk">Questions <select id="aset"><option value="all">All</option><option value="branded">Branded only</option><option value="category">Category only</option><option value="medicine">Medical school only (24)</option><option value="smoke">Quick test (2)</option></select></label>
       <button id="ago">Run answer test</button>
       <button id="astop" class="sec" type="button" disabled>Stop</button>
       <button id="acsv" class="sec" type="button" disabled>Answers CSV</button>
@@ -205,7 +205,7 @@
     </form>
     <div id="aout"></div>
     <div class="card note"><b>How this works</b><br>
-      Each question in <code>questions.json</code> (27 branded, 32 category, from EAB's audit prompts and the admitted-student survey themes) is sent to each provider with web search on. The tool records whether the answer <b>mentions</b> Methodist University, <b>cites</b> methodist.edu, contains the <b>required facts</b>, and whether it <b>confused</b> MU with another "Methodist" school. Category questions are the ones to watch: EAB measured MU at 0-4% on these.<br>
+      Each question in <code>questions.json</code> (41 branded, 42 category, from EAB's audit prompts, the admitted-student survey themes, and new-medical-school FAQs) is sent to each provider with web search on. The tool records whether the answer <b>mentions</b> Methodist University, <b>cites</b> methodist.edu, contains the <b>required facts</b>, and whether it <b>confused</b> MU with another "Methodist" school. Category questions are the ones to watch: EAB measured MU at 0-4% on these.<br>
       Re-run monthly and compare: branded mention, category mention, citation rate, accuracy. The latest run is included in the results bundle (answers only, never keys).</div>
   </section>
 </main>
@@ -596,7 +596,7 @@ $("#rbundle").onclick = () => {
   setTimeout(() => { b.disabled = false; b.textContent = "Download results bundle"; }, 8000);
 };
 /* ---------------- AI Answers ---------------- */
-let ajob = null, atimer = null, QIDS = {branded: [], category: []};
+let ajob = null, atimer = null, QIDS = {branded: [], category: [], medicine: []};
 async function loadKeys() {
   const k = await (await fetch("/api/answers/keys")).json();
   $("#kanth").textContent = k.anthropic ? "(saved)" : "(not set)"; $("#koai").textContent = k.openai ? "(saved)" : "(not set)";
@@ -605,7 +605,7 @@ async function loadKeys() {
   $("#kpmodel").value = k.perplexity_model || ""; $("#kgmodel").value = k.gemini_model || "";
 }
 loadKeys();
-fetch("/api/answers/questions").then(r => r.json()).then(b => { for (const q of b.questions) QIDS[q.type].push(q.id); });
+fetch("/api/answers/questions").then(r => r.json()).then(b => { for (const q of b.questions) { QIDS[q.type].push(q.id); if (q.topic === "medicine") QIDS.medicine.push(q.id); } });
 $("#klist").onclick = async () => {
   $("#klistmsg").textContent = "Checking…";
   const res = await fetch("/api/answers/openai-models"); const d = await res.json();
@@ -665,7 +665,7 @@ $("#af").onsubmit = async e => {
   e.preventDefault();
   const provs = [$("#pa").checked ? "anthropic" : "", $("#po").checked ? "openai" : "", $("#pp").checked ? "perplexity" : "", $("#pg").checked ? "gemini" : ""].filter(Boolean).join(",");
   const set = $("#aset").value;
-  const ids = set === "branded" ? QIDS.branded : set === "category" ? QIDS.category : set === "smoke" ? [QIDS.branded[0], QIDS.category[0]] : [];
+  const ids = set === "branded" ? QIDS.branded : set === "category" ? QIDS.category : set === "medicine" ? QIDS.medicine : set === "smoke" ? [QIDS.branded[0], QIDS.category[0]] : [];
   const res = await fetch("/api/answers/start?" + new URLSearchParams({ providers: provs, ids: ids.join(",") }));
   const data = await res.json();
   if (!res.ok) { $("#aout").innerHTML = `<div class="card err">Error: ${esc(data.error)}</div>`; return; }
