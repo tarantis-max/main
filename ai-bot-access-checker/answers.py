@@ -33,7 +33,7 @@ from urllib.parse import urlsplit
 HERE = os.path.dirname(os.path.abspath(__file__))
 ANTHROPIC_MODEL = "claude-opus-5-5"
 OPENAI_MODEL = "gpt-5"  # editable in keys.json as "openai_model"; the error from OpenAI names valid models if this is stale
-PERPLEXITY_MODEL = "fast"           # editable as "perplexity_model": an effort level (fast = Sonar, low = Pro Search, medium, high) or a model id such as "openai/gpt-6-luna"
+PERPLEXITY_MODEL = "low"            # editable as "perplexity_model": an effort level (fast = Sonar, low = Pro Search, medium, high) or a model id such as "openai/gpt-6-luna"
 GEMINI_MODEL = "gemini-2.5-flash"   # editable as "gemini_model"; if Google retires it, the newest available flash model is used automatically
 PROVIDERS = ("anthropic", "openai", "perplexity", "gemini")
 TIMEOUT = 180
@@ -297,6 +297,16 @@ def _perplexity_body(q: str, model: str) -> dict:
             "tools": [{"type": "web_search"}], "max_steps": 5, "max_output_tokens": 8192}
 
 
+def _strip_leaked_tool_call(text: str) -> str:
+    """Perplexity 'fast' sometimes prints its search call as text ('search query to=web.run {...}answer') instead
+    of running it. Drop that prefix through the closing brace; the missing sources still show in the results."""
+    head = text[:300]
+    if not head.lower().lstrip().startswith("search query") or "{" not in head:
+        return text
+    end = text.find("}", text.index("{"))
+    return text[end + 1:].lstrip() if end != -1 else text
+
+
 def ask_perplexity(q: str, key: str, model: str) -> dict:
     """Perplexity Agent API. The answer is in output[] message items (content[].text, url_citation annotations);
     sources are in search_results items (results[].url). output_text is an SDK convenience, not in the JSON."""
@@ -308,6 +318,7 @@ def ask_perplexity(q: str, key: str, model: str) -> dict:
         msg = (resp.get("error") or {}).get("message") or resp["status"]
         return {"text": "", "urls": [], "usage": usage, "error": f"perplexity: {msg}"}
     text, urls = _parse_responses_output(resp)
+    text = _strip_leaked_tool_call(text)
     if not text:
         return {"text": "", "urls": urls, "usage": usage,
                 "error": f"perplexity returned no answer text (status {resp.get('status')}); response fields: {sorted(resp.keys())}"}
