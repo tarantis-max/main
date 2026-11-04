@@ -67,7 +67,7 @@
 </head>
 <body>
 <main>
-  <h1>AI Access & Readiness</h1>
+  <h1>AI Access & Readiness <span id="ver" class="muted" style="font-size:13px;font-weight:400"></span></h1>
   <p class="sub">Shows which AI crawlers can reach a site, and how ready each page is to be found and cited by AI search.</p>
 
   <div class="tabs">
@@ -277,6 +277,7 @@ $("#f").onsubmit = async e => {
 let pfilter = "flagged";
 let CHECKS = [], job = null, timer = null, rdata = null, rfilter = "all", rcheck = "", ropen = new Set();
 
+fetch("/api/version").then(r => r.json()).then(d => { $("#ver").textContent = "version " + d.version; });
 fetch("/api/defaults").then(r => r.json()).then(d => {
   $("#sname").value = d.official_name; $("#scity").value = d.city; $("#sstate").value = d.region; $("#sformer").value = d.former_names.join(", "); $("#spri").value = (d.priority_pages || []).join("\n");
 });

@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, urlsplit
 from ai_bot_check import run
 from readiness import CHECKS, DEFAULTS, MESSAGES, Crawl
 from report import build as build_report
-from bundle import make_bundle
+from bundle import make_bundle, VERSION
 from compare import Compare
 from answers import AnswerRun, key_status, save_keys, load_questions, list_openai_models, list_gemini_models, load_keys
 
@@ -238,6 +238,8 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 pages = [{k: v for k, v in p.items() if not k.startswith("_")} for p in list(c.results)]
                 self._send(200, json.dumps({"summary": c.summary(), "pages": pages, "pdfs": c.pdf_report()}).encode(), "application/json")
+        elif u.path == "/api/version":
+            self._send(200, json.dumps({"version": VERSION}).encode(), "application/json")
         elif u.path == "/api/defaults":
             self._send(200, json.dumps({**DEFAULTS, "priority_pages": MESSAGES.get("priority_pages", [])}).encode(), "application/json")
         elif u.path == "/api/checks":
@@ -270,7 +272,7 @@ def main() -> None:
     a = ap.parse_args()
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
     url = f"http://localhost:{a.port}"
-    print(f"AI Bot Access Checker running at {url}  (Ctrl+C to stop)")
+    print(f"AI Access & Readiness {VERSION} running at {url}  (Ctrl+C to stop)")
     if not a.no_browser:
         try:
             webbrowser.open(url)
