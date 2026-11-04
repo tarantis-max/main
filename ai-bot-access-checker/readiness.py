@@ -259,11 +259,19 @@ class PageParser(HTMLParser):
         self._buf: list[str] = []
         self._a: list[str] | None = None
         self._a_href = ""
+        self._chrome = 0            # depth inside nav/header/footer/aside (site chrome, not page content)
+        self.body_links: list[str] = []
+        self.h2_body = 0
+        self.body_text: list[str] = []
+        self._body_len = 0
 
     def handle_starttag(self, tag, attrs):
         a = {k.lower(): (v or "") for k, v in attrs}
         if tag != "img":
             self._recent = (self._recent + [a.get("class", "") + " " + a.get("id", "")])[-3:]
+        if tag in ("nav", "header", "footer", "aside") or a.get("role", "").lower() in ("navigation", "banner", "contentinfo", "complementary"):
+            self._chrome += 1
+            a["data-chrome"] = "1"
         if tag == "html":
             self.lang = a.get("lang", "").strip()
         elif tag == "title":
@@ -276,6 +284,8 @@ class PageParser(HTMLParser):
             self.canonical = a.get("href", "")
         elif tag == "a" and a.get("href"):
             self.links.append(a["href"])
+            if not self._chrome:
+                self.body_links.append(a["href"])
             self._a, self._a_href = [], a["href"]
         elif tag == "h1":
             self.h1 += 1
@@ -288,6 +298,8 @@ class PageParser(HTMLParser):
             self._pcur = []
         elif tag == "h2":
             self.h2 += 1
+            if not self._chrome:
+                self.h2_body += 1
         elif tag == "input" and a.get("type", "").lower() == "password":
             self.login_form = True
         elif tag == "img":
@@ -318,8 +330,8 @@ class PageParser(HTMLParser):
             n = len(" ".join(self._pcur).split())
             if n >= 10:
                 key = "main" if self._main else "other"
-                if key not in self.first_p:
-                    self.first_p[key] = (n, self.h2)  # (words, H2s seen before it)
+                if key not in self.first_p and not self._chrome:
+                    self.first_p[key] = (n, self.h2_body)  # (words, body H2s seen before it)
             (self.p_main if self._main else self.p_other).append("\n")  # paragraph end = sentence break
         if tag == "script" and self._in_jsonld:
             self.jsonld.append("".join(self._buf))
@@ -329,6 +341,8 @@ class PageParser(HTMLParser):
             self._a = None
         if tag in self.SKIP and self._skip:
             self._skip -= 1
+        if tag in ("nav", "header", "footer", "aside") and self._chrome:
+            self._chrome -= 1
 
     def handle_data(self, data):
         if self._in_title:
@@ -340,6 +354,9 @@ class PageParser(HTMLParser):
             if self._text_len < self.MAX_TEXT:
                 self.text.append(data)
                 self._text_len += len(data)
+            if not self._chrome and self._body_len < self.MAX_TEXT:
+                self.body_text.append(data)
+                self._body_len += len(data)
             if self._a is not None:
                 self._a.append(data)
             if self._h:
@@ -432,9 +449,9 @@ PP_ELEMENTS = [
     ("direct_answer", "Direct answer", "The first paragraph of the main content is 20-80 words and comes before the first H2."),
     ("proof", "Proof", "The page states at least one number (%, $, count) and at least one year, so outcomes are dated. "
               "Also requires at least one approved proof point from messages.json."),
-    ("connections", "Connections", "Links to at least {n} of: School of Medicine, Admissions, Scholarships and aid, Outcomes and careers."),
+    ("connections", "Connections", "Links in the page body (not menus or footer) to at least {n} of: School of Medicine, Admissions, Scholarships and aid, Outcomes and careers."),
     ("authority", "Authority", "Named owner, author or reviewer, plus a published date and an updated date (visible or in page metadata)."),
-    ("structure", "Structure", "At least 2 H2s, at least one question heading or FAQPage, 150+ words of server-rendered text, mobile viewport, no invalid structured data."),
+    ("structure", "Structure", "At least 2 H2s in the page body, at least one question heading or FAQPage, 150+ words of server-rendered text, mobile viewport. (Invalid structured data is reported separately.)"),
 ]
 
 
@@ -448,7 +465,7 @@ def pp_elements(p: dict) -> dict:
         "connections": len(pp.get("connections", [])) >= need,
         "authority": bool(pp.get("owner") and pp.get("published") and pp.get("updated")),
         "structure": (d.get("h2_count", 2) >= 2 and (d.get("question_headings", 0) > 0 or d.get("faq_schema"))
-                      and ch.get("server_text") is True and ch.get("mobile_viewport") is True and ch.get("schema_valid") is True),
+                      and ch.get("server_text") is True and ch.get("mobile_viewport") is True),
     }
 
 
@@ -705,12 +722,14 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
     title = " ".join(p.title.split())
     desc = re.sub(r"[\ufeff\u200b\u200c\u200d\u2060]", "", p.meta.get("description", "")).strip()
     text = " ".join(" ".join(p.text).split())
-    page_text = f"{title} {text}"
+    body = " ".join(" ".join(p.body_text).split()) or text   # page content without menus/header/footer
+    page_text = f"{title} {body}"
+    body_links_abs = [urljoin(url, h.strip()) for h in p.body_links]
     links_abs = [urljoin(url, h.strip()) for h in p.links]
     # A. priority page elements (EAB standard)
     fp = p.first_p.get("main") or p.first_p.get("other")
     conn = [label for label, rx in MESSAGES.get("connections", {}).items()
-            if any(re.search(rx, urlsplit(u).path, re.I) and norm(u) != norm(url) for u in links_abs)]
+            if any(re.search(rx, urlsplit(u).path, re.I) and norm(u) != norm(url) for u in body_links_abs)]
     meta_author = p.meta.get("author", "").strip()
     pp = {
         "direct_answer": bool(fp and 20 <= fp[0] <= 80 and fp[1] == 0),
@@ -727,7 +746,10 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
         "banned": [x["phrase"] for x in MESSAGES.get("banned_phrases", []) if re.search(x["pattern"], page_text, re.I)],
         "claims": {},
     }
+    dated_page = bool(NEWS_PATH.search(sp.path) or p.meta.get("article:published_time") or '"datePublished"' in jsonld_raw)
     for cl in MESSAGES.get("numeric_claims", []):
+        if dated_page:
+            continue  # news and dated pages report past figures legitimately
         for m in re.finditer(cl["pattern"], page_text, re.I):
             try:
                 v = float(m.group(1).replace(",", ""))
@@ -805,7 +827,7 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
             "title": title[:120],
             "words": p.words,
             "h1": p.h1,
-            "h2_count": p.h2,
+            "h2_count": p.h2_body,
             "images": p.imgs,
             "images_with_alt": p.imgs_alt,
             "ms": round(elapsed * 1000),
@@ -818,7 +840,7 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
             "key_page": key_page,
             "pp": pp,
             "msg": msg,
-            "outcomes": bool(re.search(MESSAGES.get("outcome_pattern", "$^"), text, re.I)),
+            "outcomes": bool(re.search(MESSAGES.get("outcome_pattern", "$^"), body, re.I)),
             "inventory": inv,
             "reading_grade": grade_level,
             "question_headings": sum(1 for h in p.subheads if h and QUESTION_RE.search(h)),
