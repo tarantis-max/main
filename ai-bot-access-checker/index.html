@@ -118,6 +118,9 @@
           <label>State <input type="text" id="sstate"></label>
           <label>Former names, comma-separated <input type="text" id="sformer"></label>
         </div>
+        <label style="display:flex;flex-direction:column;gap:4px;margin-top:10px">Priority pages, one URL per line (scored on EAB's five-element standard; crawled first)
+          <textarea id="spri" rows="6" style="padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);font:12px ui-monospace,monospace"></textarea></label>
+        <div class="note">Proof points, banned phrases and approved numbers come from <code>messages.json</code> (edit it, then restart the app).</div>
       </details>
     </form>
     <div id="rout"></div>
@@ -239,7 +242,7 @@ let pfilter = "flagged";
 let CHECKS = [], job = null, timer = null, rdata = null, rfilter = "all", rcheck = "", ropen = new Set();
 
 fetch("/api/defaults").then(r => r.json()).then(d => {
-  $("#sname").value = d.official_name; $("#scity").value = d.city; $("#sstate").value = d.region; $("#sformer").value = d.former_names.join(", ");
+  $("#sname").value = d.official_name; $("#scity").value = d.city; $("#sstate").value = d.region; $("#sformer").value = d.former_names.join(", "); $("#spri").value = (d.priority_pages || []).join("\n");
 });
 
 fetch("/api/checks").then(r => r.json()).then(c => {
@@ -289,6 +292,9 @@ function renderReady() {
       </table></div>
     </div>
     ${areasCard(s)}
+    ${priorityCard(s)}
+    ${messagesCard(s)}
+    ${inventoryCard(s)}
     ${siteCard(s)}
     ${orgCard(s)}
     ${pdfCard(s, rdata.pdfs)}
@@ -337,6 +343,42 @@ function areasCard(s) {
   return `<div class="card"><h2>Scores by area</h2>
     <div class="summary">${s.areas.map(a => `<div><b>${esc(a.area)}</b><span class="big pill ${cls(a.score)}" style="font-size:22px">${a.score == null ? "-" : a.score}</span><div class="note">${a.checks.map(esc).join(", ")}</div></div>`).join("")}</div>
     <div class="note" style="margin-top:8px">Share of applicable page checks passed. 90+ green, 70-89 amber, below 70 red. SEO = Technical + On-page. GEO/AEO = Content + Structured data.</div></div>`;
+}
+
+const tick = b => b ? '<span class="pill ok">pass</span>' : '<span class="pill bad">fail</span>';
+
+function priorityCard(s) {
+  const pr = s.priority_pages; if (!pr || !pr.total) return "";
+  const els = pr.elements;
+  return `<div class="card"><h2>Priority pages: ${pr.optimized} of ${pr.total} meet all five elements</h2>
+    <div class="note" style="margin-bottom:8px">EAB's priority-page standard. ${els.map(x => `<b>${esc(x.label)}</b>: ${esc(x.rule)}`).join(" ")} Site-wide, ${pr.key_pages_optimized} of ${pr.key_pages} key student pages meet all five.</div>
+    <div class="tablewrap"><table><thead><tr><th>Page</th>${els.map(x => `<th>${esc(x.label)}<br><span class="muted">${pr.element_pass[x.id]}/${pr.total}</span></th>`).join("")}<th>Score</th></tr></thead><tbody>
+    ${pr.rows.map(r => `<tr><td class="url"><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url.replace(/^https?:\/\/[^/]+/, "") || "/")}</a>${r.elements && Object.keys(r.elements).length ? `<div class="note">first paragraph ${r.first_paragraph_words} words · links: ${esc((r.connections_found || []).join(", ") || "none")} · proof points: ${(r.proof_points || []).length} · owner ${r.owner ? "yes" : "no"}, published ${r.published ? "yes" : "no"}, updated ${r.updated ? "yes" : "no"}</div>` : ""}</td>
+      ${r.elements && Object.keys(r.elements).length ? els.map(x => `<td>${tick(r.elements[x.id])}</td>`).join("") : `<td colspan="${els.length}" class="muted">${esc(String(r.status))}</td>`}
+      <td class="nw"><b>${r.score == null ? "-" : r.score + "/5"}</b></td></tr>`).join("")}</tbody></table></div></div>`;
+}
+
+function messagesCard(s) {
+  const m = s.messages; if (!m || !m.proof_points) return "";
+  const conflicts = m.claims.filter(c => c.found && !c.consistent);
+  return `<div class="card"><h2>Message consistency</h2>
+    <div class="note" style="margin-bottom:8px">Checked against <code>messages.json</code> (pre-filled from the MU brand positioning statements). ${m.homepage_proof_points} of ${m.proof_points.length} approved proof points appear on the homepage. ${conflicts.length} number(s) conflict with approved figures.</div>
+    <div class="tablewrap"><table><thead><tr><th>Approved proof point</th><th>Homepage</th><th>Priority pages</th><th>All pages</th></tr></thead><tbody>
+      ${m.proof_points.map(x => `<tr><td>${esc(x.label)}</td><td>${tick(x.homepage)}</td><td>${x.priority_pages}</td><td>${x.site_pages}</td></tr>`).join("")}</tbody></table></div>
+    <h2 style="margin-top:14px">Numbers</h2>
+    <div class="tablewrap"><table><thead><tr><th>Claim</th><th>Approved</th><th>Found on site</th><th>Result</th></tr></thead><tbody>
+      ${m.claims.map(c => `<tr><td>${esc(c.label)}</td><td>${c.approved}</td><td>${c.values.length ? c.values.map(v => `<div><b>${v.value}</b> on ${v.pages} page(s) <span class="muted">“…${esc(v.snippet.slice(0, 90))}…”</span>${v.value !== c.approved ? `<details><summary class="muted">pages</summary><code>${v.sample.map(esc).join("<br>")}</code></details>` : ""}</div>`).join("") : '<span class="muted">not stated</span>'}</td><td>${c.found ? tick(c.consistent) : '<span class="muted">-</span>'}</td></tr>`).join("")}</tbody></table></div>
+    <h2 style="margin-top:14px">Off-brand phrases</h2>
+    ${m.banned.map(b => `<div>${b.pages ? '<span class="pill bad">' + b.pages + ' page(s)</span>' : '<span class="pill ok">none</span>'} “${esc(b.phrase)}”${b.pages ? `<details><summary class="muted">pages</summary><code>${b.sample.map(esc).join("<br>")}</code></details>` : ""}</div>`).join("")}
+  </div>`;
+}
+
+function inventoryCard(s) {
+  const iv = s.inventory; if (!iv || !iv.rows) return "";
+  return `<div class="card"><h2>Content inventory: ${iv.passed} of ${iv.total}</h2>
+    <div class="note" style="margin-bottom:8px">What students look for before they inquire (EAB value proposition, admitted student survey, virtual tour audit).</div>
+    <div class="tablewrap"><table><thead><tr><th>Item</th><th>Result</th><th>Detail</th></tr></thead><tbody>
+    ${iv.rows.map(r => `<tr><td>${esc(r.label)}</td><td>${tick(r.pass)}</td><td>${esc(r.detail)}${(r.missing || []).length ? `<details><summary class="muted">missing</summary><code>${r.missing.map(esc).join("<br>")}</code></details>` : ""}</td></tr>`).join("")}</tbody></table></div></div>`;
 }
 
 function siteCard(s) {
@@ -426,7 +468,7 @@ async function poll() {
 $("#rf").onsubmit = async e => {
   e.preventDefault();
   const q = new URLSearchParams({ url: $("#rurl").value, max: $("#rmax").value || "500", subdomains: $("#rsub").checked ? "1" : "0", exclude: $("#rexcl").value,
-    name: $("#sname").value, city: $("#scity").value, state: $("#sstate").value, former: $("#sformer").value });
+    name: $("#sname").value, city: $("#scity").value, state: $("#sstate").value, former: $("#sformer").value, priority: $("#spri").value });
   const res = await fetch("/api/crawl/start?" + q);
   const data = await res.json();
   if (!res.ok) { $("#rout").innerHTML = `<div class="card err">Error: ${esc(data.error)}</div>`; return; }

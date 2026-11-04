@@ -148,6 +148,21 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         findings.append(f"{pc['total']} PDFs are linked. {pc['key_facts']} hold key facts that AI crawlers may not read; {pc['past_terms']} name past terms.")
 
     si = s.get("site_issues") or {}
+    ppr, msr, inr = s.get("priority_pages") or {}, s.get("messages") or {}, s.get("inventory") or {}
+    if ppr.get("total"):
+        findings.append(f"<b>{ppr['optimized']} of {ppr['total']} priority pages meet all five elements</b> of EAB's priority-page standard "
+                        "(direct answer, proof, connections, authority, structure).")
+    conflicts = [x for x in msr.get("claims", []) if x["found"] and not x["consistent"]]
+    if conflicts or any(b["pages"] for b in msr.get("banned", [])):
+        parts = []
+        if conflicts:
+            parts.append(f"{len(conflicts)} number(s) conflict with approved figures ("
+                         + "; ".join(f"{e(x['label'])}: approved {x['approved']}, site also says "
+                                     + ", ".join(str(v['value']) for v in x['values'] if v['value'] != x['approved']) for x in conflicts[:3]) + ")")
+        nb = [b for b in msr.get("banned", []) if b["pages"]]
+        if nb:
+            parts.append("off-brand phrases on the site: " + ", ".join(f"\"{e(b['phrase'])}\" ({b['pages']} page(s))" for b in nb))
+        findings.append("<b>Message consistency:</b> " + "; ".join(parts) + ".")
     legacy = si.get("legacy_hosts", [])
     if legacy:
         findings.append("<b>Old or staging site is publicly reachable</b>: " + e(", ".join(h["host"] for h in legacy))
@@ -189,6 +204,26 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     if org["total"] and not org_ok and not sd_state:
         actions.append(("Fix homepage organization schema", "AI systems use it to identify the school correctly.",
                         "Paste the generated snippet (app: Site Readiness tab, Structured data card) into the homepage after replacing every REPLACE-WITH value.", "Web team", "Homepage"))
+    if ppr.get("total") and ppr["optimized"] < ppr["total"]:
+        ep = ppr.get("element_pass", {})
+        weakest = sorted(ppr.get("elements", []), key=lambda x: ep.get(x["id"], 0))[:2]
+        actions.insert(min(3, len(actions)), ("Renovate the priority pages",
+                        "These pages answer the questions MU most needs to win in search and AI; EAB found only 20 of 187 pages optimized.",
+                        "Bring each priority page to all five elements (Appendix F). Weakest: "
+                        + ", ".join(f"{x['label']} ({ep.get(x['id'], 0)} of {ppr['total']} pass)" for x in weakest) + ".",
+                        "Content owners + Web team", f"{ppr['total'] - ppr['optimized']} of {ppr['total']} page(s)"))
+    if conflicts:
+        actions.append(("Use one set of approved numbers", "Conflicting figures undercut credibility, and AI may repeat the wrong one.",
+                        "Update every page to the approved figure in messages.json; pages are listed in Appendix G.", "Marketing",
+                        f"{sum(x['off_pages'] for x in conflicts)} page(s)"))
+    nb = [b for b in msr.get("banned", []) if b["pages"]]
+    if nb:
+        actions.append(("Remove off-brand phrases", "The message guide bars these phrases.", "Rewrite the pages listed in Appendix G.",
+                        "Marketing", f"{sum(b['pages'] for b in nb)} page(s)"))
+    inv_fail = [r for r in inr.get("rows", []) if not r["pass"]]
+    if inv_fail:
+        actions.append(("Close content gaps", "Students look for cost, outcomes and a virtual visit before they inquire.",
+                        "Add: " + "; ".join(r["label"] for r in inv_fail) + ".", "Marketing + Web team", f"{len(inv_fail)} gap(s)"))
     smap, orph, bl = si.get("sitemap", {}), si.get("orphans", {}), si.get("broken_internal_links", {})
     dt_, dd_ = si.get("duplicate_titles", {}), si.get("duplicate_descriptions", {})
     if bl.get("count"):
@@ -296,6 +331,35 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     org_passed_txt = "%d of %d checks pass." % (org["passed"], org["total"])
     skipped_txt = ", ".join("%s (%d)" % (k, v) for k, v in s["skipped"].items()) or "none"
     stopped_txt = "crawl stopped early; " if s["state"] == "stopped" else ""
+    # ---- Appendix F/G/H: priority pages, messages, inventory
+    def fmt_vals(x):
+        return ", ".join("%s (%d)" % (v["value"], v["pages"]) for v in x["values"])
+
+    tick = lambda b: '<span class="pill ok">pass</span>' if b else '<span class="pill bad">fail</span>'
+    brand_html = ""
+    if ppr.get("total"):
+        els = ppr.get("elements", [])
+        brand_html += ('<h2>Appendix F: Priority pages (EAB standard)</h2><p class="note">'
+                       + " ".join(f"<b>{e(x['label'])}</b>: {e(x['rule'])}" for x in els)
+                       + f" Optimized = all five. Site-wide, {ppr.get('key_pages_optimized', 0)} of {ppr.get('key_pages', 0)} key student pages meet all five.</p>"
+                       + '<table><thead><tr><th>Page</th>' + "".join(f"<th>{e(x['label'])}</th>" for x in els) + '<th>Score</th></tr></thead><tbody>'
+                       + "".join("<tr><td class='url'>%s</td>%s<td>%s</td></tr>" % (
+                           e(urlsplit(r["url"]).path or "/"),
+                           "".join(f"<td>{tick(r['elements'].get(x['id']))}</td>" for x in els) if r["elements"] else f"<td colspan='{len(els)}'>{e(str(r['status']))}</td>",
+                           "-" if r["score"] is None else f"{r['score']}/5") for r in ppr["rows"])
+                       + "</tbody></table>")
+    if msr.get("proof_points"):
+        brand_html += ('<h2>Appendix G: Message consistency</h2><p class="note">Source: messages.json, pre-filled from the MU brand positioning statements.</p>'
+                       '<table><thead><tr><th>Approved proof point</th><th>Homepage</th><th>Priority pages</th><th>All pages</th></tr></thead><tbody>'
+                       + "".join(f"<tr><td>{e(x['label'])}</td><td>{tick(x['homepage'])}</td><td>{x['priority_pages']} of {ppr.get('total', 0)}</td><td>{x['site_pages']}</td></tr>" for x in msr["proof_points"])
+                       + '</tbody></table><table style="margin-top:10px"><thead><tr><th>Number</th><th>Approved</th><th>Found on site (pages)</th><th>Result</th></tr></thead><tbody>'
+                       + "".join(f"<tr><td>{e(x['label'])}</td><td>{x['approved']}</td><td>{e(fmt_vals(x)) or 'not stated'}</td><td>{tick(x['consistent']) if x['found'] else '-'}</td></tr>" for x in msr["claims"])
+                       + "</tbody></table>"
+                       + "".join(f"<p class='note'><b>\"{e(b['phrase'])}\"</b> on {b['pages']} page(s): {e(', '.join(urlsplit(u).path for u in b['sample'][:5]))}</p>" for b in msr.get("banned", []) if b["pages"]))
+    if inr.get("rows"):
+        brand_html += ('<h2>Appendix H: Content inventory</h2><table><thead><tr><th>Item</th><th>Result</th><th>Detail</th></tr></thead><tbody>'
+                       + "".join(f"<tr><td>{e(r['label'])}</td><td>{tick(r['pass'])}</td><td>{e(r['detail'])}</td></tr>" for r in inr["rows"])
+                       + "</tbody></table>")
     coverage = [
         ("Title tags and meta descriptions", "SEO", "Automated: Title, Meta description, unique titles/descriptions"),
         ("Clear headings, simple content", "SEO / AEO", "Automated: Single H1, Subheadings, Readable text"),
@@ -497,6 +561,7 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 </tbody></table>
 
 {deny_appendix}
+{brand_html}
 <h2>Appendix E: Coverage of the EAB search visibility checklist</h2>
 <p class="note">Source: EAB, "Navigating Search Visibility in the AI Era" (2025). Automated = checked by this tool on every crawl. Manual = needs data this tool cannot crawl.</p>
 <table><thead><tr><th>Guide item</th><th>Area</th><th>Coverage</th></tr></thead><tbody>

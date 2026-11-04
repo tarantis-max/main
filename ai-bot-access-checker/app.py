@@ -18,7 +18,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from ai_bot_check import run
-from readiness import CHECKS, DEFAULTS, Crawl
+from readiness import CHECKS, DEFAULTS, MESSAGES, Crawl
 from report import build as build_report
 from bundle import make_bundle
 from compare import Compare
@@ -73,7 +73,8 @@ class Handler(BaseHTTPRequestHandler):
                           official_name=q["name"][0] if "name" in q else None,
                           city=q["city"][0] if "city" in q else None,
                           region=q["state"][0] if "state" in q else None,
-                          former_names=q["former"][0].split(",") if "former" in q else None)
+                          former_names=q["former"][0].split(",") if "former" in q else None,
+                          priority_pages=[x for x in q["priority"][0].splitlines() if x.strip()] if "priority" in q else None)
             except Exception as e:
                 self._send(400, json.dumps({"error": str(e)}).encode(), "application/json")
                 return
@@ -173,7 +174,7 @@ class Handler(BaseHTTPRequestHandler):
                 pages = [{k: v for k, v in p.items() if not k.startswith("_")} for p in list(c.results)]
                 self._send(200, json.dumps({"summary": c.summary(), "pages": pages, "pdfs": c.pdf_report()}).encode(), "application/json")
         elif u.path == "/api/defaults":
-            self._send(200, json.dumps(DEFAULTS).encode(), "application/json")
+            self._send(200, json.dumps({**DEFAULTS, "priority_pages": MESSAGES.get("priority_pages", [])}).encode(), "application/json")
         elif u.path == "/api/checks":
             self._send(200, json.dumps([{"id": a, "label": b, "rule": r, "critical": k} for a, b, r, k in CHECKS]).encode(), "application/json")
         else:

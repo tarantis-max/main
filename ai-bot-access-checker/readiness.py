@@ -37,6 +37,25 @@ SKIP_EXT = re.compile(
     r"\.(pdf|jpe?g|png|gif|webp|svg|ico|bmp|tiff?|mp[34]|m4[av]|mov|avi|wmv|webm|zip|gz|tgz|rar|7z|"
     r"docx?|xlsx?|pptx?|csv|txt|xml|json|rss|atom|ics|css|js|woff2?|ttf|eot|exe|dmg|iso)$", re.I)
 
+def load_messages() -> dict:
+    """messages.json next to this file: priority pages, proof points, banned phrases, numeric claims, inventory."""
+    import os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "messages.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+
+MESSAGES = load_messages()
+QUANT_RE = re.compile(r"\d+(\.\d+)?\s?%|\$\s?\d|\b\d{1,3}(,\d{3})+\b|\b\d+\s+(students|graduates|programs|years|teams|clubs|scholarships|faculty|alumni|employers)\b", re.I)
+YEAR_RE = re.compile(r"\b20[1-3]\d\b")
+OWNER_RE = re.compile(r"\b(reviewed by|written by|page owner|content owner|maintained by|author:|by dr\.)", re.I)
+PUBLISHED_RE = re.compile(r"\b(published|posted)( on)?:?\s+(\w+\.? \d{1,2},? 20\d\d|\d{1,2}/\d{1,2}/20\d\d)", re.I)
+UPDATED_RE = re.compile(r"\b(updated|last (updated|reviewed|modified))( on)?:?\s+(\w+\.? \d{1,2},? 20\d\d|\d{1,2}/\d{1,2}/20\d\d|\w+ 20\d\d)", re.I)
+
+
 DEFAULTS = {
     "official_name": "Methodist University",
     "city": "Fayetteville",
@@ -226,6 +245,8 @@ class PageParser(HTMLParser):
         self._hbuf: list[str] = []
         self._main = 0
         self._in_p = 0
+        self._pcur: list[str] = []
+        self.first_p: dict[str, tuple[int, int]] = {}
         self._recent: list[str] = []
         self.anchors: list[tuple[str, str]] = []
         self.jsonld: list[str] = []
@@ -264,6 +285,7 @@ class PageParser(HTMLParser):
             self._main += 1
         if tag == "p":
             self._in_p += 1
+            self._pcur = []
         elif tag == "h2":
             self.h2 += 1
         elif tag == "input" and a.get("type", "").lower() == "password":
@@ -293,6 +315,11 @@ class PageParser(HTMLParser):
             self._main -= 1
         if tag == "p" and self._in_p:
             self._in_p -= 1
+            n = len(" ".join(self._pcur).split())
+            if n >= 10:
+                key = "main" if self._main else "other"
+                if key not in self.first_p:
+                    self.first_p[key] = (n, self.h2)  # (words, H2s seen before it)
             (self.p_main if self._main else self.p_other).append("\n")  # paragraph end = sentence break
         if tag == "script" and self._in_jsonld:
             self.jsonld.append("".join(self._buf))
@@ -319,6 +346,7 @@ class PageParser(HTMLParser):
                 self._hbuf.append(data)
             if self._in_p:
                 (self.p_main if self._main else self.p_other).append(data)
+                self._pcur.append(data)
 
 
 # ---------------------------------------------------------------- JSON-LD
@@ -398,6 +426,135 @@ def schema_explainer(state: str, failed: int, total: int) -> list[str]:
            + "Then check the homepage at validator.schema.org (one CollegeOrUniversity item, no errors) and re-run this crawl. "
              "This is also the prerequisite for program, event and FAQ structured data, where the larger visibility gains are.")
     return [what, impact, fix]
+
+
+PP_ELEMENTS = [
+    ("direct_answer", "Direct answer", "The first paragraph of the main content is 20-80 words and comes before the first H2."),
+    ("proof", "Proof", "The page states at least one number (%, $, count) and at least one year, so outcomes are dated. "
+              "Also requires at least one approved proof point from messages.json."),
+    ("connections", "Connections", "Links to at least {n} of: School of Medicine, Admissions, Scholarships and aid, Outcomes and careers."),
+    ("authority", "Authority", "Named owner, author or reviewer, plus a published date and an updated date (visible or in page metadata)."),
+    ("structure", "Structure", "At least 2 H2s, at least one question heading or FAQPage, 150+ words of server-rendered text, mobile viewport, no invalid structured data."),
+]
+
+
+def pp_elements(p: dict) -> dict:
+    d, ch, pp = p["detail"], p["checks"], p["detail"].get("pp", {})
+    need = MESSAGES.get("connections_required", 3)
+    need_proof = MESSAGES.get("proof_points_required_on_priority_page", 1)
+    return {
+        "direct_answer": bool(pp.get("direct_answer")),
+        "proof": bool(pp.get("proof")) and len(d.get("msg", {}).get("proof", [])) >= need_proof,
+        "connections": len(pp.get("connections", [])) >= need,
+        "authority": bool(pp.get("owner") and pp.get("published") and pp.get("updated")),
+        "structure": (d.get("h2_count", 2) >= 2 and (d.get("question_headings", 0) > 0 or d.get("faq_schema"))
+                      and ch.get("server_text") is True and ch.get("mobile_viewport") is True and ch.get("schema_valid") is True),
+    }
+
+
+def priority_report(c: "Crawl", pages: list[dict]) -> dict:
+    """EAB priority-page standard: each listed page scored on five elements; optimized = all five."""
+    by = {p["url"]: p for p in pages}
+    by.update({p.get("redirected_from"): p for p in pages if p.get("redirected_from")})
+    rows = []
+    for u in c.priority_pages:
+        p = by.get(u)
+        if not p:
+            rows.append({"url": u, "status": "not crawled", "elements": {}, "score": None, "optimized": False})
+            continue
+        if p["status"] != 200:
+            rows.append({"url": u, "status": p["status"], "elements": {}, "score": 0, "optimized": False})
+            continue
+        el = pp_elements(p)
+        pp = p["detail"].get("pp", {})
+        rows.append({"url": u, "status": 200, "title": p["detail"]["title"], "elements": el, "score": sum(el.values()),
+                     "optimized": all(el.values()), "connections_found": pp.get("connections", []),
+                     "proof_points": p["detail"].get("msg", {}).get("proof", []),
+                     "first_paragraph_words": pp.get("first_paragraph_words", 0),
+                     "owner": bool(pp.get("owner")), "published": bool(pp.get("published")), "updated": bool(pp.get("updated"))})
+    key = [p for p in pages if p["status"] == 200 and p["detail"].get("key_page")]
+    key_opt = sum(1 for p in key if all(pp_elements(p).values()))
+    need = MESSAGES.get("connections_required", 3)
+    return {
+        "rows": rows,
+        "elements": [{"id": a, "label": b, "rule": r.format(n=need)} for a, b, r in PP_ELEMENTS],
+        "optimized": sum(1 for r in rows if r["optimized"]),
+        "total": len(rows),
+        "element_pass": {a: sum(1 for r in rows if r["elements"].get(a)) for a, _, _ in PP_ELEMENTS},
+        "key_pages": len(key), "key_pages_optimized": key_opt,
+    }
+
+
+def message_report(c: "Crawl", pages: list[dict]) -> dict:
+    ok = [p for p in pages if p["status"] == 200]
+    home = next((p for p in ok if p["url"].rstrip("/") == c.start.rstrip("/")), None)
+    prio = {u for u in c.priority_pages}
+    prio_pages = [p for p in ok if p["url"] in prio]
+    proof = []
+    for x in MESSAGES.get("proof_points", []):
+        proof.append({"id": x["id"], "label": x["label"],
+                      "homepage": bool(home and x["id"] in home["detail"].get("msg", {}).get("proof", [])),
+                      "priority_pages": sum(1 for p in prio_pages if x["id"] in p["detail"].get("msg", {}).get("proof", [])),
+                      "site_pages": sum(1 for p in ok if x["id"] in p["detail"].get("msg", {}).get("proof", []))})
+    banned = []
+    for x in MESSAGES.get("banned_phrases", []):
+        hits = [p["url"] for p in ok if x["phrase"] in p["detail"].get("msg", {}).get("banned", [])]
+        banned.append({"phrase": x["phrase"], "pages": len(hits), "sample": hits[:10]})
+    claims = []
+    for cl in MESSAGES.get("numeric_claims", []):
+        vals: dict = {}
+        for p in ok:
+            for v, snip in p["detail"].get("msg", {}).get("claims", {}).get(cl["id"], []):
+                e = vals.setdefault(str(v), {"value": v, "pages": 0, "sample": [], "snippet": snip})
+                if p["url"] not in e["sample"]:
+                    e["pages"] += 1
+                    if len(e["sample"]) < 5:
+                        e["sample"].append(p["url"])
+        found = sorted(vals.values(), key=lambda e: -e["pages"])
+        off = [e for e in found if e["value"] != cl["approved"]]
+        claims.append({"id": cl["id"], "label": cl["label"], "approved": cl["approved"], "values": found,
+                       "consistent": not off, "found": bool(found), "off_pages": sum(e["pages"] for e in off)})
+    return {
+        "proof_points": proof,
+        "homepage_proof_points": sum(1 for x in proof if x["homepage"]),
+        "banned": banned,
+        "banned_pages": len({u for b in banned for u in b["sample"]}),
+        "claims": claims,
+        "conflicting_claims": sum(1 for x in claims if x["found"] and not x["consistent"]),
+        "priority_without_proof": [p["url"] for p in prio_pages if not p["detail"].get("msg", {}).get("proof")],
+    }
+
+
+def inventory_report(c: "Crawl", pages: list[dict]) -> dict:
+    ok = [p for p in pages if p["status"] == 200]
+    home = next((p for p in ok if p["url"].rstrip("/") == c.start.rstrip("/")), None)
+    inv = MESSAGES.get("inventory", {})
+    site_has = lambda k: [p["url"] for p in ok if k in p["detail"].get("inventory", [])]
+    rows = []
+    for k in ("net_price_calculator", "cost_page", "parents_page", "virtual_tour"):
+        if k in inv:
+            hits = site_has(k)
+            rows.append({"id": k, "label": inv[k]["label"], "pass": bool(hits), "detail": f"linked from {len(hits)} page(s)" if hits else "not found on any crawled page"})
+    if "virtual_tour" in inv:
+        secs = MESSAGES.get("virtual_tour_sections", [])
+        missing = []
+        for sec in secs:
+            pg = next((p for p in ok if urlsplit(p["url"]).path == sec), None)
+            if not pg or "virtual_tour" not in pg["detail"].get("inventory", []):
+                missing.append(sec + ("" if pg else " (not crawled)"))
+        rows.append({"id": "virtual_tour_placement", "label": "Virtual tour linked from academics, admissions, student life, housing and visit pages",
+                     "pass": not missing, "detail": ("missing on: " + ", ".join(missing)) if missing else f"all {len(secs)} pages"})
+    for k in ("instagram", "youtube", "tiktok"):
+        if k in inv:
+            ok_ = bool(home and k in home["detail"].get("inventory", []))
+            rows.append({"id": k, "label": inv[k]["label"] + " on homepage", "pass": ok_, "detail": "found" if ok_ else "not found"})
+    progs = [p for p in ok if p["checks"].get("program_schema") is not None]
+    with_out = [p for p in progs if p["detail"].get("outcomes")]
+    rows.append({"id": "program_outcomes", "label": "Every program home page states an outcome (placement, pass rate, salary, employment)",
+                 "pass": bool(progs) and len(with_out) == len(progs),
+                 "detail": f"{len(with_out)} of {len(progs)} program pages",
+                 "missing": [p["url"] for p in progs if not p["detail"].get("outcomes")][:20]})
+    return {"rows": rows, "passed": sum(1 for r in rows if r["pass"]), "total": len(rows)}
 
 
 def area_scores(pages: list[dict]) -> list[dict]:
@@ -548,6 +705,40 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
     title = " ".join(p.title.split())
     desc = re.sub(r"[\ufeff\u200b\u200c\u200d\u2060]", "", p.meta.get("description", "")).strip()
     text = " ".join(" ".join(p.text).split())
+    page_text = f"{title} {text}"
+    links_abs = [urljoin(url, h.strip()) for h in p.links]
+    # A. priority page elements (EAB standard)
+    fp = p.first_p.get("main") or p.first_p.get("other")
+    conn = [label for label, rx in MESSAGES.get("connections", {}).items()
+            if any(re.search(rx, urlsplit(u).path, re.I) and norm(u) != norm(url) for u in links_abs)]
+    meta_author = p.meta.get("author", "").strip()
+    pp = {
+        "direct_answer": bool(fp and 20 <= fp[0] <= 80 and fp[1] == 0),
+        "proof": bool(QUANT_RE.search(text) and YEAR_RE.search(text)),
+        "connections": conn,
+        "owner": bool(meta_author or re.search(r'"(author|reviewedBy|editor)"', " ".join(p.jsonld)) or OWNER_RE.search(text)),
+        "published": bool(p.meta.get("article:published_time") or '"datePublished"' in " ".join(p.jsonld) or PUBLISHED_RE.search(text)),
+        "updated": bool(p.meta.get("article:modified_time") or '"dateModified"' in " ".join(p.jsonld) or UPDATED_RE.search(text)),
+        "first_paragraph_words": fp[0] if fp else 0,
+    }
+    # B. messages
+    msg = {
+        "proof": [x["id"] for x in MESSAGES.get("proof_points", []) if re.search(x["pattern"], page_text, re.I)],
+        "banned": [x["phrase"] for x in MESSAGES.get("banned_phrases", []) if re.search(x["pattern"], page_text, re.I)],
+        "claims": {},
+    }
+    for cl in MESSAGES.get("numeric_claims", []):
+        for m in re.finditer(cl["pattern"], page_text, re.I):
+            try:
+                v = float(m.group(1).replace(",", ""))
+            except ValueError:
+                continue
+            v = int(v) if v.is_integer() else v
+            snip = page_text[max(0, m.start() - 40): m.end() + 40].strip()
+            msg["claims"].setdefault(cl["id"], []).append([v, snip])
+    # D. inventory signals (links and text)
+    hay = " ".join(links_abs) + " " + " ".join(t for _, t in p.anchors)
+    inv = [k for k, x in MESSAGES.get("inventory", {}).items() if re.search(x["pattern"], hay, re.I)]
     fresh = bool(_header(r["headers"], "last-modified") or p.meta.get("article:modified_time")
                  or re.search(r'"date(Modified|Published)"', jsonld_raw))
 
@@ -614,6 +805,7 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
             "title": title[:120],
             "words": p.words,
             "h1": p.h1,
+            "h2_count": p.h2,
             "images": p.imgs,
             "images_with_alt": p.imgs_alt,
             "ms": round(elapsed * 1000),
@@ -624,6 +816,10 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
             "desc": desc[:200],
             "canonical_url": urljoin(url, p.canonical) if p.canonical else "",
             "key_page": key_page,
+            "pp": pp,
+            "msg": msg,
+            "outcomes": bool(re.search(MESSAGES.get("outcome_pattern", "$^"), text, re.I)),
+            "inventory": inv,
             "reading_grade": grade_level,
             "question_headings": sum(1 for h in p.subheads if h and QUESTION_RE.search(h)),
             "faq_schema": has_faq,
@@ -773,7 +969,7 @@ class Crawl:
     def __init__(self, start: str, max_pages: int = 500, subdomains: bool = False,
                  workers: int = 4, delay: float = 0.5, exclude: str = "",
                  official_name: str | None = None, city: str | None = None, region: str | None = None,
-                 former_names: list[str] | None = None):
+                 former_names: list[str] | None = None, priority_pages: list[str] | None = None):
         if "://" not in start:
             start = "https://" + start
         self.start = norm(start)
@@ -792,6 +988,10 @@ class Crawl:
             "former_names": [n.strip() for n in (DEFAULTS["former_names"] if former_names is None else former_names) if n.strip()],
             "ay_start": academic_year_start(),
         }
+        if priority_pages is None:  # default list only applies to the site it was written for
+            dflt = MESSAGES.get("priority_pages", [])
+            priority_pages = [u for u in dflt if urlsplit(u).netloc.lower() == self.host.lower()]
+        self.priority_pages = [norm(u if "://" in u else urljoin(self.origin + "/", u.strip())) for u in priority_pages if u.strip()]
         self.results: list[dict] = []
         self.pdfs: dict[str, dict] = {}
         self.schema_types: Counter = Counter()
@@ -903,6 +1103,10 @@ class Crawl:
         try:
             seen: set[str] = {self.start}
             frontier: list[str] = [self.start]
+            for u in self.priority_pages:  # always crawl priority pages first
+                if u not in seen and self.in_scope(u):
+                    seen.add(u)
+                    frontier.append(u)
             self.robots(self.origin)
             sm = self._sitemaps.get(self.origin) or [self.origin + "/sitemap.xml"]
             all_sm, _ = collect_sitemap_urls(sm, 50_000, max_sitemaps=200)
@@ -985,6 +1189,9 @@ class Crawl:
             "organization": org_report(home, self.cfg, self.origin) if home or self.state != "running" else None,
             "site_issues": site_issues(self, pages),
             "areas": area_scores(pages),
+            "priority_pages": priority_report(self, pages),
+            "messages": message_report(self, pages),
+            "inventory": inventory_report(self, pages),
             "schema_state": schema_state(cf_list := [{"id": c[0], "pct": round(100 * fails[c[0]] / n) if n else 0} for c in CHECKS]),
             "schema_explainer": schema_explainer(schema_state(cf_list), fails["schema_valid"] if schema_state(cf_list) == "invalid" else fails["structured_data"], n) if n and schema_state(cf_list) else [],
             "schema_types": [{"type": t, "pages": k} for t, k in types],

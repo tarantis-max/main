@@ -1,0 +1,79 @@
+{
+  "_about": "Editable. Pre-filled from MU_Brand_Positioning_Statements. Patterns are case-insensitive regular expressions. Restart the app after editing.",
+
+  "priority_pages": [
+    "https://www.methodist.edu/",
+    "https://www.methodist.edu/admissions-aid/",
+    "https://www.methodist.edu/admissions-aid/apply/",
+    "https://www.methodist.edu/admissions-aid/undergraduate/first-year-students/",
+    "https://www.methodist.edu/admissions-aid/undergraduate/transfer/",
+    "https://www.methodist.edu/admissions-aid/financial-aid/",
+    "https://www.methodist.edu/admissions-aid/military/",
+    "https://www.methodist.edu/admissions-aid/graduate/",
+    "https://www.methodist.edu/academics/medicine/",
+    "https://www.methodist.edu/explore-mu/value/",
+    "https://www.methodist.edu/explore-mu/on-a-tour/",
+    "https://www.methodist.edu/explore-mu/numbers/",
+    "https://www.methodist.edu/academics/program/nursing/",
+    "https://www.methodist.edu/academics/program/pgm/",
+    "https://www.methodist.edu/academics/program/engineering/",
+    "https://www.methodist.edu/academics/program/paprogram/",
+    "https://www.methodist.edu/academics/program/dpt/",
+    "https://www.methodist.edu/academics/program/otd/",
+    "https://www.methodist.edu/academics/program/clinical-mental-health-counseling/",
+    "https://www.methodist.edu/academics/program/psychology/"
+  ],
+
+  "connections": {
+    "School of Medicine": "/academics/medicine/",
+    "Admissions": "/admissions-aid/(apply|undergraduate|graduate|request)",
+    "Scholarships and aid": "financial-aid|scholarship",
+    "Outcomes and careers": "outcome|career|placement|numbers"
+  },
+  "connections_required": 3,
+
+  "proof_points": [
+    {"id": "medical_school", "label": "School of Medicine (opened 2026, with Cape Fear Valley Health)", "pattern": "school of medicine|medical school"},
+    {"id": "smallest_med", "label": "Smallest university in America with a medical school", "pattern": "smallest university[^.]{0,60}medical school"},
+    {"id": "carnegie", "label": "Carnegie: Professions-focused Undergraduate/Graduate-Doctorate Small", "pattern": "professions[- ]focused|carnegie classification"},
+    {"id": "monarch_momentum", "label": "Monarch Momentum pathways (guaranteed interview, 5 graduate health programs)", "pattern": "monarch momentum"},
+    {"id": "scholarships", "label": "$24 million in scholarships each year", "pattern": "\\$\\s?24 million"},
+    {"id": "aid_98", "label": "98% of students receive institutional aid", "pattern": "98\\s?%\\s+of\\s+(our\\s+)?students"},
+    {"id": "ncaa", "label": "20 NCAA Division III teams", "pattern": "20 ncaa|division iii|div\\.? iii"},
+    {"id": "military", "label": "Military Gold / Best for Vets; 18 online programs", "pattern": "military gold|military friendly|best for vets"},
+    {"id": "nursing_pass", "label": "Nursing: 100% board pass rate (2025)", "pattern": "100\\s?%[^.]{0,40}(board|nclex|pass)"},
+    {"id": "pgm_placement", "label": "PGM: 25 consecutive years of 100% job placement", "pattern": "25 consecutive years|100\\s?%[^.]{0,30}placement"},
+    {"id": "abet", "label": "ABET-accredited engineering", "pattern": "\\babet\\b"},
+    {"id": "faculty_know", "label": "Faculty who know every student", "pattern": "know (every|each) student|knows? (you|me|everyone) by name|everybody knows me"},
+    {"id": "purpose", "label": "Know How. Know Why. / Life on Purpose / Veritas et Virtus", "pattern": "know how\\.? know why|life on purpose|veritas et virtus|purpose meets profession"}
+  ],
+  "proof_points_required_on_priority_page": 1,
+
+  "banned_phrases": [
+    {"phrase": "best kept secret", "pattern": "best[- ]kept secret"},
+    {"phrase": "little engine that could", "pattern": "little engine that could"},
+    {"phrase": "liberal arts (school/college/university)", "pattern": "liberal arts (school|college|university|institution)"}
+  ],
+
+  "numeric_claims": [
+    {"id": "clubs", "label": "Student clubs and organizations", "approved": 90, "pattern": "(\\d{2,3})\\+?\\s+(?:student\\s+)?(?:clubs|organizations)"},
+    {"id": "ncaa_teams", "label": "NCAA teams/sports", "approved": 20, "pattern": "(\\d{1,2})\\s+NCAA"},
+    {"id": "scholarship_millions", "label": "Scholarships awarded each year ($ millions)", "approved": 24, "pattern": "\\$\\s?(\\d{1,3}(?:\\.\\d)?)\\s?million[^.]{0,30}(?:scholarship|aid)"},
+    {"id": "aid_pct", "label": "Share of students receiving institutional aid (%)", "approved": 98, "pattern": "(\\d{2,3})\\s?%\\s+of\\s+(?:our\\s+)?students\\s+receive"},
+    {"id": "online_programs", "label": "Fully online degree programs", "approved": 18, "pattern": "(\\d{1,3})\\s+(?:fully\\s+)?online\\s+(?:degree\\s+)?programs"},
+    {"id": "enrollment", "label": "Total students", "approved": 1700, "pattern": "(?:university|campus|community|enrollment)\\s+of\\s+(?:about\\s+|approximately\\s+|nearly\\s+|more than\\s+|over\\s+)?([\\d,]{3,6})\\s+students"},
+    {"id": "pgm_years", "label": "PGM consecutive years of 100% placement", "approved": 25, "pattern": "(\\d{1,2})\\s+consecutive\\s+years"}
+  ],
+
+  "inventory": {
+    "net_price_calculator": {"label": "Net price calculator linked", "pattern": "net price calculator|npc\\.|/npc"},
+    "cost_page": {"label": "Tuition / cost of attendance page", "pattern": "cost of attendance|tuition (and|&) fees|tuition-fees|/cost"},
+    "virtual_tour": {"label": "Virtual tour linked", "pattern": "virtual tour|360|youvisit|concept3d|campus tour"},
+    "parents_page": {"label": "Page for parents and families", "pattern": "/parents"},
+    "tiktok": {"label": "TikTok linked", "pattern": "tiktok\\.com"},
+    "instagram": {"label": "Instagram linked", "pattern": "instagram\\.com"},
+    "youtube": {"label": "YouTube linked", "pattern": "youtube\\.com"}
+  },
+  "virtual_tour_sections": ["/admissions-aid/", "/academics/", "/life-at-mu/", "/life-at-mu/housing-residence-life/", "/explore-mu/on-a-tour/"],
+  "outcome_pattern": "placement|employed|employment rate|job rate|pass rate|board pass|nclex|salary|graduate school acceptance|career outcomes|alumni work at"
+}

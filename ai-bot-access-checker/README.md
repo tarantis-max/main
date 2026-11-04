@@ -83,6 +83,29 @@ Shown on the Site Readiness tab and in the report: sitemap coverage, broken and 
 
 The checks follow EAB's "Navigating Search Visibility in the AI Era" (2025). The report's Appendix E maps each guide item to the check that covers it, or marks it manual (Search Console, keyword tools, backlinks).
 
+## Priority pages, message consistency and content inventory
+
+These three reports are on the Site Readiness tab, in the executive report (Appendices F, G, H) and in the results bundle. They are driven by `messages.json`, pre-filled from the MU brand positioning statements and EAB's AI visibility audit. Edit it and restart the app.
+
+**Priority pages (EAB's five-element standard).** Each page in the priority list (Institution settings) is crawled first and scored pass/fail on:
+
+| Element | Pass when |
+|---|---|
+| Direct answer | First paragraph of the main content is 20-80 words and comes before the first H2 |
+| Proof | Page states a number (%, $, count) and a year, and at least one approved proof point |
+| Connections | Links to at least 3 of: School of Medicine, Admissions, Scholarships and aid, Outcomes and careers |
+| Authority | Named owner, author or reviewer, plus published and updated dates (visible or in metadata) |
+| Structure | 2+ H2s, a question heading or FAQPage, 150+ words of server-rendered text, mobile viewport, no invalid structured data |
+
+Optimized = all five. The report also counts key student pages site-wide that meet all five.
+
+**Message consistency.**
+- Approved proof points: whether each appears on the homepage, the priority pages and the site.
+- Approved numbers (clubs, NCAA teams, scholarships, aid %, online programs, enrollment, PGM placement years): every value stated on the site, and the pages that state a different value.
+- Off-brand phrases: "best kept secret", "little engine that could", "liberal arts school/college/university".
+
+**Content inventory.** Net price calculator, tuition/cost page, parents page, virtual tour (and whether it is linked from the admissions, academics, student life, housing and visit pages), Instagram/YouTube/TikTok on the homepage, and whether every program home page states an outcome.
+
 ## Competitors tab
 
 Enter your site and up to 10 competitors. Each site gets the Bot Access check and a readiness crawl of up to the page limit (default 200; same host only, robots.txt respected, 2 workers, 0.5 s delay). Your site is re-crawled with the same limit so the comparison is fair. The table ranks your site on each metric (1 = best, "tie" = all equal). **Comparison report** opens a printable page; **Comparison CSV** exports the table. The latest finished comparison is included in the results bundle.
