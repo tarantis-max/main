@@ -109,6 +109,14 @@
     {
       "phrase": "liberal arts (school/college/university)",
       "pattern": "liberal arts (school|college|university|institution)"
+    },
+    {
+      "phrase": "outdated: LCME applicant/candidate status (now preliminary accreditation, Oct. 2025)",
+      "pattern": "(applicant|candidate|candidacy) (program|school|status|designation)[^.]{0,150}(LCME|Liaison Committee)|(LCME|Liaison Committee)[^.]{0,150}(applicant|candidate|candidacy) (program|school|status|designation)"
+    },
+    {
+      "phrase": "outdated name: MU College of Medicine (now School of Medicine)",
+      "pattern": "(MU|Methodist University) College of Medicine|College of Medicine at Methodist"
     }
   ],
   "numeric_claims": [
