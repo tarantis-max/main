@@ -2,10 +2,13 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><style>body{margin:0}[hidden]{display:none!important}
 /* Two panes on wide screens: the question list and the answers each scroll on their own, so the answers stay in view. */
 @media (min-width: 861px) {
-  .layout { height: calc(100dvh - 150px); min-height: 420px; }
-  .list, .detail { height: 100%; overflow-y: auto; overscroll-behavior: contain; padding-right: 6px; }
-  .wrap { padding-block: 20px 12px; }
-  #foot { margin: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  .wrap { height: 100%; box-sizing: border-box; padding-block: 20px 12px; }
+  .layout { flex: 1; min-height: 0; }
+  .list, .detail { height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 6px; }
+  #foot { margin: 0; max-height: 3.2em; overflow-y: auto; }
+  .answer { max-height: none; overflow: visible; }
+  .cfoot button[data-expand] { display: none; }
 }
 </style>
 <title>MU AI Answers Full Run</title>
