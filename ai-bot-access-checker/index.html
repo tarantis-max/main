@@ -152,12 +152,12 @@
       <form id="kf" class="setgrid" style="display:grid">
         <label>Anthropic API key <span id="kanth" class="muted"></span><input type="password" id="kanthropic" placeholder="sk-ant-…" autocomplete="off"></label>
         <label>OpenAI API key <span id="koai" class="muted"></span><input type="password" id="kopenai" placeholder="sk-…" autocomplete="off"></label>
-        <label>OpenAI model <input type="text" id="kmodel" placeholder="gpt-5" list="kmodels"><datalist id="kmodels"></datalist>
+        <label>OpenAI model <input type="text" id="kmodel" placeholder="gpt-5"><select id="kmodels" hidden style="margin-top:4px"></select>
           <button type="button" class="sec" id="klist" style="margin-top:4px;padding:6px 10px">List my models</button> <span id="klistmsg" class="note"></span></label>
         <label>Perplexity API key <span id="kpplx" class="muted"></span><input type="password" id="kperplexity" placeholder="pplx-…" autocomplete="off"></label>
         <label>Perplexity model <input type="text" id="kpmodel" placeholder="fast"><span class="note">an effort level: fast (like free Perplexity, default), low (like Pro Search), medium, high; or a model id such as openai/gpt-6-luna</span></label>
         <label>Google Gemini API key <span id="kgem" class="muted"></span><input type="password" id="kgemini" placeholder="AIza…" autocomplete="off"></label>
-        <label>Gemini model <input type="text" id="kgmodel" placeholder="gemini-2.5-flash" list="kgmodels"><datalist id="kgmodels"></datalist>
+        <label>Gemini model <input type="text" id="kgmodel" placeholder="gemini-2.5-flash"><select id="kgmodels" hidden style="margin-top:4px"></select>
           <button type="button" class="sec" id="kglist" style="margin-top:4px;padding:6px 10px">List my models</button> <span id="kglistmsg" class="note"></span></label>
         <div style="align-self:end"><button id="ksave">Save keys</button></div>
       </form>
@@ -538,16 +538,18 @@ $("#klist").onclick = async () => {
   $("#klistmsg").textContent = "Checking…";
   const res = await fetch("/api/answers/openai-models"); const d = await res.json();
   if (!res.ok) { $("#klistmsg").innerHTML = `<span class="err">${esc(d.error)}</span>`; return; }
-  $("#kmodels").innerHTML = d.models.map(m => `<option value="${esc(m)}">`).join("");
-  $("#klistmsg").textContent = d.models.length ? `${d.models.length} chat models available. Click the model box to pick one, then Save keys. First listed: ${d.models[0]}` : "No chat models found for this key.";
+  $("#kmodels").innerHTML = `<option value="">Choose from ${d.models.length} models…</option>` + d.models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+  $("#kmodels").hidden = !d.models.length; $("#kmodels").onchange = e => { if (e.target.value) $("#kmodel").value = e.target.value; };
+  $("#klistmsg").textContent = d.models.length ? `${d.models.length} chat models available. Pick one from the dropdown, then Save keys. First listed: ${d.models[0]}` : "No chat models found for this key.";
   if (d.models.length && !$("#kmodel").value) $("#kmodel").value = d.models[0];
 };
 $("#kglist").onclick = async () => {
   $("#kglistmsg").textContent = "Checking…";
   const res = await fetch("/api/answers/gemini-models"); const d = await res.json();
   if (!res.ok) { $("#kglistmsg").innerHTML = `<span class="err">${esc(d.error)}</span>`; return; }
-  $("#kgmodels").innerHTML = d.models.map(m => `<option value="${esc(m)}">`).join("");
-  $("#kglistmsg").textContent = d.models.length ? `${d.models.length} models available. Click the model box to pick one, then Save keys.` : "No Gemini models found for this key.";
+  $("#kgmodels").innerHTML = `<option value="">Choose from ${d.models.length} models…</option>` + d.models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+  $("#kgmodels").hidden = !d.models.length; $("#kgmodels").onchange = e => { if (e.target.value) $("#kgmodel").value = e.target.value; };
+  $("#kglistmsg").textContent = d.models.length ? `${d.models.length} models available. Pick one from the dropdown, then Save keys.` : "No Gemini models found for this key.";
   if (d.models.length && !$("#kgmodel").value) $("#kgmodel").value = d.models[0];
 };
 $("#kf").onsubmit = async e => {
