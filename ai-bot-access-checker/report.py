@@ -250,8 +250,17 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
                          "schema in an SEO plugin, validate at validator.schema.org, re-run this crawl."),
                         "Web team", f"{sd_fail['failed']} page(s), ~1 hour"))
     skip_ids = {"schema_valid", "structured_data"} if sd_state else set()
+    merged_broken = False
     for c in [c for c in fails if c["id"] not in skip_ids][:6]:
         why, fix, owner = ISSUES[c["id"]]
+        if c["id"] == "http_ok":  # one action for broken pages and the links to them
+            merged_broken = True
+            actions.append(("Critical: Fix broken pages and the links to them",
+                            "Links to missing or failing pages send students and AI to dead ends and waste crawl budget.",
+                            "Fix or redirect each page that does not load, and update the links pointing to it. Each broken page and the page "
+                            "linking to it are listed in Site-level findings and in the Pages CSV (linked_from column).",
+                            "Web team + Content owners", f"{c['failed']} page(s)"))
+            continue
         actions.append((("Critical: " if c["critical"] else "") + c["label"], why, fix, owner, f"{c['failed']} page(s), {c['pct']}%"))
     if org["total"] and not org_ok and not sd_state:
         actions.append(("Fix homepage organization schema", "AI systems use it to identify the school correctly.",
@@ -307,7 +316,7 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
                         "Add: " + "; ".join(r["label"] for r in inv_fail) + ".", "Marketing + Web team", f"{len(inv_fail)} gap(s)"))
     smap, orph, bl = si.get("sitemap", {}), si.get("orphans", {}), si.get("broken_internal_links", {})
     dt_, dd_ = si.get("duplicate_titles", {}), si.get("duplicate_descriptions", {})
-    if bl.get("count"):
+    if bl.get("count") and not merged_broken:
         actions.append(("Fix broken internal links", "Links to missing pages waste crawl budget and send students and AI to dead ends.",
                         "Update or remove links to the pages listed in Site-level findings (each shows where it is linked from).", "Web team", f"{bl['count']} broken page(s)"))
     dlg = si.get("dead_legacy_links", [])
