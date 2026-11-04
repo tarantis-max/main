@@ -104,6 +104,7 @@
     <button data-tab="ready">Site Readiness</button>
     <button data-tab="compare">Competitors</button>
     <button data-tab="answers">AI Answers</button>
+    <button data-tab="ask">Ask the AIs</button>
   </div>
 
   <!-- ===================== BOT ACCESS ===================== -->
@@ -175,6 +176,24 @@
       Expect about 2-4 minutes per site at 200 pages. Rank 1 = best. Bold = best value. The latest finished comparison is included in the results bundle.</div>
   </section>
   <!-- ===================== AI ANSWERS ===================== -->
+  <section id="tab-ask" hidden>
+    <form id="askf" class="card" style="display:flex;flex-direction:column;align-items:stretch;gap:10px;text-align:left">
+      <label for="askq"><b>Ask a question</b> <span class="note">Sent to each AI at the same time, with web search on, the same way the answer test asks. Ctrl+Enter sends.</span></label>
+      <textarea id="askq" rows="3" maxlength="2000" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);font:inherit" placeholder="Can Methodist University undergraduates get a head start on getting into its medical school?"></textarea>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+        <label class="chk"><input type="checkbox" class="askp" value="anthropic" checked> Claude</label>
+        <label class="chk"><input type="checkbox" class="askp" value="openai" checked> ChatGPT</label>
+        <label class="chk"><input type="checkbox" class="askp" value="perplexity" checked> Perplexity</label>
+        <label class="chk"><input type="checkbox" class="askp" value="gemini" checked> Gemini</label>
+        <label class="chk">Claude effort <select id="askeffort"><option value="low">Low (like the test)</option><option value="medium">Medium (more searching)</option></select></label>
+        <button id="askgo">Ask</button>
+        <span id="askmsg" class="note"></span>
+      </div>
+    </form>
+    <div id="askout"></div>
+    <div class="card"><h2>Earlier questions</h2><div class="note" style="margin-bottom:6px">Saved on this computer in <code>ask-history.jsonl</code> (answers only, never keys). Click one to show its answers again.</div><div id="askhist" class="note">None yet.</div></div>
+  </section>
+
   <section id="tab-answers" hidden>
     <div class="card">
       <h2>Keys</h2>
@@ -212,6 +231,55 @@
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// ---------------- Ask the AIs (live)
+let askjob = null, asktimer = null;
+const ASKNAMES = { anthropic: "Claude", openai: "ChatGPT", perplexity: "Perplexity", gemini: "Gemini" };
+function askFmt(t) {
+  return esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+function renderAsk(st) {
+  const pill = (v, yes, no) => v == null ? "" : `<span class="pill ${v ? "ok" : "bad"}">${v ? yes : no}</span>`;
+  const cards = st.providers.map(p => {
+    const r = st.results[p];
+    if (!r) return `<div class="card" style="min-width:0"><h2 style="margin:0">${ASKNAMES[p] || p}</h2><p class="note">Waiting for an answer… (${st.elapsed_s}s)</p></div>`;
+    const src = [...(r.cited_urls || []), ...(r.other_sources || [])];
+    return `<div class="card" style="min-width:0;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:space-between"><h2 style="margin:0">${esc(r.name)} <span class="note">${esc(r.model)} · ${r.seconds}s</span></h2>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${r.error ? '<span class="pill bad">Error</span>' : pill(r.mentioned, "Names MU", "Doesn’t name MU") + pill(r.cited, "Cites methodist.edu", "No methodist.edu source") + ((r.confused_with || []).length ? '<span class="pill bad">Confused with another Methodist</span>' : "")}</div></div>
+      <div style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px">${r.error ? `<span class="err">${esc(r.error)}</span>` : askFmt(r.answer)}</div>
+      ${(r.colleges_named || []).length ? `<div class="note"><b>Colleges named:</b> ${esc(r.colleges_named.join(", "))}</div>` : ""}
+      <div class="note" style="overflow-wrap:anywhere"><b>Sources:</b> ${src.length ? src.map(u => esc(u.replace(/^https?:\/\//, "").replace(/\?utm_source=openai$/, ""))).join(" · ") : "none captured"}</div></div>`;
+  }).join("");
+  $("#askout").innerHTML = `<div class="card"><h2 style="margin:0 0 4px">${esc(st.question)}</h2><div class="note">${st.type === "branded" ? "Names MU" : "Doesn’t name MU, so the test is whether each AI brings MU up"} · ${st.done ? "all answers in" : "answers arrive as each AI finishes"}${st.missing_keys.length ? " · no key for " + esc(st.missing_keys.map(p => ASKNAMES[p] || p).join(", ")) : ""}</div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px">${cards}</div>`;
+}
+async function askPoll() {
+  try {
+    const st = await (await fetch("/api/ask/status?id=" + askjob)).json();
+    renderAsk(st);
+    if (st.done) { clearInterval(asktimer); asktimer = null; $("#askgo").disabled = false; $("#askmsg").textContent = ""; loadAskHistory(); }
+  } catch (e) {}
+}
+$("#askf").onsubmit = async ev => {
+  ev.preventDefault();
+  const question = $("#askq").value.trim();
+  if (!question) { $("#askmsg").textContent = "Type a question first."; return; }
+  const providers = [...document.querySelectorAll(".askp")].filter(c => c.checked).map(c => c.value);
+  if (!providers.length) { $("#askmsg").textContent = "Pick at least one AI."; return; }
+  $("#askgo").disabled = true; $("#askmsg").textContent = "Asking…";
+  const res = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, providers, effort: $("#askeffort").value }) });
+  const d = await res.json();
+  if (!res.ok) { $("#askgo").disabled = false; $("#askmsg").textContent = d.error; return; }
+  askjob = d.id; if (asktimer) clearInterval(asktimer); asktimer = setInterval(askPoll, 1500); askPoll();
+};
+$("#askq").addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("#askf").requestSubmit(); });
+let ASKHIST = [];
+async function loadAskHistory() {
+  try { ASKHIST = await (await fetch("/api/ask/history")).json(); } catch (e) { return; }
+  $("#askhist").innerHTML = ASKHIST.length ? ASKHIST.map((h, i) => `<div><a href="#" data-h="${i}">${esc(h.question)}</a> <span class="muted">${esc(h.created.replace("T", " "))}</span></div>`).join("") : "None yet.";
+  document.querySelectorAll("#askhist [data-h]").forEach(a => a.onclick = ev => { ev.preventDefault(); renderAsk(ASKHIST[+a.dataset.h]); $("#askq").value = ASKHIST[+a.dataset.h].question; window.scrollTo(0, 0); });
+}
 
 // ---------------- Run everything
 let xjob = null, xtimer = null;
@@ -261,6 +329,8 @@ document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   $("#tab-ready").hidden = b.dataset.tab !== "ready";
   $("#tab-compare").hidden = b.dataset.tab !== "compare";
   $("#tab-answers").hidden = b.dataset.tab !== "answers";
+  $("#tab-ask").hidden = b.dataset.tab !== "ask";
+  if (b.dataset.tab === "ask") loadAskHistory();
 });
 
 function pill(text) {

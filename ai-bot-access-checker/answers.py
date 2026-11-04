@@ -500,6 +500,79 @@ def score(qd: dict, bank: dict, text: str, urls: list[str], home_domain: str) ->
             "accurate": accurate, "pass": ok}
 
 
+# ---------------------------------------------------------------- one question, one provider
+
+PROVIDER_NAMES = {"anthropic": "Claude", "openai": "ChatGPT", "perplexity": "Perplexity", "gemini": "Gemini"}
+
+
+def model_of(prov: str, keys: dict) -> str:
+    return {"anthropic": ANTHROPIC_MODEL, "openai": keys.get("openai_model") or OPENAI_MODEL,
+            "perplexity": keys.get("perplexity_model") or PERPLEXITY_MODEL,
+            "gemini": _GEMINI_SUBSTITUTE.get(keys.get("gemini_model") or GEMINI_MODEL, keys.get("gemini_model") or GEMINI_MODEL)}.get(prov, "")
+
+
+def ask_one(prov: str, q: str, keys: dict, effort: str = "low") -> dict:
+    """Ask one provider one question. Never raises: failures come back in "error"."""
+    try:
+        if prov == "anthropic":
+            a = ask_anthropic(q, keys["anthropic"], effort)
+        elif prov == "openai":
+            a = ask_openai(q, keys["openai"], keys.get("openai_model") or OPENAI_MODEL)
+        elif prov == "perplexity":
+            a = ask_perplexity(q, keys["perplexity"], keys.get("perplexity_model") or PERPLEXITY_MODEL)
+        elif prov == "gemini":
+            a = ask_gemini(q, keys["gemini"], keys.get("gemini_model") or GEMINI_MODEL)
+        else:
+            a = {"text": "", "urls": [], "usage": {}, "error": f"unknown provider {prov}"}
+    except (RuntimeError, KeyError) as ex:
+        a = {"text": "", "urls": [], "usage": {}, "error": str(ex)}
+    if not a.get("error") and not a.get("text"):
+        a["error"] = f"{prov} returned no answer text"
+    return a
+
+
+class AskJob:
+    """A live question: every chosen provider at once, each result as soon as it arrives (the Ask tab)."""
+
+    def __init__(self, question: str, providers: list[str], effort: str = "low", home_domain: str = "methodist.edu"):
+        self.bank = load_questions()
+        self.keys = load_keys()
+        self.question = question.strip()
+        self.providers = [p for p in providers if self.keys.get(p)]
+        self.missing_keys = [p for p in providers if not self.keys.get(p)]
+        self.effort = effort if effort in ("low", "medium", "high") else "low"
+        self.home_domain = home_domain
+        self.results: dict[str, dict | None] = {p: None for p in self.providers}
+        self.started = time.time()
+        self.created = dt.datetime.now().isoformat(timespec="seconds")
+        self._lock = threading.Lock()
+        alias = "|".join(f"(?:{a})" for a in self.bank["institution_aliases"])
+        self.qd = {"id": "ASK", "type": "branded" if re.search(alias, self.question, re.I) else "category",
+                   "topic": "live", "q": self.question, "must_contain": [], "must_not_contain": []}
+
+    def _one(self, prov: str) -> None:
+        t0 = time.time()
+        a = ask_one(prov, self.question, self.keys, self.effort)
+        row = {"provider": prov, "name": PROVIDER_NAMES.get(prov, prov), "model": model_of(prov, self.keys),
+               "answer": a.get("text", ""), "error": a.get("error", ""), "seconds": round(time.time() - t0, 1), "usage": a.get("usage", {})}
+        if not a.get("error"):
+            sc = score(self.qd, self.bank, a["text"], a["urls"], self.home_domain)
+            row.update({k: sc[k] for k in ("mentioned", "cited", "cited_urls", "other_sources", "colleges_named", "confused_with")})
+        with self._lock:
+            self.results[prov] = row
+
+    def start(self) -> None:
+        for p in self.providers:
+            threading.Thread(target=self._one, args=(p,), daemon=True).start()
+
+    def status(self) -> dict:
+        with self._lock:
+            res = dict(self.results)
+        return {"question": self.question, "type": self.qd["type"], "effort": self.effort, "created": self.created,
+                "providers": self.providers, "missing_keys": self.missing_keys, "results": res,
+                "done": all(v is not None for v in res.values()), "elapsed_s": round(time.time() - self.started)}
+
+
 # ---------------------------------------------------------------- run
 
 class AnswerRun:
@@ -529,21 +602,7 @@ class AnswerRun:
                     if self._stop.is_set():
                         break
                     t0 = time.time()
-                    try:
-                        if prov == "anthropic":
-                            a = ask_anthropic(qd["q"], self.keys["anthropic"], "medium" if deep else "low")
-                        elif prov == "openai":
-                            a = ask_openai(qd["q"], self.keys["openai"], self.keys.get("openai_model") or OPENAI_MODEL)
-                        elif prov == "perplexity":
-                            a = ask_perplexity(qd["q"], self.keys["perplexity"], self.keys.get("perplexity_model") or PERPLEXITY_MODEL)
-                        elif prov == "gemini":
-                            a = ask_gemini(qd["q"], self.keys["gemini"], self.keys.get("gemini_model") or GEMINI_MODEL)
-                        else:
-                            a = {"text": "", "urls": [], "usage": {}, "error": f"unknown provider {prov}"}
-                    except RuntimeError as ex:
-                        a = {"text": "", "urls": [], "usage": {}, "error": str(ex)}
-                    if not a.get("error") and not a.get("text"):
-                        a["error"] = f"{prov} returned no answer text"
+                    a = ask_one(prov, qd["q"], self.keys, "medium" if deep else "low")
                     row = {"id": qd["id"], "rep": rep, "type": qd["type"], "scope": scope_of(qd), "topic": qd["topic"], "question": qd["q"], "provider": prov,
                            "answer": a["text"], "error": a.get("error", ""), "seconds": round(time.time() - t0, 1), "usage": a.get("usage", {})}
                     row.update(score(qd, self.bank, a["text"], a["urls"], self.home_domain) if not a.get("error") else

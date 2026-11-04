@@ -22,7 +22,7 @@ from readiness import CHECKS, DEFAULTS, MESSAGES, Crawl
 from report import build as build_report
 from bundle import make_bundle, VERSION
 from compare import Compare
-from answers import AnswerRun, key_status, save_keys, load_questions, list_openai_models, list_gemini_models, load_keys
+from answers import AnswerRun, AskJob, key_status, save_keys, load_questions, list_openai_models, list_gemini_models, load_keys
 from runall import RunAll, load_settings, save_settings, PRESETS
 
 JOBS: dict[str, Crawl] = {}
@@ -40,6 +40,33 @@ def busy() -> str:
 COMPARES: dict[str, Compare] = {}
 ANSWERS: dict[str, AnswerRun] = {}
 RUNALLS: dict[str, RunAll] = {}
+ASKS: dict[str, AskJob] = {}
+ASK_LOG = Path(__file__).resolve().parent / "ask-history.jsonl"  # every live question and its answers, kept on this computer (not in git)
+
+
+def _log_ask(job: AskJob) -> None:
+    """Append a finished live question to ask-history.jsonl (answers only; never keys)."""
+    try:
+        with open(ASK_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(job.status(), ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def _ask_history(limit: int = 30) -> list[dict]:
+    try:
+        lines = ASK_LOG.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    out = []
+    for ln in reversed(lines[-500:]):
+        try:
+            out.append(json.loads(ln))
+        except ValueError:
+            continue
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _register(kind: str, obj) -> None:
@@ -247,6 +274,18 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 pages = [{k: v for k, v in p.items() if not k.startswith("_")} for p in list(c.results)]
                 self._send(200, json.dumps({"summary": c.summary(), "pages": pages, "pdfs": c.pdf_report()}).encode(), "application/json")
+        elif u.path == "/api/ask/status":
+            job = ASKS.get((parse_qs(u.query).get("id") or [""])[0])
+            if not job:
+                self._send(404, b'{"error":"unknown question"}', "application/json")
+                return
+            st = job.status()
+            if st["done"] and not getattr(job, "logged", False):
+                job.logged = True
+                _log_ask(job)
+            self._send(200, json.dumps(st).encode(), "application/json")
+        elif u.path == "/api/ask/history":
+            self._send(200, json.dumps(_ask_history()).encode(), "application/json")
         elif u.path == "/api/all/settings":
             self._send(200, json.dumps({**load_settings(), "presets": PRESETS}).encode(), "application/json")
         elif u.path in ("/api/all/status", "/api/all/stop", "/api/all/bundle", "/api/all/report"):
@@ -283,7 +322,27 @@ class Handler(BaseHTTPRequestHandler):
         u = urlsplit(self.path)
         n = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(n) if n else b""
-        if u.path == "/api/all/start":
+        if u.path == "/api/ask":
+            try:
+                d = json.loads(raw or b"{}")
+            except ValueError:
+                d = {}
+            q = str(d.get("question") or "").strip()
+            if not q:
+                self._send(400, b'{"error":"Type a question first."}', "application/json")
+                return
+            if len(q) > 2000:
+                self._send(400, b'{"error":"Keep the question under 2,000 characters."}', "application/json")
+                return
+            job = AskJob(q, [p for p in d.get("providers") or [] if isinstance(p, str)], str(d.get("effort") or "low"))
+            if not job.providers:
+                self._send(400, json.dumps({"error": "No API key saved for the AIs you picked. Add keys on the AI Answers tab."}).encode(), "application/json")
+                return
+            aid = uuid.uuid4().hex[:8]
+            ASKS[aid] = job
+            job.start()
+            self._send(200, json.dumps({"id": aid, "missing_keys": job.missing_keys}).encode(), "application/json")
+        elif u.path == "/api/all/start":
             if busy() or any(a.state == "running" for a in ANSWERS.values()):
                 self._send(409, json.dumps({"error": busy() or "An AI answer test is running. Wait for it to finish or stop it first."}).encode(), "application/json")
                 return

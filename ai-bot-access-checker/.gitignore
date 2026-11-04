@@ -4,3 +4,4 @@ keys.json
 results/
 runall.json
 *.png
+ask-history.jsonl

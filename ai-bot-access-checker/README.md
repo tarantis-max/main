@@ -143,6 +143,10 @@ If the list is turned off or blocked, the report says so and the crawl continues
 - `outdated_phrases`: wording that was true once and is not now (LCME applicant/candidate status, School of Medicine "will open" or "pending approval", "MU College of Medicine", Fort Liberty, Pope Air Force Base, Twitter, COVID-era notices, old copyright years). The crawl lists every page that uses each one, separates news posts (add an update note) from live pages (rewrite), and marks phrases on nearly every page as a site-template fix. Results are in Appendix G and the Action plan.
 - `manual_actions`: fixes found outside the crawl (for example a page no link points to). They are added to the Action plan; `"priority": "high"` puts them near the top.
 
+## Ask the AIs tab
+
+Type any question and send it to Claude, ChatGPT, Perplexity and Gemini at once, with web search on, the same way the answer test asks. Each answer appears as soon as that AI finishes, labeled with whether it names MU, whether it cites methodist.edu, the colleges it names and its sources. Every question and its answers are saved on this computer in `ask-history.jsonl` (never keys), and "Earlier questions" reopens them. Uses the keys saved on the AI Answers tab; each question costs about the same as one test question per AI.
+
 ## AI Answers tab
 
 Sends a question bank to AI assistants with web search on and scores the answers. Needs API keys (Anthropic Console, OpenAI Platform, Perplexity API settings, Google AI Studio). Run any subset of providers. Keys are saved to `keys.json` on your computer only; it is gitignored and never enters the results bundle.
