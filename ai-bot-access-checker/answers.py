@@ -441,7 +441,7 @@ def colleges_named(text: str, bank: dict) -> list[str]:
     for m in _COLLEGE_RX.finditer(text):
         if any(a < m.end() and m.start() < b for a, b in covered):
             continue
-        words = m.group(0).split()
+        words = m.group(0).rstrip(".,;:'").split()
         while words and _NOT_A_NAME.match(words[0]):
             words.pop(0)
         if len(words) >= 2 and words[0] not in ("University", "College"):
