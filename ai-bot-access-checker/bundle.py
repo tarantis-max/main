@@ -15,7 +15,7 @@ from ai_bot_check import DENY
 from readiness import CHECKS, Crawl
 from report import build as build_report
 
-VERSION = "2026.11.04.1"
+VERSION = "2026.11.04.2"
 
 
 def make_bundle(c: Crawl, access: dict | None, comparison=None) -> bytes:
@@ -46,6 +46,9 @@ def make_bundle(c: Crawl, access: dict | None, comparison=None) -> bytes:
             "comparison.json / comparison.csv / comparison.html": "latest competitor comparison, if one was run",
         },
     }
+    st = comparison.status() if comparison is not None else None
+    if st:
+        manifest["comparison"] = "complete" if st["state"] == "done" else f"partial: {st['done']} of {len(st['sites'])} sites, status {st['state']}"
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("manifest.json", json.dumps(manifest, indent=2))
@@ -56,7 +59,7 @@ def make_bundle(c: Crawl, access: dict | None, comparison=None) -> bytes:
         z.writestr("bot-access.json", json.dumps(access, indent=2) if access else "null")
         z.writestr("report.html", build_report(summary, list(c.results), c.pdf_report(), access))
         if comparison is not None:
-            z.writestr("comparison.json", json.dumps(comparison.status(), indent=2))
+            z.writestr("comparison.json", json.dumps(st, indent=2))
             z.writestr("comparison.csv", comparison.to_csv())
             z.writestr("comparison.html", comparison.report())
     return buf.getvalue()

@@ -24,6 +24,15 @@ from bundle import make_bundle
 from compare import Compare
 
 JOBS: dict[str, Crawl] = {}
+
+
+def busy() -> str:
+    """A crawl and a comparison at the same time slow each other down and distort response times."""
+    if any(c.state in ("pending", "running") for c in JOBS.values()):
+        return "A Site Readiness crawl is running. Wait for it to finish or stop it first, so response times stay accurate."
+    if any(c.state in ("pending", "running") for c in COMPARES.values()):
+        return "A competitor comparison is running. Wait for it to finish or stop it first, so response times stay accurate."
+    return ""
 COMPARES: dict[str, Compare] = {}
 
 
@@ -61,6 +70,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(500, json.dumps({"error": f"{type(e).__name__}: {e}"}).encode(), "application/json")
         elif u.path == "/api/crawl/start":
             q = parse_qs(u.query)
+            if busy():
+                self._send(409, json.dumps({"error": busy()}).encode(), "application/json")
+                return
             target = (q.get("url") or [""])[0].strip()
             if not target:
                 self._send(400, b'{"error":"url is required"}', "application/json")
@@ -84,6 +96,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, json.dumps({"id": jid}).encode(), "application/json")
         elif u.path == "/api/compare/start":
             q = parse_qs(u.query)
+            if busy():
+                self._send(409, json.dumps({"error": busy()}).encode(), "application/json")
+                return
             sites = [x for x in (q.get("sites") or [""])[0].replace(",", "\n").splitlines() if x.strip()]
             if len(sites) < 2:
                 self._send(400, b'{"error":"enter your site and at least one competitor"}', "application/json")

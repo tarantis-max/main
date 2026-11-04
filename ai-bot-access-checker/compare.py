@@ -71,6 +71,8 @@ def site_metrics(c: Crawl, access: dict | None) -> dict:
         m["sitemap"] = "yes" if access.get("sitemaps") or access.get("pages_scanned") else "no"
     org = s.get("organization") or {}
     m["org_schema"] = "yes" if org.get("rows") and org["rows"][0]["pass"] else "no"
+    m["org_found"] = org["rows"][0]["found"] if org.get("rows") else "homepage not crawled"  # diagnostic
+    m["home_url"] = org.get("home_url", "")
     m["invalid_schema_pct"] = cf["schema_valid"]["pct"] if "schema_valid" in cf else None
     si = s.get("site_issues") or {}
     m["program_schema_pct"] = _pct(si.get("program_schema_pages", 0), si.get("program_pages", 0))
@@ -212,6 +214,9 @@ def build_compare_report(st: dict) -> str:
         best = r["site"] in ranks.get(mid, {}).get("best", []) and len(rows) > 1
         return f"<b>{e(txt)}</b>" if best else e(txt)
 
+    partial = ("" if st["state"] == "done" else
+               f'<p style="background:#fff4d6;padding:8px 12px;border-radius:6px"><b>Partial results:</b> {len(rows)} of {len(st["sites"])} sites checked '
+               f'(status: {e(st["state"])}). Ranks compare only the sites checked so far.</p>')
     head = "".join(f"<th>{e(r['site'])}{' (you)' if i == 0 else ''}</th>" for i, r in enumerate(rows))
     body = "".join(
         f"<tr><td>{e(label)}</td><td class='rk'>{'tie' if ranks.get(mid, {}).get('tie') else '' if mid not in ranks or ranks[mid]['rank'] is None else ranks[mid]['rank']}</td>"
@@ -229,7 +234,7 @@ td.rk{{text-align:center;color:#5f6068}} th:nth-child(3),td:nth-child(3){{backgr
 @media print{{.bar{{display:none}} main{{padding:0}} @page{{margin:0.5in;size:landscape}}}}
 </style></head><body><div class="bar"><button onclick="window.print()">Print / Save as PDF</button></div><main>
 <h1>Competitor Comparison</h1>
-<div class="meta">{e(me)} vs {len(rows) - 1} competitor(s) · {d:%B} {d.day}, {d.year} · up to {st['max_pages']} pages per site</div>
+{partial}<div class="meta">{e(me)} vs {len(rows) - 1} competitor(s) · {d:%B} {d.day}, {d.year} · up to {st['max_pages']} pages per site</div>
 <h2>Summary</h2>
 <ul>
 <li><b>{e(me)} leads on {len(lead)} of {sum(1 for r in ranks.values() if not r.get('tie'))} ranked metrics</b>{': ' + e(', '.join(lead)) if lead else ''}.</li>
@@ -239,7 +244,8 @@ td.rk{{text-align:center;color:#5f6068}} th:nth-child(3),td:nth-child(3){{backgr
 <table><thead><tr><th>Metric</th><th>Your rank</th>{head}</tr></thead><tbody>{body}</tbody></table>
 <p class="note">Bold = best value. Rank 1 = best (ties share a rank). "tie" = every site has the same value. Metrics without a rank are informational. Every site was crawled the same way:
 same host only, robots.txt respected, up to {st['max_pages']} pages from its sitemap and links, plus the same bot access check.
-Competitors are scored without institution-specific name checks. A sample of pages is checked, not the whole site.</p>
+Competitors are scored without institution-specific name checks. A sample of pages is checked, not the whole site.
+"Program pages with program schema" applies only to sites whose program pages use /program/, /programs/, /degrees/ or /majors/ URLs; "-" means none were found.</p>
 </main></body></html>"""
 
 
