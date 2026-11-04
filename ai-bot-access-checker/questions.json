@@ -1,5 +1,5 @@
 {
-  "_about": "Question bank for the AI answer tester. Edit freely. type: branded (names MU) or category (does not). must_contain / must_not_contain are case-insensitive regular expressions; leave must_contain empty until the approved answer is confirmed. Approved facts come from MU_Brand_Positioning_Statements; fill in anything marked CONFIRM.",
+  "_about": "Question bank for the AI answer tester. Edit freely. 59 questions: 27 branded, 32 category. type: branded (names MU) or category (does not). must_contain / must_not_contain are case-insensitive regular expressions; leave must_contain empty until the approved answer is confirmed. Approved facts come from MU_Brand_Positioning_Statements; fill in anything marked CONFIRM.",
   "institution": "Methodist University",
   "institution_aliases": [
     "Methodist University",
@@ -80,7 +80,7 @@
       "topic": "medicine",
       "q": "What can I do as an undergraduate at Methodist University because it has a School of Medicine?",
       "must_contain": [
-        "Monarch Momentum|guaranteed"
+        "Monarch Momentum"
       ],
       "must_not_contain": []
     },
@@ -167,8 +167,8 @@
     {
       "id": "B14",
       "type": "branded",
-      "topic": "size",
-      "q": "How many students attend Methodist University?",
+      "topic": "outcomes",
+      "q": "What is the graduation rate at Methodist University and why is it low?",
       "must_contain": [],
       "must_not_contain": []
     },
@@ -223,6 +223,66 @@
       "q": "Does Methodist University offer campus tours or a virtual tour?",
       "must_contain": [
         "tour|visit"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "B21",
+      "type": "branded",
+      "topic": "parents",
+      "q": "Is Methodist University safe?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "B22",
+      "type": "branded",
+      "topic": "support",
+      "q": "What support does Methodist University give first-year students?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "B23",
+      "type": "branded",
+      "topic": "admissions",
+      "q": "What GPA and test scores do I need to get into Methodist University?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "B24",
+      "type": "branded",
+      "topic": "admissions",
+      "q": "Does Methodist University accept the Common App, and is there an application fee?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "B25",
+      "type": "branded",
+      "topic": "transfer",
+      "q": "How do I transfer credits from Fayetteville Technical Community College to Methodist University?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "B26",
+      "type": "branded",
+      "topic": "identity",
+      "q": "Is Methodist University a Christian school, and do I have to be Methodist to attend?",
+      "must_contain": [
+        "United Methodist|Wesleyan|Methodist"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "B27",
+      "type": "branded",
+      "topic": "identity",
+      "q": "Methodist University vs Methodist College: are they the same place?",
+      "must_contain": [
+        "Fayetteville"
       ],
       "must_not_contain": []
     },
@@ -383,6 +443,102 @@
       "type": "category",
       "topic": "methodist",
       "q": "Which universities in North Carolina are affiliated with the United Methodist Church?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C21",
+      "type": "category",
+      "topic": "cost",
+      "q": "How much does a private college in North Carolina cost after financial aid?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C22",
+      "type": "category",
+      "topic": "aid",
+      "q": "Which North Carolina private colleges offer full-tuition or merit scholarships for a 3.5 GPA?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C23",
+      "type": "category",
+      "topic": "aid",
+      "q": "Which private colleges in North Carolina accept the NC Need-Based Scholarship?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C24",
+      "type": "category",
+      "topic": "value",
+      "q": "Is a private college in North Carolina worth it compared to UNC Charlotte or East Carolina?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C25",
+      "type": "category",
+      "topic": "outcomes",
+      "q": "Which small colleges in North Carolina have the best job placement rates?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C26",
+      "type": "category",
+      "topic": "health",
+      "q": "Which North Carolina colleges give their own graduates an advantage getting into a physician assistant program?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C27",
+      "type": "category",
+      "topic": "engineering",
+      "q": "Which North Carolina colleges have a 100% job placement rate for engineering graduates?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C28",
+      "type": "category",
+      "topic": "military",
+      "q": "What are the best colleges near Fayetteville, NC (Fort Liberty, formerly Fort Bragg) for military spouses?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C29",
+      "type": "category",
+      "topic": "online",
+      "q": "Which online bachelor's programs in North Carolina are good for working adults with transfer credits?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C30",
+      "type": "category",
+      "topic": "first-gen",
+      "q": "Which colleges in North Carolina have strong support for first-generation students?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C31",
+      "type": "category",
+      "topic": "medicine",
+      "q": "Which North Carolina colleges recently opened a medical school?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C32",
+      "type": "category",
+      "topic": "golf",
+      "q": "Which colleges in North Carolina have an on-campus golf course?",
       "must_contain": [],
       "must_not_contain": []
     }

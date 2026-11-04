@@ -261,7 +261,10 @@ def score(qd: dict, bank: dict, text: str, urls: list[str], home_domain: str) ->
     cited_urls = sorted({u for u in urls if _host(u) == home_domain or _host(u).endswith("." + home_domain)})
     other_hosts = sorted({_host(u) for u in urls if _host(u) and not (_host(u) == home_domain or _host(u).endswith("." + home_domain))})
     peers = [p for p in bank.get("peers", []) if re.search(r"\b" + re.escape(p), text, re.I)]
-    confused = [c for c in bank.get("confusion_terms", []) if re.search(c, text, re.I)]
+    first_mu = (re.search(alias_rx, text, re.I) or type("m", (), {"start": lambda self: 10**9})()).start()
+    # a confusion only if the other school is named before (or instead of) the institution; a disambiguation
+    # aside after naming the right school ("not Southern Methodist") does not count
+    confused = [c for c in bank.get("confusion_terms", []) for m in [re.search(c, text, re.I)] if m and m.start() < first_mu]
     missing = [m for m in qd.get("must_contain", []) if not re.search(m, text, re.I)]
     forbidden = [m for m in qd.get("must_not_contain", []) if re.search(m, text, re.I)]
     accurate = None if not qd.get("must_contain") and not qd.get("must_not_contain") else (not missing and not forbidden)
