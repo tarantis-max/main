@@ -34,7 +34,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ANTHROPIC_MODEL = "claude-opus-5-5"
 OPENAI_MODEL = "gpt-5"  # editable in keys.json as "openai_model"; the error from OpenAI names valid models if this is stale
 PERPLEXITY_MODEL = "fast"           # editable as "perplexity_model": an effort level (fast = Sonar, low = Pro Search, medium, high) or a model id such as "openai/gpt-6-luna"
-GEMINI_MODEL = "gemini-2.5-flash"   # editable as "gemini_model"; "List my models" shows what the key can use
+GEMINI_MODEL = "gemini-2.5-flash"   # editable as "gemini_model"; if Google retires it, the newest available flash model is used automatically
 PROVIDERS = ("anthropic", "openai", "perplexity", "gemini")
 TIMEOUT = 180
 SYSTEM = ("You are helping a prospective college student. Answer the question directly and concisely (under 250 words), "
@@ -314,14 +314,42 @@ def smoke_test(provider: str) -> int:
     return 0
 
 
+_GEMINI_SUBSTITUTE: dict[str, str] = {}  # retired model -> replacement chosen this session
+
+
+def _pick_gemini_replacement(key: str) -> str:
+    """Newest available flash model (cheap, fast), else the first listed model."""
+    models = list_gemini_models(key)
+    flash = [m for m in models if "flash" in m and "-lite" not in m]
+
+    def version(m: str) -> float:
+        v = re.match(r"gemini-(\d+(?:\.\d+)?)", m)
+        return float(v.group(1)) if v else 0.0
+    pick = sorted(flash, key=lambda m: (-version(m), "preview" in m, len(m)))[:1] or models[:1]
+    if not pick:
+        raise RuntimeError("HTTP 404: no Gemini models available to this key")
+    return pick[0]
+
+
 def ask_gemini(q: str, key: str, model: str) -> dict:
-    """generateContent with Google Search grounding; sources in candidates[].groundingMetadata.groundingChunks[].web.uri."""
-    resp = _post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent", {"x-goog-api-key": key}, {
+    """generateContent with Google Search grounding; sources in candidates[].groundingMetadata.groundingChunks[].web.uri.
+    If Google has retired the configured model (404), switch to the newest available flash model and retry once."""
+    model = _GEMINI_SUBSTITUTE.get(model, model)
+    body = {
         "system_instruction": {"parts": [{"text": SYSTEM}]},
         "contents": [{"role": "user", "parts": [{"text": q}]}],
         "tools": [{"google_search": {}}],
         "generationConfig": {"maxOutputTokens": 2048},
-    })
+    }
+    url = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent"
+    try:
+        resp = _post(url.format(model), {"x-goog-api-key": key}, body)
+    except RuntimeError as ex:
+        if not str(ex).startswith("HTTP 404"):
+            raise
+        replacement = _pick_gemini_replacement(key)
+        _GEMINI_SUBSTITUTE[model] = replacement
+        resp = _post(url.format(replacement), {"x-goog-api-key": key}, body)
     cands = resp.get("candidates") or []
     if not cands:
         reason = (resp.get("promptFeedback") or {}).get("blockReason") or "no candidates"
@@ -471,6 +499,7 @@ class AnswerRun:
             "category_total": len(cat),
             "tokens": {"input": tok_in, "output": tok_out},
             "reported_cost_usd": cost,
+            "model_substitutions": dict(_GEMINI_SUBSTITUTE),
             "date": dt.date.today().isoformat(),
         }
 
