@@ -4,7 +4,7 @@ whether the institution is mentioned, cited, accurate, and not confused with ano
 Providers (raw HTTP, standard library only):
   anthropic   POST https://api.anthropic.com/v1/messages   (web_search_20260209 server tool)
   openai      POST https://api.openai.com/v1/responses      (web_search tool)
-  perplexity  POST https://api.perplexity.ai/v1/agent       (Agent API; web_search tool; preset or model)
+  perplexity  POST https://api.perplexity.ai/v1/agent       (Agent API; effort level, or a model with the web_search tool)
   gemini      POST generativelanguage.googleapis.com/v1beta/models/{model}:generateContent (google_search grounding)
 
 Keys are read from the environment (ANTHROPIC_API_KEY, OPENAI_API_KEY, PERPLEXITY_API_KEY, GEMINI_API_KEY) or from
@@ -33,7 +33,7 @@ from urllib.parse import urlsplit
 HERE = os.path.dirname(os.path.abspath(__file__))
 ANTHROPIC_MODEL = "claude-opus-5-5"
 OPENAI_MODEL = "gpt-5"  # editable in keys.json as "openai_model"; the error from OpenAI names valid models if this is stale
-PERPLEXITY_MODEL = "low"            # editable as "perplexity_model": a preset ("low", "medium", ...) or a model such as "openai/gpt-5.6-sol"
+PERPLEXITY_MODEL = "fast"           # editable as "perplexity_model": an effort level (fast = Sonar, low = Pro Search, medium, high) or a model id such as "openai/gpt-6-luna"
 GEMINI_MODEL = "gemini-2.5-flash"   # editable as "gemini_model"; "List my models" shows what the key can use
 PROVIDERS = ("anthropic", "openai", "perplexity", "gemini")
 TIMEOUT = 180
@@ -255,42 +255,36 @@ def _parse_responses_output(resp: dict) -> tuple[str, list[str]]:
 
 
 PERPLEXITY_AGENT_URL = "https://api.perplexity.ai/v1/agent"
+PERPLEXITY_EFFORTS = ("fast", "low", "medium", "high", "xhigh", "ultra-preview")
 
 
 def _perplexity_body(q: str, model: str) -> dict:
-    """A value with a provider prefix ("openai/gpt-5.6-sol") or a sonar model name is sent as `model`;
-    anything else ("low", "medium", ...) is sent as a `preset`, which bundles model, tools and limits."""
-    body = {"input": q, "instructions": SYSTEM, "tools": [{"type": "web_search"}]}
-    if "/" in model or model.startswith("sonar"):
-        body["model"] = model
-    else:
-        body["preset"] = model
-    return body
+    """Request body for POST /v1/agent (docs: api-reference/agent-post, agent-api/effort).
+
+    An effort level ("low", "fast@2026-10-16.0", ...) bundles model, tools, steps and Perplexity's own system
+    prompt; anything else sent alongside overrides it, so only the question is sent, which is what a student gets.
+    A provider/model id ("openai/gpt-6-luna") runs that model directly: web_search must then be listed, max_steps
+    defaults to 1 (too few to search and answer), and anthropic/* models require max_output_tokens."""
+    if "/" not in model:
+        return {"effort": model, "input": q}
+    return {"model": model, "input": q, "instructions": SYSTEM,
+            "tools": [{"type": "web_search"}], "max_steps": 5, "max_output_tokens": 8192}
 
 
 def ask_perplexity(q: str, key: str, model: str) -> dict:
-    """Perplexity Agent API (POST /v1/agent). Web grounding is the web_search tool; answer text comes from
-    output_text or the output message items, URL citations from text annotations and search_results items."""
-    headers = {"Authorization": f"Bearer {key}"}
-    body = _perplexity_body(q, model)
-    try:
-        resp = _post(PERPLEXITY_AGENT_URL, headers, body)
-    except RuntimeError as ex:
-        msg = str(ex)
-        if not msg.startswith("HTTP 400"):
-            raise  # 401 key, 403 credits, 429 already retried with Retry-After
-        if "tool" in msg:            # a preset that already bundles its tools may reject an explicit list
-            body.pop("tools", None)
-        if "instructions" in msg:    # fold the system prompt into the input instead
-            body.pop("instructions", None)
-            body["input"] = f"{SYSTEM}\n\nQuestion: {q}"
-        resp = _post(PERPLEXITY_AGENT_URL, headers, body)
+    """Perplexity Agent API. The answer is in output[] message items (content[].text, url_citation annotations);
+    sources are in search_results items (results[].url). output_text is an SDK convenience, not in the JSON."""
+    resp = _post(PERPLEXITY_AGENT_URL, {"Authorization": f"Bearer {key}"}, _perplexity_body(q, model))
+    u = resp.get("usage") or {}
+    usage = {"input": u.get("input_tokens", 0), "output": u.get("output_tokens", 0), "searches": 0,
+             "cost_usd": ((u.get("cost") or {}).get("total_cost") or 0)}
+    if resp.get("status") in ("failed", "cancelled"):
+        msg = (resp.get("error") or {}).get("message") or resp["status"]
+        return {"text": "", "urls": [], "usage": usage, "error": f"perplexity: {msg}"}
     text, urls = _parse_responses_output(resp)
-    u = resp.get("usage", {})
-    usage = {"input": u.get("input_tokens", u.get("prompt_tokens", 0)), "output": u.get("output_tokens", u.get("completion_tokens", 0)), "searches": 0}
     if not text:
-        reason = (resp.get("incomplete_details") or {}).get("reason") or resp.get("status") or "empty answer"
-        return {"text": "", "urls": urls, "usage": usage, "error": f"perplexity returned no answer text ({reason}); response fields: {sorted(resp.keys())}"}
+        return {"text": "", "urls": urls, "usage": usage,
+                "error": f"perplexity returned no answer text (status {resp.get('status')}); response fields: {sorted(resp.keys())}"}
     return {"text": text, "urls": urls, "usage": usage}
 
 
@@ -461,6 +455,7 @@ class AnswerRun:
         cat = [r for r in ok if r["type"] == "category"]
         tok_in = sum(r["usage"].get("input", 0) for r in rows)
         tok_out = sum(r["usage"].get("output", 0) for r in rows)
+        cost = round(sum(r["usage"].get("cost_usd", 0) or 0 for r in rows), 4)
         return {
             "state": self.state, "error": self.error, "providers": self.providers, "missing_keys": self.missing_keys,
             "questions": len(self.questions), "done": len(rows), "total": len(self.questions) * max(1, len(self.providers)),
@@ -475,6 +470,7 @@ class AnswerRun:
             "peer_mentions": sorted(({"peer": p, "answers": n} for p, n in peer.items()), key=lambda x: -x["answers"]),
             "category_total": len(cat),
             "tokens": {"input": tok_in, "output": tok_out},
+            "reported_cost_usd": cost,
             "date": dt.date.today().isoformat(),
         }
 
@@ -557,7 +553,7 @@ pre{{white-space:pre-wrap;background:#f5f5f7;padding:10px;border-radius:6px;font
 <table><thead><tr><th>ID</th><th>Question</th><th>Provider</th><th>Mentioned</th><th>Cited</th><th>Accurate</th><th>Peers named</th><th>Issue</th></tr></thead><tbody>{q_rows}</tbody></table>
 <h2>Answers</h2>
 {answers}
-<p class="note">Method: each question is sent once per provider with web search enabled and a neutral system prompt. Mentioned = the answer names the institution. Cited = a search result or citation is on the institution's domain. Accurate = every required fact in questions.json appears and no forbidden term does (branded questions with rules only). Tokens used: {s['tokens']['input']:,} in, {s['tokens']['output']:,} out.</p>
+<p class="note">Method: each question is sent once per provider with web search enabled and a neutral system prompt. Mentioned = the answer names the institution. Cited = a search result or citation is on the institution's domain. Accurate = every required fact in questions.json appears and no forbidden term does (branded questions with rules only). Tokens used: {s['tokens']['input']:,} in, {s['tokens']['output']:,} out. Cost reported by providers that return it (Perplexity): ${s.get('reported_cost_usd', 0):.2f}.</p>
 </main></body></html>"""
 
 
