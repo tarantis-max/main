@@ -672,10 +672,17 @@ def site_issues(c: "Crawl", pages: list[dict]) -> dict:
     if wp.get("available"):
         pub = wp.get("published") or {}
         not_sm = [u for u in pub if u not in c.sitemap_urls] if c.sitemap_urls else []
-        hidden = [u for u in not_sm if c.inlinks.get(u, 0) == 0 and u.rstrip("/") != c.start.rstrip("/")]
+        hidden_all = [u for u in not_sm if c.inlinks.get(u, 0) == 0 and u.rstrip("/") != c.start.rstrip("/")]
+        # event-calendar venues and organizers are created automatically by the events plugin: a noindex fix, not content
+        listing = [u for u in hidden_all if WP_LISTING_TYPE.search(pub.get(u, ""))]
+        hidden = [u for u in hidden_all if u not in set(listing)]
         file_redirects = [x for x in wp.get("suspects", []) if x.get("opens_file", True)]
-        wordpress.update({"published": len(pub), "by_type": wp.get("by_type", {}), "media": wp.get("media", 0),
+        media_n = wp.get("media", 0)
+        wordpress.update({"published": len(pub), "by_type": wp.get("by_type", {}), "media": media_n,
+                          "media_limited": media_n < max(200, len(pub) // 4),
                           "not_in_sitemap": len(not_sm), "not_in_sitemap_sample": not_sm[:15],
+                          "listing_pages": len(listing), "listing_sample": listing[:10],
+                          "listing_types": sorted({pub.get(u, "") for u in listing}),
                           "hidden": len(hidden), "hidden_sample": hidden[:15],
                           "file_redirects": len(file_redirects), "file_redirect_sample": file_redirects[:15]})
     return {
@@ -1041,6 +1048,7 @@ def norm(u: str) -> str:
     return urlunsplit((sp.scheme.lower(), sp.netloc.lower(), path, sp.query, ""))
 
 
+WP_LISTING_TYPE = re.compile(r"venue|organizer|organiser|tribe_|location|speaker", re.I)
 WP_SKIP_TYPES = {"attachment", "nav_menu_item", "wp_block", "wp_template", "wp_template_part", "wp_navigation",
                  "wp_global_styles", "wp_font_family", "wp_font_face"}
 FILE_PATH = re.compile(r"/wp-content/uploads/|\.(jpe?g|png|gif|webp|svg|pdf|docx?|pptx?|xlsx?|mp4|mp3|zip)$", re.I)

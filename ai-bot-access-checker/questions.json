@@ -29,7 +29,7 @@
   ],
   "confusion_terms": [
     "Southern Methodist",
-    "Methodist College (of|at|in)",
+    "Methodist College (of|at|in)(?! (Fayetteville|North Carolina|N\\.?C\\.?\\b))",
     "Methodist Hospital",
     "Nebraska Methodist",
     "Central Methodist",
@@ -82,7 +82,7 @@
         "Cape Fear Valley"
       ],
       "must_not_contain": [
-        "(does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program)|^\\W*No\\b"
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}((does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|has no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program))|^\\W*No\\b"
       ],
       "scope": "branded",
       "repeat": 3

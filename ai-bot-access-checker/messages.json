@@ -204,7 +204,7 @@
       "id": "som_future",
       "phrase": "School of Medicine described as not yet open or pending approval",
       "use_instead": "Opened July 20, 2026, with 64 students",
-      "pattern": "(School of Medicine|medical school|charter class|inaugural class)[^.]{0,120}(will (open|welcome|enroll|begin|launch)|plans? to (open|enroll)|(expected|anticipated|scheduled) to (open|begin|enroll)|pending (LCME|SACSCOC|accreditation|approval))|(pending (LCME|SACSCOC) (approval|accreditation))"
+      "pattern": "(School of Medicine|medical school|College of Medicine)[^.]{0,120}(will (open|welcome|enroll|begin|launch)|plans? to (open|enroll)|(expected|anticipated|scheduled) to (open|begin|enroll)|pending (LCME|SACSCOC|accreditation|approval))|pending (LCME|SACSCOC) (approval|accreditation)"
     },
     {
       "id": "som_old_name",
@@ -234,7 +234,7 @@
       "id": "covid_ops",
       "phrase": "COVID-era operating notices",
       "use_instead": "Remove, or label as historical",
-      "pattern": "(COVID|coronavirus|pandemic)[^.]{0,100}(protocol|mask|social distanc|until further notice|temporar|remote instruction|virtual only|test-optional for)"
+      "pattern": "(COVID|coronavirus|pandemic)[^.]{0,100}(protocols? (are|remain|require)|masks? (are|is) (required|optional)|social distancing|until further notice|remote instruction|virtual only|test-optional for (fall|spring) 202[0-3])"
     },
     {
       "id": "old_copyright",

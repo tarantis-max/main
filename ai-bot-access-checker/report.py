@@ -220,6 +220,10 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     if wpo.get("available"):
         other.append(f"WordPress lists {wpo.get('published', 0)} published pages and posts and {wpo.get('media', 0)} media files. "
                      f"{wpo.get('not_in_sitemap', 0)} published page(s) are missing from the sitemap; {wpo.get('hidden', 0)} of those have no links either.")
+        if wpo.get("listing_pages"):
+            other.append(f"{wpo['listing_pages']} of the unlinked pages are event-calendar venue or organizer pages ({e(', '.join(wpo.get('listing_types', [])))}), listed separately.")
+        if wpo.get("media_limited"):
+            other.append(f"WordPress listed only {wpo.get('media', 0)} media files, so the site limits that list. The check for old page addresses that now open a file is incomplete; check known cases (like /academics/medicine-2/) by hand.")
         for x in wpo.get("file_redirect_sample", [])[:5]:
             other.append(f"<b>{e(urlsplit(x['url']).path)}</b> opens a file ({e((x.get('goes_to') or x.get('file') or '').rsplit('/', 1)[-1])}) "
                          f"but looks like a former version of <b>{e(x['page'])}</b>.")
@@ -346,6 +350,11 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
                         "These addresses were probably pages once (a \"-2\" version of a live page). Search results and AI may still show the old page text; clicking opens an image or PDF.",
                         "301-redirect each to the live page it duplicates (shown in Site-level findings), not to the file; request a recrawl in Google Search Console.",
                         "Web team", f"{wpi['file_redirects']} address(es)"))
+    if wpi.get("listing_pages"):
+        actions.append(("Noindex event-calendar venue and organizer pages",
+                        "The events plugin publishes a page for every venue and organizer (restaurants, stores, campus rooms). Nobody links to them, and they add thin pages to search.",
+                        "In the events plugin or SEO plugin settings, set venue and organizer pages to noindex and leave them out of the sitemap.",
+                        "Web team", f"{wpi['listing_pages']} page(s)"))
     if wpi.get("hidden"):
         actions.append(("Link, redirect or unpublish hidden WordPress pages",
                         "Published pages with no links and no sitemap entry go stale unnoticed, and search engines that already know them keep showing them.",
@@ -567,7 +576,10 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
                  f"{wpi.get('hidden', 0)} of {wpi.get('published', 0)} published page(s)/post(s) hidden: "
                  + (", ".join(urlsplit(u).path for u in wpi.get("hidden_sample", [])[:5]) or "none")),
                 ("No former page addresses that open a file", not wpi.get("file_redirects"),
-                 ", ".join(f"{urlsplit(x['url']).path} -> {urlsplit(x.get('goes_to') or x.get('file') or '').path.rsplit('/', 1)[-1]}" for x in wpi.get("file_redirect_sample", [])[:5]) or "none"),
+                 (", ".join(f"{urlsplit(x['url']).path} -> {urlsplit(x.get('goes_to') or x.get('file') or '').path.rsplit('/', 1)[-1]}" for x in wpi.get("file_redirect_sample", [])[:5]) or "none found")
+                 + (f" (incomplete: WordPress listed only {wpi.get('media', 0)} media files)" if wpi.get("media_limited") else "")),
+                ("Event venue and organizer pages kept out of search", not wpi.get("listing_pages"),
+                 f"{wpi.get('listing_pages', 0)} unlinked venue/organizer page(s)"),
             ]
 
     site_html = ('<h2>Site-level SEO and GEO findings</h2><table><thead><tr><th>Check</th><th>Result</th><th>Detail</th></tr></thead><tbody>'
