@@ -31,7 +31,7 @@ from html import escape as e
 from urllib.parse import urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ANTHROPIC_MODEL = "claude-opus-5-5"
+ANTHROPIC_MODEL = "claude-sonnet-5-5"  # Sonnet: far fewer dollars per token than Opus, close to what Claude app users see
 OPENAI_MODEL = "gpt-5"  # editable in keys.json as "openai_model"; the error from OpenAI names valid models if this is stale
 PERPLEXITY_MODEL = "low"            # editable as "perplexity_model": an effort level (fast = Sonar, low = Pro Search, medium, high) or a model id such as "openai/gpt-6-luna"
 GEMINI_MODEL = "gemini-2.5-flash"   # editable as "gemini_model"; if Google retires it, the newest available flash model is used automatically
