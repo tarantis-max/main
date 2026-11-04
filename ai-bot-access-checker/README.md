@@ -113,12 +113,18 @@ Sends a question bank to AI assistants with web search on and scores the answers
 - `questions.json`: 27 branded questions (name MU) and 32 category questions (do not), from EAB's audit prompts and admitted-student survey themes. Each can have `must_contain` / `must_not_contain` rules (regular expressions) for accuracy scoring.
 - Per answer: **mentioned** (names MU), **cited** (a search result or citation is on methodist.edu), **accurate** (all required facts present, branded only), **confused** (mixed up with another "Methodist" school), peers named, other sources used.
 - Summary: branded mention %, category mention %, citation rate, accuracy, confusions, who gets named on category questions, and which third-party sites the AIs relied on.
-- Providers: Claude (`claude-opus-5-5`, Anthropic web search tool), ChatGPT (OpenAI Responses API with web search), Perplexity (`sonar` via the Agent API, `/v1/responses`; search built in) and Google Gemini (`gemini-2.5-flash` with Google Search grounding). Model names are editable under Keys; "List my models" fills the OpenAI and Gemini pickers from the key's own account. Gemini has a free tier; Google AI Overviews themselves have no API, so grounded Gemini is the closest stand-in.
+- Providers: Claude (`claude-opus-5-5`, Anthropic web search tool), ChatGPT (OpenAI Responses API with web search), Perplexity (Agent API, `POST /v1/agent`, with the `web_search` tool; the model box takes a preset such as `low` or a model such as `openai/gpt-5.6-sol`; needs paid Agent API credit) and Google Gemini (`gemini-2.5-flash` with Google Search grounding). Model names are editable under Keys; "List my models" fills the OpenAI and Gemini pickers from the key's own account. Gemini has a free tier; Google AI Overviews themselves have no API, so grounded Gemini is the closest stand-in.
 - Cost: roughly a dollar or two per provider for a full run. "Quick test (2)" runs one branded and one category question. A full run is 59 questions per provider.
 - Re-run monthly. The latest run goes into the results bundle (answers.json/csv/html) and Appendix I of the executive report.
 
 ```bash
 python3 answers.py --out ai-answers.html --csv ai-answers.csv
+```
+
+Keys can also come from environment variables, which take precedence over keys saved in the app: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`. To check one provider with a single minimal request (prints only the status, never the key):
+
+```bash
+python3 answers.py --smoke perplexity
 ```
 
 ## Competitors tab

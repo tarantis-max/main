@@ -4,7 +4,7 @@ whether the institution is mentioned, cited, accurate, and not confused with ano
 Providers (raw HTTP, standard library only):
   anthropic   POST https://api.anthropic.com/v1/messages   (web_search_20260209 server tool)
   openai      POST https://api.openai.com/v1/responses      (web_search tool)
-  perplexity  POST https://api.perplexity.ai/v1/responses   (Agent API, Responses-style; search built in)
+  perplexity  POST https://api.perplexity.ai/v1/agent       (Agent API; web_search tool; preset or model)
   gemini      POST generativelanguage.googleapis.com/v1beta/models/{model}:generateContent (google_search grounding)
 
 Keys are read from the environment (ANTHROPIC_API_KEY, OPENAI_API_KEY, PERPLEXITY_API_KEY, GEMINI_API_KEY) or from
@@ -33,7 +33,7 @@ from urllib.parse import urlsplit
 HERE = os.path.dirname(os.path.abspath(__file__))
 ANTHROPIC_MODEL = "claude-opus-5-5"
 OPENAI_MODEL = "gpt-5"  # editable in keys.json as "openai_model"; the error from OpenAI names valid models if this is stale
-PERPLEXITY_MODEL = "sonar"          # editable as "perplexity_model"
+PERPLEXITY_MODEL = "low"            # editable as "perplexity_model": a preset ("low", "medium", ...) or a model such as "openai/gpt-5.6-sol"
 GEMINI_MODEL = "gemini-2.5-flash"   # editable as "gemini_model"; "List my models" shows what the key can use
 PROVIDERS = ("anthropic", "openai", "perplexity", "gemini")
 TIMEOUT = 180
@@ -55,10 +55,12 @@ def load_keys() -> dict:
             keys = json.load(f)
     except FileNotFoundError:
         pass
-    keys.setdefault("anthropic", os.environ.get("ANTHROPIC_API_KEY", ""))
-    keys.setdefault("openai", os.environ.get("OPENAI_API_KEY", ""))
-    keys.setdefault("perplexity", os.environ.get("PERPLEXITY_API_KEY", ""))
-    keys.setdefault("gemini", os.environ.get("GEMINI_API_KEY", ""))
+    # an exported environment variable wins over keys.json, so a key can live only in the shell
+    for name, env in (("anthropic", "ANTHROPIC_API_KEY"), ("openai", "OPENAI_API_KEY"),
+                      ("perplexity", "PERPLEXITY_API_KEY"), ("gemini", "GEMINI_API_KEY")):
+        if os.environ.get(env, "").strip():
+            keys[name] = os.environ[env]
+        keys.setdefault(name, "")
     return {k: (v or "").strip() if isinstance(v, str) else v for k, v in keys.items()}
 
 
@@ -252,27 +254,70 @@ def _parse_responses_output(resp: dict) -> tuple[str, list[str]]:
     return "\n".join(text).strip(), urls
 
 
+PERPLEXITY_AGENT_URL = "https://api.perplexity.ai/v1/agent"
+
+
+def _perplexity_body(q: str, model: str) -> dict:
+    """A value with a provider prefix ("openai/gpt-5.6-sol") or a sonar model name is sent as `model`;
+    anything else ("low", "medium", ...) is sent as a `preset`, which bundles model, tools and limits."""
+    body = {"input": q, "instructions": SYSTEM, "tools": [{"type": "web_search"}]}
+    if "/" in model or model.startswith("sonar"):
+        body["model"] = model
+    else:
+        body["preset"] = model
+    return body
+
+
 def ask_perplexity(q: str, key: str, model: str) -> dict:
-    """Perplexity Agent API (POST /v1/responses, Responses-style). Search is built into Sonar models;
-    if the API asks for an explicit tool, retry with web_search."""
+    """Perplexity Agent API (POST /v1/agent). Web grounding is the web_search tool; answer text comes from
+    output_text or the output message items, URL citations from text annotations and search_results items."""
     headers = {"Authorization": f"Bearer {key}"}
-    body = {"model": model, "instructions": SYSTEM, "input": q, "max_output_tokens": 4096}
+    body = _perplexity_body(q, model)
     try:
-        resp = _post("https://api.perplexity.ai/v1/responses", headers, body)
+        resp = _post(PERPLEXITY_AGENT_URL, headers, body)
     except RuntimeError as ex:
         msg = str(ex)
-        if "HTTP 400" in msg and ("instructions" in msg or "max_output_tokens" in msg):
-            body = {"model": model, "input": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": q}]}
-            resp = _post("https://api.perplexity.ai/v1/responses", headers, body)
-        else:
-            raise
+        if not msg.startswith("HTTP 400"):
+            raise  # 401 key, 403 credits, 429 already retried with Retry-After
+        if "tool" in msg:            # a preset that already bundles its tools may reject an explicit list
+            body.pop("tools", None)
+        if "instructions" in msg:    # fold the system prompt into the input instead
+            body.pop("instructions", None)
+            body["input"] = f"{SYSTEM}\n\nQuestion: {q}"
+        resp = _post(PERPLEXITY_AGENT_URL, headers, body)
     text, urls = _parse_responses_output(resp)
     u = resp.get("usage", {})
     usage = {"input": u.get("input_tokens", u.get("prompt_tokens", 0)), "output": u.get("output_tokens", u.get("completion_tokens", 0)), "searches": 0}
     if not text:
         reason = (resp.get("incomplete_details") or {}).get("reason") or resp.get("status") or "empty answer"
-        return {"text": "", "urls": urls, "usage": usage, "error": f"perplexity returned no answer text ({reason}); raw keys: {sorted(resp.keys())}"}
+        return {"text": "", "urls": urls, "usage": usage, "error": f"perplexity returned no answer text ({reason}); response fields: {sorted(resp.keys())}"}
     return {"text": text, "urls": urls, "usage": usage}
+
+
+def smoke_test(provider: str) -> int:
+    """One minimal real request; prints only the HTTP status and response shape, never the key."""
+    keys = load_keys()
+    if not keys.get(provider):
+        env = {"perplexity": "PERPLEXITY_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}[provider]
+        print(f"No {provider} key. Create one in the provider's console and export {env} in your terminal (or save it on the AI Answers tab).")
+        return 2
+    fn = {"perplexity": lambda: ask_perplexity("What is the capital of France? One word.", keys["perplexity"], keys.get("perplexity_model") or PERPLEXITY_MODEL),
+          "anthropic": lambda: ask_anthropic("What is the capital of France? One word.", keys["anthropic"]),
+          "openai": lambda: ask_openai("What is the capital of France? One word.", keys["openai"], keys.get("openai_model") or OPENAI_MODEL),
+          "gemini": lambda: ask_gemini("What is the capital of France? One word.", keys["gemini"], keys.get("gemini_model") or GEMINI_MODEL)}[provider]
+    try:
+        r = fn()
+    except RuntimeError as ex:
+        code = str(ex).split(":", 1)[0]
+        hint = {"HTTP 401": "authentication failed: check or rotate the key", "HTTP 403": "forbidden: usually missing paid credit or no access to this model",
+                "HTTP 429": "rate limited: retried with Retry-After and still limited; try again later"}.get(code, "")
+        print(f"{provider}: {code} {hint}".rstrip())
+        return 1
+    if r.get("error"):
+        print(f"{provider}: 200 but {r['error']}")
+        return 1
+    print(f"{provider}: HTTP 200 · answer {len(r['text'])} chars · {len(r['urls'])} source URL(s)")
+    return 0
 
 
 def ask_gemini(q: str, key: str, model: str) -> dict:
@@ -524,7 +569,10 @@ def main() -> int:
     ap.add_argument("--out", default="ai-answers.html")
     ap.add_argument("--csv")
     ap.add_argument("--json")
+    ap.add_argument("--smoke", metavar="PROVIDER", help="send one minimal request to a provider and print only the status")
     a = ap.parse_args()
+    if a.smoke:
+        return smoke_test(a.smoke)
     run = AnswerRun([p.strip() for p in a.providers.split(",") if p.strip()], [x.strip() for x in a.ids.split(",") if x.strip()], a.domain)
     if run.missing_keys:
         print("no key for: " + ", ".join(run.missing_keys), file=sys.stderr)
