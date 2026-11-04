@@ -159,6 +159,7 @@ HOSTING_SUFFIXES = ("wpenginepowered.com", "wpengine.com", "pantheonsite.io", "k
                     "vercel.app", "herokuapp.com", "azurewebsites.net", "cloudfront.net", "amazonaws.com", "wpcomstaging.com",
                     "flywheelsites.com", "pressable.com", "github.io")
 LEGACY_HOST = re.compile(r"^(www)?(old|legacy|staging|stage|dev|test|beta|preview|archive)[0-9]*\.|(^|\.)(old|legacy|staging|stage|dev|test)[0-9]*\.", re.I)
+LOGIN_PATH = re.compile(r"/(login|log-in|signin|sign-in|logout|servicedesk|portal|wp-admin|wp-login|account|my-account|cas)(/|\.|$)", re.I)
 NEWS_PATH = re.compile(r"/(news|blog|blogs|stories|story|press|press-releases|archive|archives)(/|$)", re.I)
 SOCIAL = ("facebook.com", "instagram.com", "twitter.com", "x.com", "linkedin.com", "youtube.com",
           "tiktok.com", "wikipedia.org", "wikidata.org", "flickr.com", "pinterest.com")
@@ -641,7 +642,7 @@ def site_issues(c: "Crawl", pages: list[dict]) -> dict:
         cu = norm(p["detail"].get("canonical_url") or "") if p["detail"].get("canonical_url") else ""
         return not cu or cu == p["url"]
     ok = [p for p in ok_all if not urlsplit(p["url"]).query and canonical_self(p)]  # canonical pages only
-    facets = [p["url"] for p in ok_all if urlsplit(p["url"]).query and canonical_self(p)]
+    facets = [p["url"] for p in ok_all if urlsplit(p["url"]).query and canonical_self(p) and not LOGIN_PATH.search(urlsplit(p["url"]).path)]
     start_host = urlsplit(c.start).netloc.lower()
     # sitemap coverage (start host only)
     not_in_sitemap = [p["url"] for p in ok if urlsplit(p["url"]).netloc.lower() == start_host and p["url"] not in c.sitemap_urls] if c.sitemap_urls else []
@@ -693,8 +694,8 @@ def site_issues(c: "Crawl", pages: list[dict]) -> dict:
         "duplicate_titles": dups("title"),
         "duplicate_descriptions": dups("desc"),
         "faq_pages": sum(1 for p in ok if p["detail"].get("faq_schema")),
-        "program_schema_pages": sum(1 for p in ok if p["checks"].get("program_schema") is True),
-        "program_pages": sum(1 for p in ok if p["checks"].get("program_schema") is not None),
+        "program_schema_pages": sum(1 for p in ok_all if p["checks"].get("program_schema") is True),  # same pages as the check
+        "program_pages": sum(1 for p in ok_all if p["checks"].get("program_schema") is not None),
         "median_reading_grade": (lambda g: g[len(g) // 2] if g else None)(sorted(p["detail"]["reading_grade"] for p in ok if p["detail"].get("reading_grade") is not None)),
         "trust": {"Privacy policy link": trust.get("privacy_link"), "Phone or contact link": trust.get("contact"),
                   "Street address": trust.get("street_address"), "Accessibility statement link": trust.get("accessibility_link")} if trust else {},

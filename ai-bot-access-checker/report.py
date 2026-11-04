@@ -27,7 +27,7 @@ ISSUES = {
     "ai_search_allowed": ("Blocked pages cannot appear in ChatGPT, Claude, Perplexity or Copilot answers.", "Remove robots.txt rules that block AI search and user-fetch bots from these pages.", "Web team"),
     "indexable": ("noindex or noai tags tell AI systems not to use the page.", "Remove noindex, none, noai and noimageai from pages that should be found.", "Web team"),
     "server_text": ("Most AI crawlers do not run JavaScript, so they see these pages as nearly empty.", "Render the main page content in the HTML the server sends (server-side rendering), not only through JavaScript.", "Web team"),
-    "title": ("The title is the main label AI systems show and match on.", "Write a unique title of 10-70 characters for every page.", "Content owners"),
+    "title": ("The title is the main label AI systems show and match on.", "Keep every title 10-70 characters. Most failures are too long: the \" | Methodist University\" ending uses 23 characters, so keep the page part under 47. (Duplicate titles are a separate action.)", "Content owners"),
     "meta_desc": ("The description is often used as the summary of the page.", "Write a unique 50-160 character description for every page.", "Content owners"),
     "one_h1": ("A single main heading tells AI systems what the page is about.", "Use exactly one H1 per page.", "Content owners"),
     "headings": ("Sections with subheadings are easier to extract and quote accurately.", "Break content into sections with H2 subheadings.", "Content owners"),
@@ -130,10 +130,35 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     else:
         findings.append("Bot access was not checked.")
     findings.append(f"<b>{pct_ready}% of {n} pages are Ready</b> for AI search. {g['Needs work']} need work and {g['Not ready']} are not ready.")
-    fails = sorted((c for c in s["check_failures"] if c["failed"]), key=lambda c: (-c["critical"], -c["failed"]))
+    # Deliberate exclusions are not defects: a host that is entirely blocked or noindexed (an internal system), and a
+    # section where every page is noindexed (reported once, under "Confirm noindex sections are intended").
+    live = [p for p in pages if p["status"] == 200]
+    by_host: dict = {}
+    for p in live:
+        by_host.setdefault(urlsplit(p["url"]).netloc.lower(), []).append(p)
+    private_hosts = sorted(h for h, ps in by_host.items() if h != urlsplit(s["start"]).netloc.lower()
+                           and all(p["checks"].get("ai_search_allowed") is False or p["checks"].get("indexable") is False for p in ps))
+    nsec = {x["section"] for x in (s.get("site_issues") or {}).get("noindex_sections", [])}
+
+    def _section(u):
+        sp = urlsplit(u)
+        parts = [x for x in sp.path.split("/") if x]
+        return sp.netloc.lower() + "/" + (parts[0] + "/" if parts else "")
+
+    deliberate = {p["url"] for p in live if urlsplit(p["url"]).netloc.lower() in private_hosts or _section(p["url"]) in nsec}
+    adj = []
+    for c in s["check_failures"]:
+        if c["id"] in ("indexable", "ai_search_allowed") and deliberate:
+            real = sum(1 for p in live if p["checks"].get(c["id"]) is False and p["url"] not in deliberate)
+            c = {**c, "failed": real, "pct": round(100 * real / max(1, n))}
+        adj.append(c)
+    fails = sorted((c for c in adj if c["failed"]), key=lambda c: (-c["critical"], -c["failed"]))
     crit = [c for c in fails if c["critical"]]
     if crit:
         findings.append("Critical issues: " + "; ".join(f"{e(c['label'])} on {c['failed']} page(s)" for c in crit) + ".")
+    if private_hosts:
+        other.append("Blocked or noindexed on purpose, not counted as problems: " + ", ".join(
+            f"<b>{e(h)}</b> ({len(by_host[h])} page(s), appears to be an internal system)" for h in private_hosts) + ".")
     top = sorted(fails, key=lambda c: -c["failed"])[:1]
     if top:
         other.append(f"Most common issue: <b>{e(top[0]['label'])}</b>, failing on {top[0]['pct']}% of pages.")
@@ -211,14 +236,6 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         actions.append(("Retire or block the old/staging site", "Outdated copies of pages can be indexed and cited as current.",
                         "Shut it down, password-protect it, or redirect it to the live site; then remove it from search consoles.",
                         "Web team", ", ".join(h["host"] for h in legacy)))
-    dlg = si.get("dead_legacy_links", [])
-    if dlg:
-        targets = "; ".join("%s (linked from %s)" % (urlsplit(x["url"]).path + ("?" + urlsplit(x["url"]).query if urlsplit(x["url"]).query else ""),
-                                                      ", ".join(urlsplit(u).path for u in x["linked_from"][:2]) or "unknown") for x in dlg[:5])
-        actions.append(("Remove links to the retired old site",
-                        urlsplit(dlg[0]["url"]).netloc + " no longer exists, but pages still link to it. Visitors and crawlers hit a dead end.",
-                        "Point each link to the current page on the main site: " + targets + ".",
-                        "Content owners", f"{len(dlg)} link target(s)"))
     if search_blocked:
         actions.append(("Unblock AI search and answer bots", f"{len(search_blocked)} bots blocked: {', '.join(b['bot'] for b in search_blocked)}.",
                         "Remove the robots.txt rules or firewall/CDN rules that block them.", "Web team", "Site-wide"))
@@ -293,6 +310,14 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     if bl.get("count"):
         actions.append(("Fix broken internal links", "Links to missing pages waste crawl budget and send students and AI to dead ends.",
                         "Update or remove links to the pages listed in Site-level findings (each shows where it is linked from).", "Web team", f"{bl['count']} broken page(s)"))
+    dlg = si.get("dead_legacy_links", [])
+    if dlg:
+        targets = "; ".join("%s (linked from %s)" % (urlsplit(x["url"]).path + ("?" + urlsplit(x["url"]).query if urlsplit(x["url"]).query else ""),
+                                                      ", ".join(urlsplit(u).path for u in x["linked_from"][:2]) or "unknown") for x in dlg[:5])
+        actions.append(("Remove links to the retired old site",
+                        urlsplit(dlg[0]["url"]).netloc + " no longer exists, but pages still link to it. Visitors and crawlers hit a dead end.",
+                        "Point each link to the current page on the main site: " + targets + ".",
+                        "Content owners", f"{len(dlg)} link target(s)"))
     if smap.get("broken") or smap.get("noindex"):
         actions.append(("Clean the XML sitemap", "Sitemaps should list only live, indexable pages.",
                         "Remove broken and noindex URLs from the sitemap.", "Web team", f"{smap.get('broken', 0)} broken, {smap.get('noindex', 0)} noindex"))
@@ -333,8 +358,10 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         actions.append(("Move key facts out of PDFs", "Most AI crawlers read PDFs poorly or not at all.",
                         "Publish tuition, aid, deadline, requirement and catalog facts as web page text.", "Content owners", f"{pc['key_facts']} PDF(s)"))
     if pc["past_terms"]:
-        actions.append(("Retire outdated PDFs", "Outdated PDFs get cited as current.",
-                        "Update, replace or unlink PDFs that name past terms.", "Content owners", f"{pc['past_terms']} PDF(s)"))
+        actions.append(("Update or label outdated PDFs", "Outdated PDFs get cited as current.",
+                        "Update, replace or unlink PDFs that name past terms (maps, calendars, brochures). Keep historical records "
+                        "(graduation rates, enrollment, degrees awarded) but label them as historical in the link text and page.",
+                        "Content owners", f"{pc['past_terms']} PDF(s)"))
 
     def bot_row(b):
         st = "Blocked" if blocked(b) else ("Partly blocked" if partial(b) else "Allowed")
@@ -417,6 +444,7 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         return "<tr><td>%s%s</td><td>%s</td><td>%d</td><td>%d</td><td class='url'>%s</td></tr>" % (
             e(x["phrase"]) + (" <b>(site template)</b>" if x.get("template") else ""), snip, e(x["use_instead"]), x["pages"], x["news"], e(where))
 
+    ai_html = ""
     tick = lambda b: '<span class="pill ok">pass</span>' if b else '<span class="pill bad">fail</span>'
     brand_html = ""
     if an.get("done"):
@@ -431,7 +459,7 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         named = an.get("colleges_named") or [{"college": x["peer"], "answers": x["answers"]} for x in an.get("peer_mentions", [])]
         peers = ", ".join(f"{x['college']} ({x['answers']})" for x in named[:10]) or "none"
         srcs = ", ".join(f"{x['host']} ({x['answers']})" for x in an.get("top_sources", [])[:8]) or "none"
-        brand_html += ('<h2>Appendix I: AI answer test</h2><p class="note">%s · %d questions, web search on. Branded = names the school; niche = general, few right answers; '
+        ai_html = ('<h2>Appendix I: AI answer test</h2><p class="note">%s · %d questions, web search on. Branded = names the school; niche = general, few right answers; '
                        'broad = general, many answers. Citation share = the site\'s share of all sources cited. Full answers are in answers.html in the results bundle.</p>'
                        '<table><thead><tr><th>Provider</th><th>Answered</th><th>Branded</th><th>Niche</th><th>Broad</th><th>Cites site</th><th>Citation share (broad)</th><th>Accurate</th><th>Confusions</th></tr></thead><tbody>%s</tbody></table>'
                        '%s<p class="note"><b>Most-named colleges on general questions (answers out of %d):</b> %s. <b>Sources used instead of the site:</b> %s.</p>'
@@ -484,7 +512,7 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         ("AI crawler access", "GEO", "Automated: Bot Access, AI search bots allowed, No noindex/noai"),
         ("Keyword and competitor research", "SEO", "Manual: Search Console, keyword tools; competitor scan compares site readiness"),
         ("Search Console analysis, organic rankings, traffic", "SEO", "Manual: needs Search Console / analytics access"),
-        ("AI prompt analysis, AI traffic, indexing across AI platforms", "GEO", "Manual: AI answer tester (planned) and analytics"),
+        ("AI prompt analysis, AI traffic, indexing across AI platforms", "GEO", "Automated: AI answer test (see Appendix I; mention, citation share, accuracy across Claude, ChatGPT, Perplexity, Gemini); Manual: AI referral traffic in analytics"),
     ]
     coverage_html = "".join("<tr><td>%s</td><td>%s</td><td>%s</td></tr>" % (e(a), e(b), e(c)) for a, b, c in coverage)
     areas = s.get("areas") or []
@@ -675,12 +703,13 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 </tbody></table>
 
 {deny_appendix}
-{brand_html}
 <h2>Appendix E: Coverage of the EAB search visibility checklist</h2>
 <p class="note">Source: EAB, "Navigating Search Visibility in the AI Era" (2025). Automated = checked by this tool on every crawl. Manual = needs data this tool cannot crawl.</p>
 <table><thead><tr><th>Guide item</th><th>Area</th><th>Coverage</th></tr></thead><tbody>
 {coverage_html}
 </tbody></table>
+{brand_html}
+{ai_html}
 </main></body></html>"""
     return html
 
