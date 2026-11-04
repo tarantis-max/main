@@ -15,7 +15,7 @@ from ai_bot_check import DENY
 from readiness import CHECKS, Crawl
 from report import build as build_report
 
-VERSION = "2026.11.04.25"
+VERSION = "2026.11.04.26"
 
 
 def make_bundle(c: Crawl, access: dict | None, comparison=None, answers=None) -> bytes:

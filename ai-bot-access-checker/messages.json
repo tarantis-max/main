@@ -245,10 +245,10 @@
   ],
   "manual_actions": [
     {
-      "title": "Redirect the old School of Medicine page",
+      "title": "Point the old School of Medicine URL to the School of Medicine page",
       "priority": "high",
-      "why": "/academics/medicine-2/ still says the school is an LCME \"applicant program\" and will not consider applicants. Search engines and AI still find it.",
-      "fix": "301-redirect https://www.methodist.edu/academics/medicine-2/ to the current School of Medicine page, then request removal in Google Search Console.",
+      "why": "/academics/medicine-2/ now redirects to an image file (/wp-content/uploads/2023/05/medicine.jpg). Search results still show its old \"applicant program\" text, and anyone who clicks lands on a picture instead of the medical school.",
+      "fix": "Change the redirect so /academics/medicine-2/ goes (301) to the current School of Medicine page, not the image. Then use URL Inspection in Google Search Console to request a recrawl.",
       "owner": "Web team",
       "scope": "1 page"
     },
