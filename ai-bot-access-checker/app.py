@@ -22,6 +22,7 @@ from readiness import CHECKS, DEFAULTS, MESSAGES, Crawl
 from report import build as build_report
 from bundle import make_bundle
 from compare import Compare
+from answers import AnswerRun, key_status, save_keys, load_questions
 
 JOBS: dict[str, Crawl] = {}
 
@@ -34,6 +35,7 @@ def busy() -> str:
         return "A competitor comparison is running. Wait for it to finish or stop it first, so response times stay accurate."
     return ""
 COMPARES: dict[str, Compare] = {}
+ANSWERS: dict[str, AnswerRun] = {}
 
 
 def safe_name(s: str) -> str:
@@ -130,6 +132,41 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, cmp_.report().encode(), "text/html; charset=utf-8")
             else:
                 self._send(200, json.dumps(cmp_.status()).encode(), "application/json")
+        elif u.path == "/api/answers/keys":
+            self._send(200, json.dumps(key_status()).encode(), "application/json")
+        elif u.path == "/api/answers/questions":
+            self._send(200, json.dumps(load_questions()).encode(), "application/json")
+        elif u.path == "/api/answers/start":
+            q = parse_qs(u.query)
+            provs = [p for p in (q.get("providers") or ["anthropic,openai"])[0].split(",") if p.strip()]
+            ids = [x for x in (q.get("ids") or [""])[0].split(",") if x.strip()]
+            run_ = AnswerRun(provs, ids, (q.get("domain") or ["methodist.edu"])[0])
+            if not run_.providers:
+                self._send(400, json.dumps({"error": "No API key for " + ", ".join(run_.missing_keys) + ". Add keys first."}).encode(), "application/json")
+                return
+            aid = uuid.uuid4().hex[:8]
+            ANSWERS[aid] = run_
+            threading.Thread(target=run_.run, daemon=True).start()
+            self._send(200, json.dumps({"id": aid, "missing_keys": run_.missing_keys}).encode(), "application/json")
+        elif u.path in ("/api/answers/status", "/api/answers/stop", "/api/answers/csv", "/api/answers/report"):
+            run_ = ANSWERS.get((parse_qs(u.query).get("id") or [""])[0])
+            if not run_:
+                self._send(404, b'{"error":"unknown run"}', "application/json")
+            elif u.path.endswith("stop"):
+                run_.stop()
+                self._send(200, b'{"ok":true}', "application/json")
+            elif u.path.endswith("csv"):
+                body = run_.to_csv().encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="ai-answers-{time.strftime("%Y%m%d-%H%M")}.csv"')
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            elif u.path.endswith("report"):
+                self._send(200, run_.report().encode(), "text/html; charset=utf-8")
+            else:
+                self._send(200, json.dumps({"summary": run_.summary(), "results": list(run_.results)}).encode(), "application/json")
         elif u.path == "/api/bundle":
             c = JOBS.get((parse_qs(u.query).get("id") or [""])[0])
             if not c:
@@ -142,7 +179,8 @@ class Handler(BaseHTTPRequestHandler):
                 if getattr(c, "access", None) is None:
                     c.access = run(c.start, probe=True, scan=200)
                 done = [x for x in COMPARES.values() if x.rows]
-                body = make_bundle(c, c.access, done[-1] if done else None)
+                ans = [x for x in ANSWERS.values() if x.results]
+                body = make_bundle(c, c.access, done[-1] if done else None, ans[-1] if ans else None)
                 stamp = time.strftime("%Y%m%d-%H%M")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/zip")
@@ -163,7 +201,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if getattr(c, "access", None) is None:
                     c.access = run(c.start, probe=True, scan=200)
-                html = build_report(c.summary(), list(c.results), c.pdf_report(), c.access)
+                ans = [x for x in ANSWERS.values() if x.results]
+                html = build_report(c.summary(), list(c.results), c.pdf_report(), c.access, ans[-1].summary() if ans else None)
                 self._send(200, html.encode(), "text/html; charset=utf-8")
             except Exception as e:
                 self._send(500, f"Report failed: {type(e).__name__}: {e}".encode(), "text/plain")
@@ -192,6 +231,20 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, json.dumps({**DEFAULTS, "priority_pages": MESSAGES.get("priority_pages", [])}).encode(), "application/json")
         elif u.path == "/api/checks":
             self._send(200, json.dumps([{"id": a, "label": b, "rule": r, "critical": k} for a, b, r, k in CHECKS]).encode(), "application/json")
+        else:
+            self._send(404, b"not found", "text/plain")
+
+    def do_POST(self):
+        u = urlsplit(self.path)
+        n = int(self.headers.get("Content-Length") or 0)
+        raw = self.rfile.read(n) if n else b""
+        if u.path == "/api/answers/keys":
+            try:
+                d = json.loads(raw or b"{}")
+                save_keys(d.get("anthropic"), d.get("openai"), d.get("openai_model"))
+                self._send(200, json.dumps(key_status()).encode(), "application/json")
+            except Exception as ex:
+                self._send(400, json.dumps({"error": str(ex)}).encode(), "application/json")
         else:
             self._send(404, b"not found", "text/plain")
 

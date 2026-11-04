@@ -63,7 +63,7 @@ def _grade_pill(g: str) -> str:
     return f'<span class="pill {cls}">{e(g)}</span>'
 
 
-def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | None) -> str:
+def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | None, answers: dict | None = None) -> str:
     s = summary
     n = s["pages"]
     g = s["grades"]
@@ -149,6 +149,11 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 
     si = s.get("site_issues") or {}
     ppr, msr, inr = s.get("priority_pages") or {}, s.get("messages") or {}, s.get("inventory") or {}
+    an = answers or {}
+    if an.get("done"):
+        findings.append(f"<b>AI answers ({e(an['date'])}):</b> {e(str(an['branded_mention']))}% of branded questions and "
+                        f"<b>{e(str(an['category_mention']))}% of category questions</b> mention {e(s['settings']['official_name'] or 'the school')}; "
+                        f"{e(str(an['citation_rate']))}% of answers cite the site; {an['confusions']} answer(s) confused it with another school.")
     if ppr.get("total"):
         findings.append(f"<b>{ppr['optimized']} of {ppr['total']} priority pages meet all five elements</b> of EAB's priority-page standard "
                         "(direct answer, proof, connections, authority, structure).")
@@ -337,6 +342,16 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 
     tick = lambda b: '<span class="pill ok">pass</span>' if b else '<span class="pill bad">fail</span>'
     brand_html = ""
+    if an.get("done"):
+        pr = "".join(f"<tr><td>{e(p)}</td><td>{d['answered']}</td><td>{d['branded_mention']}%</td><td>{d['category_mention']}%</td><td>{d['cited']}%</td><td>{'-' if d['accurate'] is None else str(d['accurate']) + '%'}</td><td>{d['confused']}</td></tr>"
+                     for p, d in an.get("by_provider", {}).items())
+        peers = ", ".join(f"{x['peer']} ({x['answers']})" for x in an.get("peer_mentions", [])[:6]) or "none"
+        srcs = ", ".join(f"{x['host']} ({x['answers']})" for x in an.get("top_sources", [])[:8]) or "none"
+        brand_html += ('<h2>Appendix I: AI answer test</h2><p class="note">%s · %d questions, web search on. Branded = question names the school; category = it does not. '
+                       'Full answers are in answers.html in the results bundle.</p>'
+                       '<table><thead><tr><th>Provider</th><th>Answered</th><th>Branded mention</th><th>Category mention</th><th>Cites site</th><th>Accurate</th><th>Confusions</th></tr></thead><tbody>%s</tbody></table>'
+                       '<p class="note"><b>Named on category questions:</b> %s. <b>Sources used instead of the site:</b> %s.</p>'
+                       % (e(an["date"]), an["questions"], pr, e(peers), e(srcs)))
     if ppr.get("total"):
         els = ppr.get("elements", [])
         brand_html += ('<h2>Appendix F: Priority pages (EAB standard)</h2><p class="note">'

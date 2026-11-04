@@ -1,0 +1,390 @@
+{
+  "_about": "Question bank for the AI answer tester. Edit freely. type: branded (names MU) or category (does not). must_contain / must_not_contain are case-insensitive regular expressions; leave must_contain empty until the approved answer is confirmed. Approved facts come from MU_Brand_Positioning_Statements; fill in anything marked CONFIRM.",
+  "institution": "Methodist University",
+  "institution_aliases": [
+    "Methodist University",
+    "methodist\\.edu",
+    "Methodist U\\b",
+    "\\bMU\\b[^.]{0,40}Fayetteville"
+  ],
+  "peers": [
+    "Campbell",
+    "Wingate",
+    "Lenoir-Rhyne",
+    "Barton",
+    "Mount Olive",
+    "Pfeiffer",
+    "Greensboro College",
+    "High Point",
+    "Fayetteville State",
+    "UNC Pembroke",
+    "East Carolina",
+    "UNC Charlotte",
+    "NC State",
+    "Catawba",
+    "Gardner-Webb",
+    "William Peace",
+    "Chowan"
+  ],
+  "confusion_terms": [
+    "Southern Methodist",
+    "Methodist College (of|at|in)",
+    "Methodist Hospital",
+    "Nebraska Methodist",
+    "Central Methodist",
+    "Texas Methodist",
+    "Methodist Theological"
+  ],
+  "questions": [
+    {
+      "id": "B01",
+      "type": "branded",
+      "topic": "overview",
+      "q": "What is Methodist University in Fayetteville, NC known for?",
+      "must_contain": [
+        "Fayetteville"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "B02",
+      "type": "branded",
+      "topic": "cost",
+      "q": "How much does Methodist University cost after financial aid?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "B03",
+      "type": "branded",
+      "topic": "aid",
+      "q": "Does Methodist University give good scholarships?",
+      "must_contain": [
+        "scholarship"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "B04",
+      "type": "branded",
+      "topic": "medicine",
+      "q": "Does Methodist University have a medical school?",
+      "must_contain": [
+        "Cape Fear Valley|School of Medicine"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "B05",
+      "type": "branded",
+      "topic": "medicine",
+      "q": "What can I do as an undergraduate at Methodist University because it has a School of Medicine?",
+      "must_contain": [
+        "Monarch Momentum|guaranteed"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "B06",
+      "type": "branded",
+      "topic": "programs",
+      "q": "What health professions graduate programs does Methodist University offer?",
+      "must_contain": [
+        "physician assistant|PA",
+        "physical therapy|DPT",
+        "occupational therapy|OTD"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "B07",
+      "type": "branded",
+      "topic": "programs",
+      "q": "Is Methodist University's engineering program ABET accredited?",
+      "must_contain": [
+        "ABET"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "B08",
+      "type": "branded",
+      "topic": "programs",
+      "q": "Tell me about the PGA Golf Management program at Methodist University.",
+      "must_contain": [
+        "golf"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "B09",
+      "type": "branded",
+      "topic": "outcomes",
+      "q": "What is the nursing NCLEX pass rate at Methodist University?",
+      "must_contain": [
+        "100"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "B10",
+      "type": "branded",
+      "topic": "military",
+      "q": "Is Methodist University a good school for military and veteran students?",
+      "must_contain": [
+        "military|veteran"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "B11",
+      "type": "branded",
+      "topic": "online",
+      "q": "What online degree programs does Methodist University offer?",
+      "must_contain": [
+        "online"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "B12",
+      "type": "branded",
+      "topic": "campus",
+      "q": "What is campus life like at Methodist University?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "B13",
+      "type": "branded",
+      "topic": "athletics",
+      "q": "What NCAA division is Methodist University and how many sports does it have?",
+      "must_contain": [
+        "Division III|D-?III|DIII"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "B14",
+      "type": "branded",
+      "topic": "size",
+      "q": "How many students attend Methodist University?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "B15",
+      "type": "branded",
+      "topic": "admissions",
+      "q": "How do I apply to Methodist University and what are the deadlines?",
+      "must_contain": [
+        "apply"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "B16",
+      "type": "branded",
+      "topic": "identity",
+      "q": "Is Methodist University the same as Methodist College?",
+      "must_contain": [
+        "Fayetteville"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "B17",
+      "type": "branded",
+      "topic": "value",
+      "q": "Is Methodist University worth the money?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "B18",
+      "type": "branded",
+      "topic": "compare",
+      "q": "Methodist University vs Campbell University: which is better for pre-med?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "B19",
+      "type": "branded",
+      "topic": "compare",
+      "q": "Methodist University vs Wingate University: which should I choose?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "B20",
+      "type": "branded",
+      "topic": "visit",
+      "q": "Does Methodist University offer campus tours or a virtual tour?",
+      "must_contain": [
+        "tour|visit"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "C01",
+      "type": "category",
+      "topic": "value",
+      "q": "What are the best value private universities in North Carolina?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C02",
+      "type": "category",
+      "topic": "size",
+      "q": "What are the best small private universities in North Carolina?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C03",
+      "type": "category",
+      "topic": "medicine",
+      "q": "Which small universities in the Southeast have their own medical school?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C04",
+      "type": "category",
+      "topic": "medicine",
+      "q": "What are good pre-med colleges in North Carolina with a pathway into a medical school?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C05",
+      "type": "category",
+      "topic": "health",
+      "q": "Which North Carolina colleges have physician assistant, physical therapy and occupational therapy programs?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C06",
+      "type": "category",
+      "topic": "health",
+      "q": "What are the best colleges in North Carolina for health professions?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C07",
+      "type": "category",
+      "topic": "military",
+      "q": "What are the best colleges near Fort Liberty (Fort Bragg) for active-duty military and veterans?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C08",
+      "type": "category",
+      "topic": "online",
+      "q": "What are the best online universities in the Southeast for working adults?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C09",
+      "type": "category",
+      "topic": "golf",
+      "q": "Which colleges have a PGA Golf Management program?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C10",
+      "type": "category",
+      "topic": "engineering",
+      "q": "Which small private colleges in North Carolina have ABET accredited engineering?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C11",
+      "type": "category",
+      "topic": "nursing",
+      "q": "What are the best nursing programs in North Carolina with high NCLEX pass rates?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C12",
+      "type": "category",
+      "topic": "aid",
+      "q": "Which private colleges in North Carolina give the most financial aid?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C13",
+      "type": "category",
+      "topic": "athletics",
+      "q": "Which Division III colleges in North Carolina are good for student-athletes who want to play and get a professional degree?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C14",
+      "type": "category",
+      "topic": "local",
+      "q": "What colleges and universities are in Fayetteville, North Carolina?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C15",
+      "type": "category",
+      "topic": "first-gen",
+      "q": "What are good private colleges in North Carolina for first-generation students who need financial aid?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C16",
+      "type": "category",
+      "topic": "programs",
+      "q": "Which colleges in North Carolina offer a bachelor's in cybersecurity?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C17",
+      "type": "category",
+      "topic": "programs",
+      "q": "What are the best psychology programs at small colleges in North Carolina?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C18",
+      "type": "category",
+      "topic": "programs",
+      "q": "Which North Carolina colleges offer a Doctor of Occupational Therapy?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C19",
+      "type": "category",
+      "topic": "transfer",
+      "q": "Which private universities in North Carolina are good for community college transfer students?",
+      "must_contain": [],
+      "must_not_contain": []
+    },
+    {
+      "id": "C20",
+      "type": "category",
+      "topic": "methodist",
+      "q": "Which universities in North Carolina are affiliated with the United Methodist Church?",
+      "must_contain": [],
+      "must_not_contain": []
+    }
+  ]
+}

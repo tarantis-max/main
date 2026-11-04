@@ -74,6 +74,7 @@
     <button data-tab="access" class="on">Bot Access</button>
     <button data-tab="ready">Site Readiness</button>
     <button data-tab="compare">Competitors</button>
+    <button data-tab="answers">AI Answers</button>
   </div>
 
   <!-- ===================== BOT ACCESS ===================== -->
@@ -143,6 +144,32 @@
       Your site and each competitor get the same treatment: the Bot Access check plus a readiness crawl of up to the page limit (same host only, robots.txt respected, 2 workers, 0.5 s delay). Your site is re-crawled with the same limit so the comparison is fair. Competitors are scored without your institution's name checks.<br>
       Expect about 2-4 minutes per site at 200 pages. Rank 1 = best. Bold = best value. The latest finished comparison is included in the results bundle.</div>
   </section>
+  <!-- ===================== AI ANSWERS ===================== -->
+  <section id="tab-answers" hidden>
+    <div class="card">
+      <h2>Keys</h2>
+      <div class="note" style="margin-bottom:8px">Keys are saved to <code>keys.json</code> on this computer only (never in the repo or the results bundle). Get them at console.anthropic.com and platform.openai.com; both need prepaid credits. A full run of 40 questions costs roughly a dollar or two per provider.</div>
+      <form id="kf" class="setgrid" style="display:grid">
+        <label>Anthropic API key <span id="kanth" class="muted"></span><input type="password" id="kanthropic" placeholder="sk-ant-…" autocomplete="off"></label>
+        <label>OpenAI API key <span id="koai" class="muted"></span><input type="password" id="kopenai" placeholder="sk-…" autocomplete="off"></label>
+        <label>OpenAI model <input type="text" id="kmodel" placeholder="gpt-5"></label>
+        <div style="align-self:end"><button id="ksave">Save keys</button></div>
+      </form>
+    </div>
+    <form id="af">
+      <label class="chk"><input type="checkbox" id="pa" checked> Claude</label>
+      <label class="chk"><input type="checkbox" id="po" checked> ChatGPT</label>
+      <label class="chk">Questions <select id="aset"><option value="all">All</option><option value="branded">Branded only</option><option value="category">Category only</option><option value="smoke">Quick test (2)</option></select></label>
+      <button id="ago">Run answer test</button>
+      <button id="astop" class="sec" type="button" disabled>Stop</button>
+      <button id="acsv" class="sec" type="button" disabled>Answers CSV</button>
+      <button id="areport" type="button" disabled>Answers report</button>
+    </form>
+    <div id="aout"></div>
+    <div class="card note"><b>How this works</b><br>
+      Each question in <code>questions.json</code> (20 branded, 20 category, from EAB's audit prompts and the admitted-student survey themes) is sent to each provider with web search on. The tool records whether the answer <b>mentions</b> Methodist University, <b>cites</b> methodist.edu, contains the <b>required facts</b>, and whether it <b>confused</b> MU with another "Methodist" school. Category questions are the ones to watch: EAB measured MU at 0-4% on these.<br>
+      Re-run monthly and compare: branded mention, category mention, citation rate, accuracy. The latest run is included in the results bundle (answers only, never keys).</div>
+  </section>
 </main>
 <script>
 const $ = s => document.querySelector(s);
@@ -153,6 +180,7 @@ document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   $("#tab-access").hidden = b.dataset.tab !== "access";
   $("#tab-ready").hidden = b.dataset.tab !== "ready";
   $("#tab-compare").hidden = b.dataset.tab !== "compare";
+  $("#tab-answers").hidden = b.dataset.tab !== "answers";
 });
 
 function pill(text) {
@@ -486,6 +514,66 @@ $("#rbundle").onclick = () => {
   location.href = "/api/bundle?id=" + job;
   setTimeout(() => { b.disabled = false; b.textContent = "Download results bundle"; }, 8000);
 };
+/* ---------------- AI Answers ---------------- */
+let ajob = null, atimer = null, QIDS = {branded: [], category: []};
+async function loadKeys() {
+  const k = await (await fetch("/api/answers/keys")).json();
+  $("#kanth").textContent = k.anthropic ? "(saved)" : "(not set)"; $("#koai").textContent = k.openai ? "(saved)" : "(not set)";
+  $("#kmodel").value = k.openai_model || "";
+}
+loadKeys();
+fetch("/api/answers/questions").then(r => r.json()).then(b => { for (const q of b.questions) QIDS[q.type].push(q.id); });
+$("#kf").onsubmit = async e => {
+  e.preventDefault();
+  const body = {}; if ($("#kanthropic").value) body.anthropic = $("#kanthropic").value; if ($("#kopenai").value) body.openai = $("#kopenai").value; if ($("#kmodel").value) body.openai_model = $("#kmodel").value;
+  const res = await fetch("/api/answers/keys", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (res.ok) { $("#kanthropic").value = ""; $("#kopenai").value = ""; loadKeys(); } else alert((await res.json()).error);
+};
+function renderAnswers(d) {
+  const s = d.summary, rows = d.results;
+  const pct = v => v == null ? "-" : v + "%";
+  const pill = (v) => v == null ? '<span class="muted">-</span>' : v ? '<span class="pill ok">yes</span>' : '<span class="pill bad">no</span>';
+  const prog = s.state === "running" ? `<div class="note">${s.done} of ${s.total} answers · ${s.elapsed_s}s</div><div class="progress"><i style="width:${Math.round(100 * s.done / Math.max(1, s.total))}%"></i></div>` : `<div class="note">Status: ${esc(s.state)} · ${s.elapsed_s}s ${s.error ? `<span class="err">${esc(s.error)}</span>` : ""}</div>`;
+  $("#aout").innerHTML = `<div class="card">${prog}
+    <div class="summary" style="margin-top:10px">
+      <div><b>Branded mention</b><span class="big">${pct(s.branded_mention)}</span></div>
+      <div><b>Category mention</b><span class="big" style="color:${(s.category_mention || 0) < 30 ? "var(--bad)" : "var(--ok)"}">${pct(s.category_mention)}</span></div>
+      <div><b>Cites methodist.edu</b><span class="big">${pct(s.citation_rate)}</span></div>
+      <div><b>Accurate (branded)</b><span class="big">${pct(s.accuracy)}</span></div>
+      <div><b>Confused with another school</b><span class="big" style="color:${s.confusions ? "var(--bad)" : "var(--ok)"}">${s.confusions}</span></div>
+    </div></div>
+    ${s.peer_mentions.length || s.category_total ? `<div class="card"><h2>Who gets named on category questions</h2><div class="tablewrap"><table><tbody>
+      <tr><td><b>Methodist University</b></td><td><b>${s.category_mention == null ? "-" : Math.round(s.category_mention / 100 * s.category_total)} of ${s.category_total}</b></td></tr>
+      ${s.peer_mentions.slice(0, 10).map(x => `<tr><td>${esc(x.peer)}</td><td>${x.answers} of ${s.category_total}</td></tr>`).join("")}</tbody></table></div></div>` : ""}
+    ${s.top_sources.length ? `<div class="card"><h2>Sources the AIs used instead of methodist.edu</h2><div class="note" style="margin-bottom:6px">Check each site's listing for MU is current.</div>${s.top_sources.map(x => `<span class="pill muted">${esc(x.host)} · ${x.answers}</span>`).join(" ")}</div>` : ""}
+    <div class="card"><div class="tablewrap"><table><thead><tr><th>ID</th><th>Question</th><th>Provider</th><th>Mentioned</th><th>Cited</th><th>Accurate</th><th>Peers named</th><th>Issue</th></tr></thead><tbody>
+      ${rows.map(r => `<tr class="click" data-aid="${esc(r.id + r.provider)}"><td class="nw">${esc(r.id)}</td><td>${esc(r.question)}</td><td class="nw">${esc(r.provider)}</td><td>${pill(r.mentioned)}</td><td>${pill(r.cited)}</td><td>${r.type === "branded" ? pill(r.accurate) : '<span class="muted">-</span>'}</td><td>${esc(r.peers_mentioned.join(", ")) || "-"}</td><td>${r.confused_with.length ? `<span class="pill bad">confused: ${esc(r.confused_with.join(", "))}</span>` : r.missing_facts.length ? `<span class="pill warn">missing: ${esc(r.missing_facts.join(", "))}</span>` : r.error ? `<span class="err">${esc(r.error.slice(0, 120))}</span>` : "-"}</td></tr>
+        <tr class="detail" hidden id="a-${esc(r.id + r.provider)}"><td colspan="8"><pre style="white-space:pre-wrap;margin:0;font:13px inherit">${esc(r.answer || r.error)}</pre><div class="note">Cited: ${esc(r.cited_urls.join(", ")) || "no"} · Other sources: ${esc(r.other_sources.join(", ")) || "none"}</div></td></tr>`).join("")}</tbody></table></div></div>`;
+  document.querySelectorAll("#aout tr.click").forEach(tr => tr.onclick = () => { const d = document.getElementById("a-" + tr.dataset.aid); d.hidden = !d.hidden; });
+}
+async function apoll() {
+  try {
+    const d = await (await fetch("/api/answers/status?id=" + ajob)).json();
+    renderAnswers(d);
+    if (d.summary.state !== "running" && d.summary.state !== "pending") { clearInterval(atimer); atimer = null; $("#ago").disabled = false; $("#astop").disabled = true; $("#areport").disabled = !d.results.length; $("#acsv").disabled = !d.results.length; }
+  } catch (e) {}
+}
+$("#af").onsubmit = async e => {
+  e.preventDefault();
+  const provs = [$("#pa").checked ? "anthropic" : "", $("#po").checked ? "openai" : ""].filter(Boolean).join(",");
+  const set = $("#aset").value;
+  const ids = set === "branded" ? QIDS.branded : set === "category" ? QIDS.category : set === "smoke" ? [QIDS.branded[0], QIDS.category[0]] : [];
+  const res = await fetch("/api/answers/start?" + new URLSearchParams({ providers: provs, ids: ids.join(",") }));
+  const data = await res.json();
+  if (!res.ok) { $("#aout").innerHTML = `<div class="card err">Error: ${esc(data.error)}</div>`; return; }
+  ajob = data.id; $("#ago").disabled = true; $("#astop").disabled = false; $("#areport").disabled = true; $("#acsv").disabled = true;
+  $("#aout").innerHTML = `<div class="card muted">Starting…${data.missing_keys.length ? " (no key for " + esc(data.missing_keys.join(", ")) + ", skipped)" : ""}</div>`;
+  if (atimer) clearInterval(atimer); atimer = setInterval(apoll, 2000);
+};
+$("#astop").onclick = () => ajob && fetch("/api/answers/stop?id=" + ajob);
+$("#acsv").onclick = () => ajob && (location.href = "/api/answers/csv?id=" + ajob);
+$("#areport").onclick = () => ajob && window.open("/api/answers/report?id=" + ajob, "_blank");
+
 /* ---------------- Competitors ---------------- */
 let cjob = null, ctimer = null;
 function renderCompare(st) {

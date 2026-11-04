@@ -15,10 +15,10 @@ from ai_bot_check import DENY
 from readiness import CHECKS, Crawl
 from report import build as build_report
 
-VERSION = "2026.11.04.2"
+VERSION = "2026.11.04.3"
 
 
-def make_bundle(c: Crawl, access: dict | None, comparison=None) -> bytes:
+def make_bundle(c: Crawl, access: dict | None, comparison=None, answers=None) -> bytes:
     summary = c.summary()
     pages = [{k: v for k, v in p.items() if not k.startswith("_")} for p in list(c.results)]
     manifest = {
@@ -44,6 +44,7 @@ def make_bundle(c: Crawl, access: dict | None, comparison=None) -> bytes:
             "bot-access.json": "per-bot robots.txt, sitemap coverage, live probe and policy results",
             "report.html": "executive report",
             "comparison.json / comparison.csv / comparison.html": "latest competitor comparison, if one was run",
+            "answers.json / answers.csv / answers.html": "latest AI answer test, if one was run (answers only; no API keys)",
         },
     }
     st = comparison.status() if comparison is not None else None
@@ -57,9 +58,13 @@ def make_bundle(c: Crawl, access: dict | None, comparison=None) -> bytes:
         z.writestr("pages.csv", c.to_csv())
         z.writestr("pdfs.csv", c.pdf_csv())
         z.writestr("bot-access.json", json.dumps(access, indent=2) if access else "null")
-        z.writestr("report.html", build_report(summary, list(c.results), c.pdf_report(), access))
+        z.writestr("report.html", build_report(summary, list(c.results), c.pdf_report(), access, answers.summary() if answers is not None else None))
         if comparison is not None:
             z.writestr("comparison.json", json.dumps(st, indent=2))
             z.writestr("comparison.csv", comparison.to_csv())
             z.writestr("comparison.html", comparison.report())
+        if answers is not None:
+            z.writestr("answers.json", json.dumps({"summary": answers.summary(), "results": answers.results}, indent=2))
+            z.writestr("answers.csv", answers.to_csv())
+            z.writestr("answers.html", answers.report())
     return buf.getvalue()

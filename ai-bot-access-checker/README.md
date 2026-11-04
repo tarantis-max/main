@@ -106,6 +106,21 @@ Optimized = all five. The report also counts key student pages site-wide that me
 
 **Content inventory.** Net price calculator, tuition/cost page, parents page, virtual tour (and whether it is linked from the admissions, academics, student life, housing and visit pages), Instagram/YouTube/TikTok on the homepage, and whether every program home page states an outcome.
 
+## AI Answers tab
+
+Sends a question bank to AI assistants with web search on and scores the answers. Needs API keys (Anthropic Console and OpenAI Platform; both prepaid). Keys are saved to `keys.json` on your computer only; it is gitignored and never enters the results bundle.
+
+- `questions.json`: 20 branded questions (name MU) and 20 category questions (do not), from EAB's audit prompts and admitted-student survey themes. Each can have `must_contain` / `must_not_contain` rules (regular expressions) for accuracy scoring.
+- Per answer: **mentioned** (names MU), **cited** (a search result or citation is on methodist.edu), **accurate** (all required facts present, branded only), **confused** (mixed up with another "Methodist" school), peers named, other sources used.
+- Summary: branded mention %, category mention %, citation rate, accuracy, confusions, who gets named on category questions, and which third-party sites the AIs relied on.
+- Providers: Claude (`claude-opus-5-5`, Anthropic web search tool) and ChatGPT (OpenAI Responses API with web search; model editable under Keys).
+- Cost: roughly a dollar or two per provider for a full run. "Quick test (2)" runs one branded and one category question.
+- Re-run monthly. The latest run goes into the results bundle (answers.json/csv/html) and Appendix I of the executive report.
+
+```bash
+python3 answers.py --out ai-answers.html --csv ai-answers.csv
+```
+
 ## Competitors tab
 
 Enter your site and up to 10 competitors. Each site gets the Bot Access check and a readiness crawl of up to the page limit (default 200; same host only, robots.txt respected, 2 workers, 0.5 s delay). Your site is re-crawled with the same limit so the comparison is fair. The table ranks your site on each metric (1 = best, "tie" = all equal). **Comparison report** opens a printable page; **Comparison CSV** exports the table. The latest finished comparison is included in the results bundle.
