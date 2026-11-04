@@ -10,6 +10,13 @@
   .answer { max-height: none; overflow: visible; }
   .cfoot button[data-expand] { display: none; }
 }
+.tally { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 700px) { .tally { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tcell { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.tcell b { font: 600 15px var(--body); }
+.tcell .big { font: 600 26px/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.tcell .big.ok { background: none; } .tcell .big.bad { background: none; }
+.tcell span { color: var(--muted); font-size: 13px; }
 </style>
 <title>MU AI Answers Full Run</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -137,7 +144,7 @@ function renderList() {
       const vals = rs.map(a => a.type === "category" ? a.mentioned : a.accurate).filter(v => v !== null && v !== undefined);
       const good = vals.filter(Boolean).length, n = vals.length;
       const c = !n ? "na" : good === n ? "ok" : "bad";
-      const mark = !n ? "–" : n === 1 ? (good ? "✓" : "✗") : `${good}/${n}`;
+      const mark = !n ? "–" : n === 1 ? (good ? "✓" : "✗") : `${good} of ${n}`;
       const what = all[0].type === "category" ? "named MU" : "accurate";
       return `<span class="dot ${c}" title="${esc(NAMES[p] || p)}: ${n ? good + " of " + n + " " + what : "not scored"}">${esc((NAMES[p] || p).slice(0, 2))} ${mark}</span>`;
     }).join("");
@@ -146,6 +153,19 @@ function renderList() {
   document.querySelectorAll(".q").forEach(b => b.onclick = () => select(b.dataset.id, true));
 }
 
+function tally(ans) {
+  const provs = [...new Set(ans.map(a => a.provider))];
+  if (!ans.some(a => (a.reps || 1) > 1)) return "";
+  const cat = ans[0].type === "category";
+  return `<div class="tally">${provs.map(p => {
+    const rs = ans.filter(a => a.provider === p);
+    const vals = rs.map(a => cat ? a.mentioned : a.accurate).filter(v => v !== null && v !== undefined);
+    const good = vals.filter(Boolean).length, n = vals.length;
+    const named = rs.filter(a => a.mentioned).length, cited = rs.filter(a => a.cited).length;
+    const cls = !n ? "" : good === n ? "ok" : "bad";
+    return `<div class="tcell"><b>${esc(NAMES[p] || p)}</b><span class="big ${cls}" style="color:var(--${cls === "ok" ? "ok" : cls === "bad" ? "bad" : "muted"})">${n ? good + " of " + n : "–"}</span><span>${cat ? "named MU" : "accurate"} · named MU ${named} of ${rs.length} · cited site ${cited} of ${rs.length}</span></div>`;
+  }).join("")}</div>`;
+}
 function renderDetail() {
   const el = document.getElementById("detail");
   const qs = questions();
@@ -153,6 +173,7 @@ function renderDetail() {
   if (!q) { el.innerHTML = `<div class="empty">Pick a question on the left to see each AI’s answer.</div>`; return; }
   const ans = answersFor(current);
   el.innerHTML = `<div class="qhead"><h2>${esc(q.q)}</h2><p>${esc(current)} · ${ans.length} answer${ans.length === 1 ? "" : "s"}${ans.some(a => a.reps > 1) ? " · asked 3 times per AI because a single answer can be a fluke" : ""}${ans[0] && ans[0].type === "category" ? " · does not name MU, so the test is whether the AI brings MU up" : ""}</p></div>
+  ${tally(ans)}
   <div class="cards">${ans.map((a, i) => {
     const b = [a.type === "category" ? [a.scope === "niche" ? "General: few right answers" : "General: many answers", "na"] : verdict(a), yesno(a.mentioned, "Names MU", "Doesn’t name MU"), yesno(a.cited, "Cites methodist.edu", "No methodist.edu source")].filter(Boolean);
     if (a.cited === null && a.provider_note) b.push([a.provider_note, "na"]);
