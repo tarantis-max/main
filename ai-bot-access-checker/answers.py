@@ -319,7 +319,8 @@ def ask_perplexity(q: str, key: str, model: str) -> dict:
     sources are in search_results items (results[].url). output_text is an SDK convenience, not in the JSON."""
     resp = _post(PERPLEXITY_AGENT_URL, {"Authorization": f"Bearer {key}"}, _perplexity_body(q, model))
     u = resp.get("usage") or {}
-    usage = {"input": u.get("input_tokens", 0), "output": u.get("output_tokens", 0), "searches": 0,
+    usage = {"input": u.get("input_tokens", 0), "output": u.get("output_tokens", 0),
+             "searches": ((u.get("tool_calls_details") or {}).get("search_web") or {}).get("invocation", 0),
              "cost_usd": ((u.get("cost") or {}).get("total_cost") or 0)}
     if resp.get("status") in ("failed", "cancelled"):
         msg = (resp.get("error") or {}).get("message") or resp["status"]
