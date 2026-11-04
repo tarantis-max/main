@@ -108,12 +108,12 @@ Optimized = all five. The report also counts key student pages site-wide that me
 
 ## AI Answers tab
 
-Sends a question bank to AI assistants with web search on and scores the answers. Needs API keys (Anthropic Console and OpenAI Platform; both prepaid). Keys are saved to `keys.json` on your computer only; it is gitignored and never enters the results bundle.
+Sends a question bank to AI assistants with web search on and scores the answers. Needs API keys (Anthropic Console, OpenAI Platform, Perplexity API settings, Google AI Studio). Run any subset of providers. Keys are saved to `keys.json` on your computer only; it is gitignored and never enters the results bundle.
 
 - `questions.json`: 20 branded questions (name MU) and 20 category questions (do not), from EAB's audit prompts and admitted-student survey themes. Each can have `must_contain` / `must_not_contain` rules (regular expressions) for accuracy scoring.
 - Per answer: **mentioned** (names MU), **cited** (a search result or citation is on methodist.edu), **accurate** (all required facts present, branded only), **confused** (mixed up with another "Methodist" school), peers named, other sources used.
 - Summary: branded mention %, category mention %, citation rate, accuracy, confusions, who gets named on category questions, and which third-party sites the AIs relied on.
-- Providers: Claude (`claude-opus-5-5`, Anthropic web search tool) and ChatGPT (OpenAI Responses API with web search; model editable under Keys).
+- Providers: Claude (`claude-opus-5-5`, Anthropic web search tool), ChatGPT (OpenAI Responses API with web search), Perplexity (`sonar`, search built in) and Google Gemini (`gemini-2.5-flash` with Google Search grounding). Model names are editable under Keys; "List my models" fills the OpenAI and Gemini pickers from the key's own account. Gemini has a free tier; Google AI Overviews themselves have no API, so grounded Gemini is the closest stand-in.
 - Cost: roughly a dollar or two per provider for a full run. "Quick test (2)" runs one branded and one category question.
 - Re-run monthly. The latest run goes into the results bundle (answers.json/csv/html) and Appendix I of the executive report.
 

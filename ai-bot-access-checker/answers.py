@@ -2,11 +2,13 @@
 whether the institution is mentioned, cited, accurate, and not confused with another school.
 
 Providers (raw HTTP, standard library only):
-  anthropic  POST https://api.anthropic.com/v1/messages   (web_search_20260209 server tool)
-  openai     POST https://api.openai.com/v1/responses      (web_search tool)
+  anthropic   POST https://api.anthropic.com/v1/messages   (web_search_20260209 server tool)
+  openai      POST https://api.openai.com/v1/responses      (web_search tool)
+  perplexity  POST https://api.perplexity.ai/chat/completions (search built in)
+  gemini      POST generativelanguage.googleapis.com/v1beta/models/{model}:generateContent (google_search grounding)
 
-Keys are read from the environment (ANTHROPIC_API_KEY, OPENAI_API_KEY) or from keys.json next to this
-file ({"anthropic": "...", "openai": "..."}). Never commit keys.json; it is in .gitignore.
+Keys are read from the environment (ANTHROPIC_API_KEY, OPENAI_API_KEY, PERPLEXITY_API_KEY, GEMINI_API_KEY) or from
+keys.json next to this file ({"anthropic": "...", "openai": "...", "perplexity": "...", "gemini": "..."}). Never commit keys.json; it is in .gitignore.
 
 CLI:  python3 answers.py --out answers.html --csv answers.csv [--providers anthropic,openai] [--ids B01,C01]
 """
@@ -31,6 +33,9 @@ from urllib.parse import urlsplit
 HERE = os.path.dirname(os.path.abspath(__file__))
 ANTHROPIC_MODEL = "claude-opus-5-5"
 OPENAI_MODEL = "gpt-5"  # editable in keys.json as "openai_model"; the error from OpenAI names valid models if this is stale
+PERPLEXITY_MODEL = "sonar"          # editable as "perplexity_model"
+GEMINI_MODEL = "gemini-2.5-flash"   # editable as "gemini_model"; "List my models" shows what the key can use
+PROVIDERS = ("anthropic", "openai", "perplexity", "gemini")
 TIMEOUT = 180
 SYSTEM = ("You are helping a prospective college student. Answer the question directly and concisely (under 250 words), "
           "using web search to get current facts. Name specific institutions. Include the sources you used.")
@@ -52,28 +57,32 @@ def load_keys() -> dict:
         pass
     keys.setdefault("anthropic", os.environ.get("ANTHROPIC_API_KEY", ""))
     keys.setdefault("openai", os.environ.get("OPENAI_API_KEY", ""))
+    keys.setdefault("perplexity", os.environ.get("PERPLEXITY_API_KEY", ""))
+    keys.setdefault("gemini", os.environ.get("GEMINI_API_KEY", ""))
     return {k: (v or "").strip() if isinstance(v, str) else v for k, v in keys.items()}
 
 
 def key_status() -> dict:
     k = load_keys()
     return {"anthropic": bool(k.get("anthropic")), "openai": bool(k.get("openai")),
-            "openai_model": k.get("openai_model") or OPENAI_MODEL, "anthropic_model": ANTHROPIC_MODEL}
+            "perplexity": bool(k.get("perplexity")), "gemini": bool(k.get("gemini")),
+            "openai_model": k.get("openai_model") or OPENAI_MODEL, "anthropic_model": ANTHROPIC_MODEL,
+            "perplexity_model": k.get("perplexity_model") or PERPLEXITY_MODEL, "gemini_model": k.get("gemini_model") or GEMINI_MODEL}
 
 
-def save_keys(anthropic: str | None, openai: str | None, openai_model: str | None = None) -> None:
+def save_keys(**fields: str | None) -> None:
+    """Accepts anthropic, openai, perplexity, gemini (keys) and openai_model, perplexity_model, gemini_model."""
     k = {}
     try:
         with open(os.path.join(HERE, "keys.json"), encoding="utf-8") as f:
             k = json.load(f)
     except FileNotFoundError:
         pass
-    if anthropic is not None:
-        k["anthropic"] = anthropic.strip()
-    if openai is not None:
-        k["openai"] = openai.strip()
-    if openai_model:
-        k["openai_model"] = openai_model.strip()
+    for name, val in fields.items():
+        if val is None or name not in ("anthropic", "openai", "perplexity", "gemini", "openai_model", "perplexity_model", "gemini_model"):
+            continue
+        if val.strip():
+            k[name] = val.strip()
     with open(os.path.join(HERE, "keys.json"), "w", encoding="utf-8") as f:
         json.dump(k, f, indent=2)
     try:
@@ -126,6 +135,21 @@ def list_openai_models(key: str) -> list[str]:
         small = ("-mini" in i or "-nano" in i)
         return (0 if m else 1, -ver, small, i.count("-"), i)  # gpt-* first, newest version first, full size before mini/nano
     return sorted(chat, key=key_)
+
+
+def list_gemini_models(key: str) -> list[str]:
+    """Models the key can use for generateContent, newest first."""
+    req = urllib.request.Request("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", headers={"x-goog-api-key": key})
+    try:
+        with urllib.request.urlopen(req, timeout=30, context=ssl.create_default_context()) as r:
+            data = json.loads(r.read().decode("utf-8", "replace")).get("models", [])
+    except urllib.error.HTTPError as ex:
+        raise RuntimeError(f"HTTP {ex.code}: {ex.read().decode('utf-8', 'replace')[:300]}") from None
+    except (urllib.error.URLError, TimeoutError, OSError) as ex:
+        raise RuntimeError(f"{type(ex).__name__}: {ex}") from None
+    ids = [m["name"].split("/", 1)[-1] for m in data if "generateContent" in (m.get("supportedGenerationMethods") or [])]
+    ids = [i for i in ids if i.startswith("gemini") and not any(s in i for s in ("embedding", "image", "tts", "audio", "live", "exp"))]
+    return sorted(ids, key=lambda i: (("-lite" in i), ("flash" in i), i), reverse=False)
 
 
 # ---------------------------------------------------------------- providers
@@ -193,6 +217,38 @@ def ask_openai(q: str, key: str, model: str) -> dict:
             "usage": {"input": u.get("input_tokens", 0), "output": u.get("output_tokens", 0), "searches": 0}}
 
 
+def ask_perplexity(q: str, key: str, model: str) -> dict:
+    """OpenAI-compatible chat completions; search is built in. Citations come back as `citations` (URLs) and/or `search_results`."""
+    resp = _post("https://api.perplexity.ai/chat/completions", {"Authorization": f"Bearer {key}"}, {
+        "model": model, "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": q}], "max_tokens": 2048,
+    })
+    text = "".join((c.get("message") or {}).get("content", "") for c in resp.get("choices", []))
+    urls = [u for u in resp.get("citations") or [] if isinstance(u, str)]
+    urls += [r.get("url") for r in resp.get("search_results") or [] if isinstance(r, dict) and r.get("url")]
+    u = resp.get("usage", {})
+    return {"text": text.strip(), "urls": urls, "usage": {"input": u.get("prompt_tokens", 0), "output": u.get("completion_tokens", 0), "searches": 0}}
+
+
+def ask_gemini(q: str, key: str, model: str) -> dict:
+    """generateContent with Google Search grounding; sources in candidates[].groundingMetadata.groundingChunks[].web.uri."""
+    resp = _post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent", {"x-goog-api-key": key}, {
+        "system_instruction": {"parts": [{"text": SYSTEM}]},
+        "contents": [{"role": "user", "parts": [{"text": q}]}],
+        "tools": [{"google_search": {}}],
+        "generationConfig": {"maxOutputTokens": 2048},
+    })
+    cands = resp.get("candidates") or []
+    if not cands:
+        reason = (resp.get("promptFeedback") or {}).get("blockReason") or "no candidates"
+        return {"text": "", "urls": [], "usage": {}, "error": f"gemini: {reason}"}
+    c = cands[0]
+    text = "".join(p.get("text", "") for p in (c.get("content") or {}).get("parts", []))
+    gm = c.get("groundingMetadata") or {}
+    urls = [(ch.get("web") or {}).get("uri") for ch in gm.get("groundingChunks") or [] if (ch.get("web") or {}).get("uri")]
+    u = resp.get("usageMetadata", {})
+    return {"text": text.strip(), "urls": urls, "usage": {"input": u.get("promptTokenCount", 0), "output": u.get("candidatesTokenCount", 0), "searches": 0}}
+
+
 # ---------------------------------------------------------------- scoring
 
 def _host(u: str) -> str:
@@ -249,8 +305,14 @@ class AnswerRun:
                     try:
                         if prov == "anthropic":
                             a = ask_anthropic(qd["q"], self.keys["anthropic"])
-                        else:
+                        elif prov == "openai":
                             a = ask_openai(qd["q"], self.keys["openai"], self.keys.get("openai_model") or OPENAI_MODEL)
+                        elif prov == "perplexity":
+                            a = ask_perplexity(qd["q"], self.keys["perplexity"], self.keys.get("perplexity_model") or PERPLEXITY_MODEL)
+                        elif prov == "gemini":
+                            a = ask_gemini(qd["q"], self.keys["gemini"], self.keys.get("gemini_model") or GEMINI_MODEL)
+                        else:
+                            a = {"text": "", "urls": [], "usage": {}, "error": f"unknown provider {prov}"}
                     except RuntimeError as ex:
                         a = {"text": "", "urls": [], "usage": {}, "error": str(ex)}
                     row = {"id": qd["id"], "type": qd["type"], "topic": qd["topic"], "question": qd["q"], "provider": prov,
@@ -405,7 +467,7 @@ pre{{white-space:pre-wrap;background:#f5f5f7;padding:10px;border-radius:6px;font
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Ask AI assistants a question bank and score mentions, citations and accuracy.")
-    ap.add_argument("--providers", default="anthropic,openai")
+    ap.add_argument("--providers", default="anthropic,openai,perplexity,gemini")
     ap.add_argument("--ids", default="", help="comma-separated question ids to run (default all)")
     ap.add_argument("--domain", default="methodist.edu")
     ap.add_argument("--out", default="ai-answers.html")

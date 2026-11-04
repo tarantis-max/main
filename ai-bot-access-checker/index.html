@@ -148,18 +148,25 @@
   <section id="tab-answers" hidden>
     <div class="card">
       <h2>Keys</h2>
-      <div class="note" style="margin-bottom:8px">Keys are saved to <code>keys.json</code> on this computer only (never in the repo or the results bundle). Get them at console.anthropic.com and platform.openai.com; both need prepaid credits. A full run of 40 questions costs roughly a dollar or two per provider.</div>
+      <div class="note" style="margin-bottom:8px">Keys are saved to <code>keys.json</code> on this computer only (never in the repo or the results bundle). Get them at console.anthropic.com, platform.openai.com, perplexity.ai (API settings) and aistudio.google.com (Gemini has a free tier). A full run of 40 questions costs roughly a dollar or two per paid provider.</div>
       <form id="kf" class="setgrid" style="display:grid">
         <label>Anthropic API key <span id="kanth" class="muted"></span><input type="password" id="kanthropic" placeholder="sk-ant-…" autocomplete="off"></label>
         <label>OpenAI API key <span id="koai" class="muted"></span><input type="password" id="kopenai" placeholder="sk-…" autocomplete="off"></label>
         <label>OpenAI model <input type="text" id="kmodel" placeholder="gpt-5" list="kmodels"><datalist id="kmodels"></datalist>
           <button type="button" class="sec" id="klist" style="margin-top:4px;padding:6px 10px">List my models</button> <span id="klistmsg" class="note"></span></label>
+        <label>Perplexity API key <span id="kpplx" class="muted"></span><input type="password" id="kperplexity" placeholder="pplx-…" autocomplete="off"></label>
+        <label>Perplexity model <input type="text" id="kpmodel" placeholder="sonar"><span class="note">sonar (fast, cheap) or sonar-pro</span></label>
+        <label>Google Gemini API key <span id="kgem" class="muted"></span><input type="password" id="kgemini" placeholder="AIza…" autocomplete="off"></label>
+        <label>Gemini model <input type="text" id="kgmodel" placeholder="gemini-2.5-flash" list="kgmodels"><datalist id="kgmodels"></datalist>
+          <button type="button" class="sec" id="kglist" style="margin-top:4px;padding:6px 10px">List my models</button> <span id="kglistmsg" class="note"></span></label>
         <div style="align-self:end"><button id="ksave">Save keys</button></div>
       </form>
     </div>
     <form id="af">
       <label class="chk"><input type="checkbox" id="pa" checked> Claude</label>
       <label class="chk"><input type="checkbox" id="po" checked> ChatGPT</label>
+      <label class="chk"><input type="checkbox" id="pp" checked> Perplexity</label>
+      <label class="chk"><input type="checkbox" id="pg" checked> Gemini</label>
       <label class="chk">Questions <select id="aset"><option value="all">All</option><option value="branded">Branded only</option><option value="category">Category only</option><option value="smoke">Quick test (2)</option></select></label>
       <button id="ago">Run answer test</button>
       <button id="astop" class="sec" type="button" disabled>Stop</button>
@@ -521,6 +528,8 @@ async function loadKeys() {
   const k = await (await fetch("/api/answers/keys")).json();
   $("#kanth").textContent = k.anthropic ? "(saved)" : "(not set)"; $("#koai").textContent = k.openai ? "(saved)" : "(not set)";
   $("#kmodel").value = k.openai_model || "";
+  $("#kpplx").textContent = k.perplexity ? "(saved)" : "(not set)"; $("#kgem").textContent = k.gemini ? "(saved)" : "(not set)";
+  $("#kpmodel").value = k.perplexity_model || ""; $("#kgmodel").value = k.gemini_model || "";
 }
 loadKeys();
 fetch("/api/answers/questions").then(r => r.json()).then(b => { for (const q of b.questions) QIDS[q.type].push(q.id); });
@@ -532,11 +541,21 @@ $("#klist").onclick = async () => {
   $("#klistmsg").textContent = d.models.length ? `${d.models.length} chat models available. Click the model box to pick one, then Save keys. First listed: ${d.models[0]}` : "No chat models found for this key.";
   if (d.models.length && !$("#kmodel").value) $("#kmodel").value = d.models[0];
 };
+$("#kglist").onclick = async () => {
+  $("#kglistmsg").textContent = "Checking…";
+  const res = await fetch("/api/answers/gemini-models"); const d = await res.json();
+  if (!res.ok) { $("#kglistmsg").innerHTML = `<span class="err">${esc(d.error)}</span>`; return; }
+  $("#kgmodels").innerHTML = d.models.map(m => `<option value="${esc(m)}">`).join("");
+  $("#kglistmsg").textContent = d.models.length ? `${d.models.length} models available. Click the model box to pick one, then Save keys.` : "No Gemini models found for this key.";
+  if (d.models.length && !$("#kgmodel").value) $("#kgmodel").value = d.models[0];
+};
 $("#kf").onsubmit = async e => {
   e.preventDefault();
-  const body = {}; if ($("#kanthropic").value) body.anthropic = $("#kanthropic").value; if ($("#kopenai").value) body.openai = $("#kopenai").value; if ($("#kmodel").value) body.openai_model = $("#kmodel").value;
+  const body = {};
+  for (const [id, name] of [["kanthropic", "anthropic"], ["kopenai", "openai"], ["kperplexity", "perplexity"], ["kgemini", "gemini"], ["kmodel", "openai_model"], ["kpmodel", "perplexity_model"], ["kgmodel", "gemini_model"]])
+    if ($("#" + id).value) body[name] = $("#" + id).value;
   const res = await fetch("/api/answers/keys", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (res.ok) { $("#kanthropic").value = ""; $("#kopenai").value = ""; loadKeys(); } else alert((await res.json()).error);
+  if (res.ok) { for (const id of ["kanthropic", "kopenai", "kperplexity", "kgemini"]) $("#" + id).value = ""; loadKeys(); } else alert((await res.json()).error);
 };
 function renderAnswers(d) {
   const s = d.summary, rows = d.results;
@@ -569,7 +588,7 @@ async function apoll() {
 }
 $("#af").onsubmit = async e => {
   e.preventDefault();
-  const provs = [$("#pa").checked ? "anthropic" : "", $("#po").checked ? "openai" : ""].filter(Boolean).join(",");
+  const provs = [$("#pa").checked ? "anthropic" : "", $("#po").checked ? "openai" : "", $("#pp").checked ? "perplexity" : "", $("#pg").checked ? "gemini" : ""].filter(Boolean).join(",");
   const set = $("#aset").value;
   const ids = set === "branded" ? QIDS.branded : set === "category" ? QIDS.category : set === "smoke" ? [QIDS.branded[0], QIDS.category[0]] : [];
   const res = await fetch("/api/answers/start?" + new URLSearchParams({ providers: provs, ids: ids.join(",") }));
