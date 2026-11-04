@@ -156,7 +156,7 @@ def list_gemini_models(key: str) -> list[str]:
 
 # ---------------------------------------------------------------- providers
 
-def ask_anthropic(q: str, key: str) -> dict:
+def ask_anthropic(q: str, key: str, effort: str = "low") -> dict:
     """Returns {text, urls, usage}. Handles pause_turn by resending the conversation."""
     headers = {"x-api-key": key, "anthropic-version": "2026-10-21"}
     messages = [{"role": "user", "content": q}]
@@ -164,7 +164,7 @@ def ask_anthropic(q: str, key: str) -> dict:
     for _ in range(4):
         resp = _post("https://api.anthropic.com/v1/messages", headers, {
             "model": ANTHROPIC_MODEL, "max_tokens": 4096, "system": SYSTEM,
-            "output_config": {"effort": "low"},
+            "output_config": {"effort": effort},
             "tools": [{"type": "web_search_20260209", "name": "web_search", "max_uses": 5}],
             "messages": messages,
         })
@@ -523,14 +523,15 @@ class AnswerRun:
         try:
             if not self.providers:
                 raise RuntimeError("No API keys found. Add them under Keys on the AI Answers tab.")
-            for qd in self.questions:
+            for qd, rep in [(qd, n) for qd in self.questions for n in range(1, int(qd.get("repeat") or 1) + 1)]:
+                deep = int(qd.get("repeat") or 1) > 1
                 for prov in self.providers:
                     if self._stop.is_set():
                         break
                     t0 = time.time()
                     try:
                         if prov == "anthropic":
-                            a = ask_anthropic(qd["q"], self.keys["anthropic"])
+                            a = ask_anthropic(qd["q"], self.keys["anthropic"], "medium" if deep else "low")
                         elif prov == "openai":
                             a = ask_openai(qd["q"], self.keys["openai"], self.keys.get("openai_model") or OPENAI_MODEL)
                         elif prov == "perplexity":
@@ -543,7 +544,7 @@ class AnswerRun:
                         a = {"text": "", "urls": [], "usage": {}, "error": str(ex)}
                     if not a.get("error") and not a.get("text"):
                         a["error"] = f"{prov} returned no answer text"
-                    row = {"id": qd["id"], "type": qd["type"], "scope": scope_of(qd), "topic": qd["topic"], "question": qd["q"], "provider": prov,
+                    row = {"id": qd["id"], "rep": rep, "type": qd["type"], "scope": scope_of(qd), "topic": qd["topic"], "question": qd["q"], "provider": prov,
                            "answer": a["text"], "error": a.get("error", ""), "seconds": round(time.time() - t0, 1), "usage": a.get("usage", {})}
                     row.update(score(qd, self.bank, a["text"], a["urls"], self.home_domain) if not a.get("error") else
                                {"mentioned": None, "cited": None, "cited_urls": [], "other_sources": [], "peers_mentioned": [], "colleges_named": [],
@@ -558,13 +559,31 @@ class AnswerRun:
         finally:
             self.finished = time.time()
 
+    def planned(self) -> int:
+        """Answers this run will produce: repeated questions count once per repeat."""
+        return sum(int(q.get("repeat") or 1) for q in self.questions) * max(1, len(self.providers))
+
     def stop(self):
         self._stop.set()
 
     def summary(self) -> dict:
         with self._lock:
-            rows = list(self.results)
+            all_rows = list(self.results)
+        rows = [r for r in all_rows if r.get("rep", 1) == 1]  # headline rates: first answer per question, comparable across runs
         ok = [r for r in rows if not r["error"]]
+        groups: dict = {}
+        for r in all_rows:
+            if not r["error"]:
+                groups.setdefault((r["id"], r["provider"]), []).append(r)
+        consistency = []
+        for (qid, prov), rs in sorted(groups.items()):
+            if len(rs) < 2:
+                continue
+            acc = [r["accurate"] for r in rs if r.get("accurate") is not None]
+            consistency.append({"id": qid, "provider": prov, "question": rs[0]["question"], "answers": len(rs),
+                                "mentioned": sum(1 for r in rs if r["mentioned"]), "cited": sum(1 for r in rs if r["cited"]),
+                                "accurate": sum(1 for r in acc if r), "scored": len(acc),
+                                "unstable": len({bool(r["mentioned"]) for r in rs}) > 1 or len(set(acc)) > 1})
 
         def rate(xs, key):
             xs = [r for r in xs if r.get(key) is not None]
@@ -613,12 +632,12 @@ class AnswerRun:
                 named.setdefault(c, {"college": c, "answers": 0, "by_provider": {}})
                 named[c]["answers"] += 1
                 named[c]["by_provider"][r["provider"]] = named[c]["by_provider"].get(r["provider"], 0) + 1
-        tok_in = sum(r["usage"].get("input", 0) for r in rows)
-        tok_out = sum(r["usage"].get("output", 0) for r in rows)
-        cost = round(sum(r["usage"].get("cost_usd", 0) or 0 for r in rows), 4)
+        tok_in = sum(r["usage"].get("input", 0) for r in all_rows)
+        tok_out = sum(r["usage"].get("output", 0) for r in all_rows)
+        cost = round(sum(r["usage"].get("cost_usd", 0) or 0 for r in all_rows), 4)
         return {
             "state": self.state, "error": self.error, "providers": self.providers, "missing_keys": self.missing_keys,
-            "questions": len(self.questions), "done": len(rows), "total": len(self.questions) * max(1, len(self.providers)),
+            "questions": len(self.questions), "done": len(all_rows), "total": self.planned(),
             "elapsed_s": round((self.finished or time.time()) - self.started),
             "branded_mention": rate([r for r in ok if r["type"] == "branded"], "mentioned"),
             "category_mention": rate(cat, "mentioned"),
@@ -631,6 +650,11 @@ class AnswerRun:
             "citation_share_category": citation_share(cat),
             "citation_share_broad": citation_share(broad),
             "peer_sets": peer_sets,
+            "consistency": consistency,
+            "consistency_unstable": sum(1 for c in consistency if c["unstable"]),
+            "consistency_all_accurate": sum(1 for c in consistency if c["scored"] and c["accurate"] == c["scored"]),
+            "consistency_scored": sum(1 for c in consistency if c["scored"]),
+            "answers_total": len(all_rows),
             "benchmarks": self.bank.get("benchmarks", {}),
             "citation_rate": rate(ok, "cited"),
             "accuracy": rate([r for r in ok if r["type"] == "branded"], "accurate"),
@@ -649,12 +673,12 @@ class AnswerRun:
     def to_csv(self) -> str:
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow(["id", "type", "scope", "topic", "question", "provider", "pass", "mentioned", "cited", "accurate", "confused_with",
+        w.writerow(["id", "rep", "type", "scope", "topic", "question", "provider", "pass", "mentioned", "cited", "accurate", "confused_with",
                     "peers_mentioned", "colleges_named", "missing_facts", "cited_urls", "other_sources", "error", "answer"])
         with self._lock:
             rows = list(self.results)
         for r in rows:
-            w.writerow([r["id"], r["type"], r.get("scope", ""), r["topic"], r["question"], r["provider"], r["pass"], r["mentioned"], r["cited"], r["accurate"],
+            w.writerow([r["id"], r.get("rep", 1), r["type"], r.get("scope", ""), r["topic"], r["question"], r["provider"], r["pass"], r["mentioned"], r["cited"], r["accurate"],
                         "; ".join(r["confused_with"]), "; ".join(r["peers_mentioned"]), "; ".join(r.get("colleges_named") or []), "; ".join(r["missing_facts"]),
                         " ".join(r["cited_urls"]), " ".join(r["other_sources"]), r["error"], r["answer"]])
         return buf.getvalue()
@@ -685,19 +709,33 @@ def build_answers_report(s: dict, rows: list[dict], bank: dict) -> str:
         bench_rows += (f"<tr><td>Brand mention, general questions (peer set)</td><td>{b.get('brand_mention_peer_set')}%</td><td><b>{pct(s.get('broad_mention'))}</b> broad questions</td></tr>"
                        f"<tr><td>Citation share (school's share of all sources)</td><td>{b.get('citation_share')}%</td><td><b>{pct(s.get('citation_share_broad'))}</b> broad questions</td></tr>"
                        f"<tr><td colspan='3' class='note'>{e(bname)}. EAB tested 11 models (some without web search); this test uses {len(s['providers'])} with web search on, so expect differences.</td></tr>")
+    cons = s.get("consistency") or []
+    cons_html = ""
+    if cons:
+        def frac(a, b):
+            return "-" if not b else f"{a} of {b}"
+        cons_html = ("<h2>Consistency: key questions asked 3 times</h2><p class='note'>School of Medicine and accuracy-rule questions are asked 3 times "
+                     "(Claude at medium effort) because a single answer can be a fluke. Headline rates above use the first answer only. "
+                     f"<b>{s.get('consistency_all_accurate', 0)} of {s.get('consistency_scored', 0)}</b> question-provider pairs were accurate every time; "
+                     f"<b>{s.get('consistency_unstable', 0)}</b> gave different results across repeats (marked).</p>"
+                     "<table><thead><tr><th>ID</th><th>Provider</th><th>Mentioned</th><th>Cited</th><th>Accurate</th></tr></thead><tbody>"
+                     + "".join(("<tr class='mu'>" if c["unstable"] else "<tr>")
+                               + f"<td class='nw'>{e(c['id'])}</td><td>{e(c['provider'])}</td><td>{frac(c['mentioned'], c['answers'])}</td>"
+                               f"<td>{frac(c['cited'], c['answers'])}</td><td>{frac(c['accurate'], c['scored'])}</td></tr>" for c in cons)
+                     + "</tbody></table>")
     peer_html = ""
     for pname, members in (s.get("peer_sets") or {}).items():
         peer_html += (f"<h2>Share of voice: {e(pname)} (broad questions)</h2><table><thead><tr><th>College</th><th>Named in</th><th>Rate</th></tr></thead><tbody>"
                       + "".join(("<tr class='mu'>" if m["college"] == inst else "<tr>") + f"<td>{e(m['college'])}</td><td>{m['answers']} of {s.get('broad_total', 0)}</td><td>{pct(m['rate'])}</td></tr>" for m in members)
                       + "</tbody></table>")
     q_rows = "".join(
-        f"<tr><td class='nw'>{e(r['id'])}</td><td>{e(r.get('scope', ''))}</td><td>{e(r['question'])}</td><td>{e(r['provider'])}</td>"
+        f"<tr><td class='nw'>{e(r['id'])}{(' #' + str(r['rep'])) if r.get('rep', 1) > 1 else ''}</td><td>{e(r.get('scope', ''))}</td><td>{e(r['question'])}</td><td>{e(r['provider'])}</td>"
         f"<td>{pill(r['mentioned'])}</td><td>{pill(r['cited'])}</td><td>{pill(r['accurate']) if r['type'] == 'branded' else '-'}</td>"
         f"<td>{e(', '.join(r.get('colleges_named') or r['peers_mentioned'])) or '-'}</td>"
         f"<td>{('<span class=\"bad\">' + e(', '.join(r['confused_with'])) + '</span>') if r['confused_with'] else ('<span class=\"bad\">missing: ' + e(', '.join(r['missing_facts'])) + '</span>') if r['missing_facts'] else (e(r['error'][:80]) if r['error'] else '-')}</td></tr>"
         for r in rows)
     answers = "".join(
-        f"<details><summary><b>{e(r['id'])}</b> {e(r['question'])} <span class='muted'>({e(r['provider'])})</span></summary>"
+        f"<details><summary><b>{e(r['id'])}{(' #' + str(r['rep'])) if r.get('rep', 1) > 1 else ''}</b> {e(r['question'])} <span class='muted'>({e(r['provider'])})</span></summary>"
         f"<pre>{e(r['answer'] or r['error'])}</pre><p class='note'>Cited {inst}: {e(', '.join(r['cited_urls'])) or 'no'} · Other sources: {e(', '.join(r['other_sources'])) or 'none'}</p></details>"
         for r in rows)
     src = "".join(f"<tr><td>{e(x['host'])}</td><td>{x['answers']}</td></tr>" for x in s["top_sources"])
@@ -722,7 +760,7 @@ pre{{white-space:pre-wrap;background:#f5f5f7;padding:10px;border-radius:6px;font
 @media print{{.bar{{display:none}} details{{break-inside:avoid}}}}
 </style></head><body><div class="bar"><button onclick="window.print()">Print / Save as PDF</button></div><main>
 <h1>AI Answer Test: {e(inst)}</h1>
-<div class="meta">{e(s['date'])} · {s['questions']} questions · {e(', '.join(s['providers']))} · web search on · {s['elapsed_s']}s</div>
+<div class="meta">{e(s['date'])} · {s['questions']} questions ({s.get('answers_total', s['done'])} answers incl. repeats) · {e(', '.join(s['providers']))} · web search on · {s['elapsed_s']}s</div>
 <div class="tiles">
 <div class="tile"><b>{pct(s['branded_mention'])}</b><span>branded: questions that name {e(inst)}</span></div>
 <div class="tile"><b>{pct(s.get('niche_mention'))}</b><span>niche: general questions with few right answers ({s.get('niche_total', 0)} answers)</span></div>
@@ -734,6 +772,7 @@ pre{{white-space:pre-wrap;background:#f5f5f7;padding:10px;border-radius:6px;font
 <h2>By provider</h2>
 <table><thead><tr><th>Provider</th><th>Answered</th><th>Branded</th><th>Niche</th><th>Broad</th><th>Cites site</th><th>Citation share (broad)</th><th>Accurate</th><th>Confusions</th><th>Errors</th></tr></thead><tbody>{prov_rows}</tbody></table>
 {peer_html}
+{cons_html}
 <h2>Every college named on general questions (niche and broad)</h2>
 <p class="note">Every school the AIs named when the question did not name {e(inst)}, most-named first. This is AI share of voice: the schools students hear about instead.</p>
 <table><thead><tr><th>College</th><th>All providers</th>{''.join(f"<th>{e(p)}</th>" for p in provs)}</tr></thead><tbody>{colleges}</tbody></table>
@@ -778,7 +817,7 @@ def main() -> int:
     try:
         while t.is_alive():
             t.join(2)
-            print(f"\r{len(run.results)} of {len(run.questions) * max(1, len(run.providers))} answers   ", end="", file=sys.stderr)
+            print(f"\r{len(run.results)} of {run.planned()} answers   ", end="", file=sys.stderr)
     except KeyboardInterrupt:
         run.stop()
         t.join()

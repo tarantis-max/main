@@ -146,10 +146,12 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         return sp.netloc.lower() + "/" + (parts[0] + "/" if parts else "")
 
     deliberate = {p["url"] for p in live if urlsplit(p["url"]).netloc.lower() in private_hosts or _section(p["url"]) in nsec}
+    on_private = {p["url"] for p in live if urlsplit(p["url"]).netloc.lower() in private_hosts}
     adj = []
     for c in s["check_failures"]:
-        if c["id"] in ("indexable", "ai_search_allowed") and deliberate:
-            real = sum(1 for p in live if p["checks"].get(c["id"]) is False and p["url"] not in deliberate)
+        skip = deliberate if c["id"] in ("indexable", "ai_search_allowed") else on_private  # a private host is excluded from every check
+        if skip:
+            real = sum(1 for p in pages if p["checks"].get(c["id"]) is False and p["url"] not in skip)
             c = {**c, "failed": real, "pct": round(100 * real / max(1, n))}
         adj.append(c)
     fails = sorted((c for c in adj if c["failed"]), key=lambda c: (-c["critical"], -c["failed"]))
@@ -409,7 +411,12 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 
     prio_html = "".join(prio_row(p) for p in prio[:10]) or '<tr><td colspan="4">No key student pages found in this crawl.</td></tr>'
     key_broken_note = (f" {key_broken} more key-page addresses are broken links (not found or server error); they are listed under Site-level findings, with the page that links to each." if key_broken else "")
-    checks_html = "".join(check_row(c) for c in s["check_failures"])
+    checks_html = "".join(check_row(c) for c in adj)  # same counts as page 1 (deliberate exclusions removed)
+    excl_note = ""
+    if deliberate:
+        excl_note = (f"Counts exclude {len(deliberate)} page(s) that are noindexed or blocked on purpose"
+                     + (": " + ", ".join(private_hosts) if private_hosts else "")
+                     + (("; sections " if private_hosts else ": sections ") + ", ".join(sorted(nsec)) if nsec else "") + ".")
     org_html = "".join(org_row(r) for r in org["rows"] if not r["pass"]) or '<tr><td colspan="3">All checks pass.</td></tr>'
     pdf_html = "".join(pdf_row(p) for p in [x for x in pdfs if x["topics"] or x["past_terms"]][:10]) or '<tr><td colspan="4">None flagged.</td></tr>'
     def exec_row(i, a):
@@ -690,13 +697,14 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 <b>Bot policy.</b> Bots in bot_policy.json are excluded from AI search counts and scoring; a denied bot counts as blocked only when robots.txt blocks it on the homepage and on every sampled sitemap page, or the server refuses it.<br>
 <b>Verdict rules.</b> Ready: at least 80% of pages Ready, no AI search bot blocked, and every homepage organization schema check passes. Partially ready: at least 50% of pages Ready and no AI search bot blocked. Not ready: anything else.<br>
 <b>Page grades.</b> Score = checks passed ÷ {len(CHECKS)} × 100. Ready: score 80 or higher and no critical fail. Needs work: score 50-79 and no critical fail. Not ready: score below 50 or any critical fail.<br>
-<b>Scope.</b> Started at {e(s['start'])}; {n} pages checked (limit {s['max_pages']}); {stopped_txt}skipped: {e(skipped_txt)}{e(unchecked_txt)}. Error pages (not HTTP 200) are scored only on HTTP 200. Former-name mentions are a review list and are not scored.
+<b>Scope.</b> Started at {e(s['start'])}; {n} pages checked (limit {s['max_pages']}); {stopped_txt}skipped: {e(skipped_txt)}{e(unchecked_txt)}. Not graded: {s.get('copies', 0)} filtered or paged copies (an address with "?" whose canonical tag points to another page; their links were still followed) and app, login or donation pages (counted under skipped). Error pages (not HTTP 200) are scored only on HTTP 200. Former-name mentions are a review list and are not scored.
 "Past" means before the current academic year ({e(s['academic_year'])}), which starts July 1. PDFs are judged by file name and link text only.
 </p>
 <h2>Appendix A: All checks</h2>
 <table><thead><tr><th>Check</th><th>Pass when</th><th>Pages failing</th></tr></thead><tbody>
 {checks_html}
 </tbody></table>
+<p class="note">{excl_note}</p>
 
 <h2>Appendix B: Homepage organization schema</h2>
 <p class="note">{org_passed_txt} Failing checks shown.</p>

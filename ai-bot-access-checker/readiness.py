@@ -159,6 +159,9 @@ HOSTING_SUFFIXES = ("wpenginepowered.com", "wpengine.com", "pantheonsite.io", "k
                     "vercel.app", "herokuapp.com", "azurewebsites.net", "cloudfront.net", "amazonaws.com", "wpcomstaging.com",
                     "flywheelsites.com", "pressable.com", "github.io")
 LEGACY_HOST = re.compile(r"^(www)?(old|legacy|staging|stage|dev|test|beta|preview|archive)[0-9]*\.|(^|\.)(old|legacy|staging|stage|dev|test)[0-9]*\.", re.I)
+APP_HOST = re.compile(r"^(apply|applyforonline|donate|give|giving|appointments?|munet|sft|support|help|servicedesk|portal|my|mymu|login|sso|cas|"
+                      r"webmail|mail|canvas|blackboard|moodle|selfservice|banner|pay|payments)\.", re.I)
+LOGIN_TITLE = re.compile(r"\b(log ?in|sign ?in|web client)\b", re.I)
 LOGIN_PATH = re.compile(r"/(login|log-in|signin|sign-in|logout|servicedesk|portal|wp-admin|wp-login|account|my-account|cas)(/|\.|$)", re.I)
 NEWS_PATH = re.compile(r"/(news|blog|blogs|stories|story|press|press-releases|archive|archives)(/|$)", re.I)
 SOCIAL = ("facebook.com", "instagram.com", "twitter.com", "x.com", "linkedin.com", "youtube.com",
@@ -1101,6 +1104,8 @@ class Crawl:
         self.schema_types: Counter = Counter()
         self.home: dict | None = None
         self.skipped: dict[str, int] = {}
+        self.app_pages: list[str] = []   # apps, logins, donation forms: not content, not graded
+        self.copies = 0                  # ?query pages whose canonical is another page: links followed, not graded
         self.unchecked: list[str] = []
         self.sitemap_urls: set[str] = set()
         self.wp: dict = {"checked": False}
@@ -1191,8 +1196,17 @@ class Crawl:
         with self._lock:
             self.skipped[why] = self.skipped.get(why, 0) + 1
 
+    def _app(self, url: str) -> None:
+        self._skip("app, login or donation page (not content, not graded)")
+        with self._lock:
+            if len(self.app_pages) < 200:
+                self.app_pages.append(url)
+
     def _visit(self, url: str) -> dict | None:
         sp = urlsplit(url)
+        if url != self.start and (APP_HOST.search(sp.netloc) or LOGIN_PATH.search(sp.path)):
+            self._app(url)
+            return None
         groups = self.robots(f"{sp.scheme}://{sp.netloc}")
         path = (sp.path or "/") + (f"?{sp.query}" if sp.query else "")
         if robots_verdict(groups, "AIReadinessChecker", path)[0] == "blocked":
@@ -1224,9 +1238,12 @@ class Crawl:
             return None
         fs = urlsplit(final)
         page = check_page(final, r, elapsed, self.robots(f"{fs.scheme}://{fs.netloc}"), self.cfg)
-        if page["detail"]["login_form"] and url != self.start:
-            self._skip("login or app page (has a password field)")
+        if url != self.start and (page["detail"]["login_form"] or LOGIN_TITLE.search(page["detail"].get("title") or "")):
+            self._app(final)
             return None
+        cu = (page["detail"].get("canonical_url") or "").strip()
+        if fs.query and page["status"] == 200 and cu and norm(urljoin(final, cu)) != final:
+            page["_copy"] = True  # filtered or paged copy: follow its links, do not grade it
         if final != url:
             page["redirected_from"] = url
         if url == self.start:
@@ -1313,6 +1330,10 @@ class Crawl:
                             if nu not in seen and self.in_scope(nu):
                                 seen.add(nu)
                                 frontier.append(nu)
+                        if page.pop("_copy", False):
+                            with self._lock:
+                                self.copies += 1
+                            continue
                         with self._lock:
                             self._absorb(page)
                             self.results.append(page)
@@ -1344,6 +1365,8 @@ class Crawl:
             "queued": self.queued,
             "max_pages": self.max_pages,
             "skipped": dict(self.skipped),
+            "copies": self.copies,
+            "app_pages": list(self.app_pages[:25]),
             "elapsed_s": round((self.finished or time.time()) - self.started),
             "avg_score": round(sum(p["score"] for p in pages) / n) if n else 0,
             "grades": grades,

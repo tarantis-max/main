@@ -49,7 +49,8 @@
         "Fayetteville"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "B02",
@@ -69,7 +70,8 @@
         "scholarship"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "B04",
@@ -77,12 +79,13 @@
       "topic": "medicine",
       "q": "Does Methodist University have a medical school?",
       "must_contain": [
-        "Cape Fear Valley|School of Medicine"
+        "Cape Fear Valley"
       ],
       "must_not_contain": [
-        "does not have a medical school|no medical school"
+        "(does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program)|^\\W*No\\b"
       ],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "B05",
@@ -93,7 +96,8 @@
         "Monarch Momentum"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "B06",
@@ -106,7 +110,8 @@
         "occupational therapy|OTD"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "B07",
@@ -119,7 +124,8 @@
       "must_not_contain": [
         "not (be )?ABET|isn.t ABET|is not accredited|no ABET"
       ],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "B08",
@@ -130,7 +136,8 @@
         "golf"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "B09",
@@ -141,7 +148,8 @@
         "100"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "B10",
@@ -154,7 +162,8 @@
       "must_not_contain": [
         "(?<!formerly )(?<!previously )(?<!renamed from )Fort Liberty(?! \\((formerly|previously|renamed))"
       ],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "B11",
@@ -165,7 +174,8 @@
         "online"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "B12",
@@ -185,7 +195,8 @@
         "Division III|D-?III|DIII"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "B14",
@@ -205,7 +216,8 @@
         "apply"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "B16",
@@ -213,10 +225,12 @@
       "topic": "identity",
       "q": "Is Methodist University the same as Methodist College?",
       "must_contain": [
-        "Fayetteville"
+        "Fayetteville",
+        "formerly|former name|renamed|name change|changed (its|the) name|until 2006|in 2006|to 2006|(was|were) (also )?(called|known as|named) Methodist College|went by Methodist College|originally (known as|called|named|founded as)|became Methodist University"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "B17",
@@ -254,7 +268,8 @@
         "tour|visit"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "B21",
@@ -310,7 +325,8 @@
         "United Methodist|Wesleyan|Methodist"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "B27",
@@ -318,10 +334,12 @@
       "topic": "identity",
       "q": "Methodist University vs Methodist College: are they the same place?",
       "must_contain": [
-        "Fayetteville"
+        "Fayetteville",
+        "formerly|former name|renamed|name change|changed (its|the) name|until 2006|in 2006|to 2006|(was|were) (also )?(called|known as|named) Methodist College|went by Methodist College|originally (known as|called|named|founded as)|became Methodist University"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "C01",
@@ -623,7 +641,8 @@
       "must_not_contain": [
         "not (yet )?accredited|applicant (school|program)|pending (LCME )?accreditation|seeking accreditation"
       ],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "M02",
@@ -634,7 +653,8 @@
         "\\b64\\b"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "M03",
@@ -647,7 +667,8 @@
       "must_not_contain": [
         "will open in 2027|opens? in 2027|not yet open"
       ],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "M04",
@@ -658,7 +679,8 @@
         "rural|underserved|community|primary care"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "M05",
@@ -667,7 +689,8 @@
       "q": "What MCAT score and GPA do I need for Methodist University's School of Medicine?",
       "must_contain": [],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "M06",
@@ -678,7 +701,8 @@
         "no (required )?prerequisite|not have required prerequisite|does not require (specific )?prerequisite|suggested"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "M07",
@@ -689,7 +713,8 @@
         "scholarship"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "M08",
@@ -700,7 +725,8 @@
         "AMCAS"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "M09",
@@ -709,7 +735,8 @@
       "q": "Does Methodist University's medical school give preference to North Carolina residents?",
       "must_contain": [],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "M10",
@@ -720,7 +747,8 @@
         "Cape Fear Valley"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "M11",
@@ -733,7 +761,8 @@
       "must_not_contain": [
         "is an? (DO|osteopathic)|grants? (the |a )?D\\.?O\\.?\\b"
       ],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "M12",
@@ -744,7 +773,8 @@
         "Monarch Momentum"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "M13",
@@ -756,7 +786,8 @@
         "osteopathic|\\bD\\.?O\\.?\\b"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "M14",
@@ -767,7 +798,8 @@
         "residenc"
       ],
       "must_not_contain": [],
-      "scope": "branded"
+      "scope": "branded",
+      "repeat": 3
     },
     {
       "id": "M15",
@@ -909,7 +941,7 @@
     "Bennett": "Bennett College",
     "St. Augustine's": "Saint Augustine|St\\.? Augustine",
     "St. Andrews": "St\\.? Andrews|Saint Andrews",
-    "UNC Chapel Hill": "UNC[- ]Chapel Hill|University of North Carolina at Chapel Hill|\\bUNC\\b(?![- ](?:Pembroke|Charlotte|Wilmington|Greensboro|Asheville|System))",
+    "UNC Chapel Hill": "UNC[- ]Chapel Hill|University of North Carolina at Chapel Hill|\\bUNC\\b(?![- ](?:Pembroke|Charlotte|Wilmington|Greensboro|Asheville|System|system|Board|board|Health|institutions?|campus|campuses|schools?|universities|Promise|BOG))",
     "NC State": "NC State|N\\.C\\. State|North Carolina State",
     "UNC Pembroke": "UNC[- ]Pembroke|UNCP\\b|University of North Carolina (at |- ?)?Pembroke",
     "UNC Charlotte": "UNC[- ]Charlotte|UNCC\\b|University of North Carolina (at |- ?)?Charlotte",
@@ -947,5 +979,6 @@
       "citation_share": 4.6,
       "model_visibility_avg": 18.0
     }
-  }
+  },
+  "repeat_note": "repeat: 3 = asked 3 times (School of Medicine and accuracy-rule questions), with Claude at medium effort, to show how consistent the answers are. Headline rates use the first answer only."
 }

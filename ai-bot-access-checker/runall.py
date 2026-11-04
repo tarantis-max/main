@@ -206,7 +206,7 @@ class RunAll:
             st = ch.status()
             return f"site {min(st['done'] + 1, len(st['sites']))} of {len(st['sites'])}: {st['current']} ({st['current_pages']} pages)"
         if k == "answers" and ch is not None:
-            return f"{len(ch.results)} of {len(ch.questions) * max(1, len(ch.providers))} answers"
+            return f"{len(ch.results)} of {ch.planned()} answers"
         return ""
 
     def status(self) -> dict:

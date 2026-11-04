@@ -174,6 +174,16 @@ Every question has a `scope` in `questions.json`:
 
 Reports show mention rates for all three, plus **citation share**: methodist.edu's share of all sources cited (EAB's measure), next to "cites methodist.edu" (share of answers citing it at all). The "Compared with EAB" table uses broad questions against the benchmarks in `questions.json`, and "Share of voice" ranks the EAB AI peer set on broad questions.
 
+## Repeated key questions
+
+The 30 School of Medicine and accuracy-rule questions (`"repeat": 3` in `questions.json`) are asked 3 times, with Claude at medium effort, because one answer can be a fluke. Headline rates use the first answer only, so runs stay comparable. The Consistency table shows, for each question and provider, how many of the 3 answers mentioned, cited and got it right, and marks any that changed between repeats. A full run is 143 answers per provider.
+
+## Pages not graded
+
+- App, login and donation pages (apply, donate, appointment, portals, help desk, file transfer, pages titled "Log in") are skipped and counted under "skipped".
+- Filtered or paged copies (an address with "?" whose canonical tag points to another page) are not graded or counted in page totals; their links are still followed so deeper pages are found.
+- In the report, a host that is entirely blocked or noindexed (an internal system) and sections that are entirely noindexed are left out of critical counts on page 1 and in Appendix A, with a note saying so.
+
 ## Competitors tab
 
 Enter your site and up to 10 competitors. Each site gets the Bot Access check and a readiness crawl of up to the page limit (default 200; same host only, robots.txt respected, 2 workers, 0.5 s delay). Your site is re-crawled with the same limit so the comparison is fair. The table ranks your site on each metric (1 = best, "tie" = all equal). **Comparison report** opens a printable page; **Comparison CSV** exports the table. The latest finished comparison is included in the results bundle.
