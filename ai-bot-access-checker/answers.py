@@ -195,10 +195,16 @@ def ask_anthropic(q: str, key: str) -> dict:
 
 def ask_openai(q: str, key: str, model: str) -> dict:
     headers = {"Authorization": f"Bearer {key}"}
-    resp = _post("https://api.openai.com/v1/responses", headers, {
-        "model": model, "instructions": SYSTEM, "input": q,
-        "tools": [{"type": "web_search"}], "max_output_tokens": 4096,
-    })
+    body = {"model": model, "instructions": SYSTEM, "input": q,
+            "tools": [{"type": "web_search"}], "max_output_tokens": 16000,
+            "reasoning": {"effort": "low"}}
+    try:
+        resp = _post("https://api.openai.com/v1/responses", headers, body)
+    except RuntimeError as ex:
+        if "reasoning" not in str(ex):
+            raise
+        body.pop("reasoning")  # non-reasoning models reject the parameter
+        resp = _post("https://api.openai.com/v1/responses", headers, body)
     text, urls = [], []
     for item in resp.get("output", []):
         if item.get("type") == "message":
@@ -213,8 +219,12 @@ def ask_openai(q: str, key: str, model: str) -> dict:
                 if isinstance(r, dict) and r.get("url"):
                     urls.append(r["url"])
     u = resp.get("usage", {})
-    return {"text": "\n".join(text).strip(), "urls": urls,
-            "usage": {"input": u.get("input_tokens", 0), "output": u.get("output_tokens", 0), "searches": 0}}
+    usage = {"input": u.get("input_tokens", 0), "output": u.get("output_tokens", 0), "searches": 0}
+    out = "\n".join(text).strip()
+    if not out:
+        reason = (resp.get("incomplete_details") or {}).get("reason") or resp.get("status") or "empty answer"
+        return {"text": "", "urls": urls, "usage": usage, "error": f"openai returned no answer text ({reason})"}
+    return {"text": out, "urls": urls, "usage": usage}
 
 
 def ask_perplexity(q: str, key: str, model: str) -> dict:
@@ -318,6 +328,8 @@ class AnswerRun:
                             a = {"text": "", "urls": [], "usage": {}, "error": f"unknown provider {prov}"}
                     except RuntimeError as ex:
                         a = {"text": "", "urls": [], "usage": {}, "error": str(ex)}
+                    if not a.get("error") and not a.get("text"):
+                        a["error"] = f"{prov} returned no answer text"
                     row = {"id": qd["id"], "type": qd["type"], "topic": qd["topic"], "question": qd["q"], "provider": prov,
                            "answer": a["text"], "error": a.get("error", ""), "seconds": round(time.time() - t0, 1), "usage": a.get("usage", {})}
                     row.update(score(qd, self.bank, a["text"], a["urls"], self.home_domain) if not a.get("error") else
