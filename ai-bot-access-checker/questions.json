@@ -95,7 +95,9 @@
       "must_contain": [
         "Monarch Momentum"
       ],
-      "must_not_contain": [],
+      "must_not_contain": [
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}((does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|has no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program))"
+      ],
       "scope": "branded",
       "repeat": 3
     },
@@ -225,7 +227,7 @@
       "topic": "identity",
       "q": "Is Methodist University the same as Methodist College?",
       "must_contain": [
-        "Fayetteville",
+        "Fayetteville|North Carolina|\\bN\\.?C\\.?\\b",
         "formerly|former name|renamed|name change|changed (its|the) name|until 2006|in 2006|to 2006|(was|were) (also )?(called|known as|named) Methodist College|went by Methodist College|originally (known as|called|named|founded as)|became Methodist University"
       ],
       "must_not_contain": [],
@@ -334,7 +336,7 @@
       "topic": "identity",
       "q": "Methodist University vs Methodist College: are they the same place?",
       "must_contain": [
-        "Fayetteville",
+        "Fayetteville|North Carolina|\\bN\\.?C\\.?\\b",
         "formerly|former name|renamed|name change|changed (its|the) name|until 2006|in 2006|to 2006|(was|were) (also )?(called|known as|named) Methodist College|went by Methodist College|originally (known as|called|named|founded as)|became Methodist University"
       ],
       "must_not_contain": [],
@@ -639,7 +641,8 @@
         "preliminary"
       ],
       "must_not_contain": [
-        "not (yet )?accredited|applicant (school|program)|pending (LCME )?accreditation|seeking accreditation"
+        "not (yet )?accredited|applicant (school|program)|pending (LCME )?accreditation|seeking accreditation",
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}((does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|has no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program))"
       ],
       "scope": "branded",
       "repeat": 3
@@ -652,7 +655,9 @@
       "must_contain": [
         "\\b64\\b"
       ],
-      "must_not_contain": [],
+      "must_not_contain": [
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}((does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|has no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program))"
+      ],
       "scope": "branded",
       "repeat": 3
     },
@@ -665,7 +670,8 @@
         "2026"
       ],
       "must_not_contain": [
-        "will open in 2027|opens? in 2027|not yet open"
+        "will open in 2027|opens? in 2027|not yet open",
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}((does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|has no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program))"
       ],
       "scope": "branded",
       "repeat": 3
@@ -678,7 +684,9 @@
       "must_contain": [
         "rural|underserved|community|primary care"
       ],
-      "must_not_contain": [],
+      "must_not_contain": [
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}((does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|has no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program))"
+      ],
       "scope": "branded",
       "repeat": 3
     },
@@ -688,7 +696,9 @@
       "topic": "medicine",
       "q": "What MCAT score and GPA do I need for Methodist University's School of Medicine?",
       "must_contain": [],
-      "must_not_contain": [],
+      "must_not_contain": [
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}((does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|has no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program))"
+      ],
       "scope": "branded",
       "repeat": 3
     },
@@ -700,7 +710,9 @@
       "must_contain": [
         "no (required )?prerequisite|not have required prerequisite|does not require (specific )?prerequisite|suggested"
       ],
-      "must_not_contain": [],
+      "must_not_contain": [
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}((does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|has no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program))"
+      ],
       "scope": "branded",
       "repeat": 3
     },
@@ -712,7 +724,9 @@
       "must_contain": [
         "scholarship"
       ],
-      "must_not_contain": [],
+      "must_not_contain": [
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}((does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|has no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program))"
+      ],
       "scope": "branded",
       "repeat": 3
     },
@@ -724,7 +738,9 @@
       "must_contain": [
         "AMCAS"
       ],
-      "must_not_contain": [],
+      "must_not_contain": [
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}((does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|has no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program))"
+      ],
       "scope": "branded",
       "repeat": 3
     },
@@ -734,7 +750,9 @@
       "topic": "medicine",
       "q": "Does Methodist University's medical school give preference to North Carolina residents?",
       "must_contain": [],
-      "must_not_contain": [],
+      "must_not_contain": [
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}((does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|has no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program))"
+      ],
       "scope": "branded",
       "repeat": 3
     },
@@ -746,7 +764,9 @@
       "must_contain": [
         "Cape Fear Valley"
       ],
-      "must_not_contain": [],
+      "must_not_contain": [
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}((does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|has no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program))"
+      ],
       "scope": "branded",
       "repeat": 3
     },
@@ -759,7 +779,8 @@
         "\\bM\\.?D\\.?\\b|allopathic"
       ],
       "must_not_contain": [
-        "is an? (DO|osteopathic)|grants? (the |a )?D\\.?O\\.?\\b"
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}\\b(is an? (DO|osteopathic)|grants? (the |a )?D\\.?O\\.?\\b)",
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}((does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|has no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program))"
       ],
       "scope": "branded",
       "repeat": 3
@@ -772,7 +793,9 @@
       "must_contain": [
         "Monarch Momentum"
       ],
-      "must_not_contain": [],
+      "must_not_contain": [
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}((does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|has no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program))"
+      ],
       "scope": "branded",
       "repeat": 3
     },
@@ -785,7 +808,9 @@
         "\\bM\\.?D\\.?\\b|allopathic",
         "osteopathic|\\bD\\.?O\\.?\\b"
       ],
-      "must_not_contain": [],
+      "must_not_contain": [
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}((does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|has no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program))"
+      ],
       "scope": "branded",
       "repeat": 3
     },
@@ -797,7 +822,9 @@
       "must_contain": [
         "residenc"
       ],
-      "must_not_contain": [],
+      "must_not_contain": [
+        "(?<!Southern )(?<!Nebraska )(?<!Central )(?<!Texas )(Methodist University|\\bMU\\b)[^.]{0,80}((does not|doesn.t|does n.t) (currently |yet )?(have|offer|operate) (a|an|its own) (medical school|M\\.?D\\.? program)|has no (medical school|M\\.?D\\.? (or D\\.?O\\.? )?program))"
+      ],
       "scope": "branded",
       "repeat": 3
     },
