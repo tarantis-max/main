@@ -164,6 +164,16 @@ Keys can also come from environment variables, which take precedence over keys s
 python3 answers.py --smoke perplexity
 ```
 
+## Branded, niche and broad questions
+
+Every question has a `scope` in `questions.json`:
+
+- **branded**: names MU. AI should name MU nearly every time; accuracy is scored here.
+- **niche**: general, but only a few schools are right answers (PGA Golf Management, OT doctorate, Fayetteville, United Methodist, new medical schools). A high rate is expected.
+- **broad**: general, with many possible answers (best value, financial aid, nursing, pre-med). **This is the number to grow.**
+
+Reports show mention rates for all three, plus **citation share**: methodist.edu's share of all sources cited (EAB's measure), next to "cites methodist.edu" (share of answers citing it at all). The "Compared with EAB" table uses broad questions against the benchmarks in `questions.json`, and "Share of voice" ranks the EAB AI peer set on broad questions.
+
 ## Competitors tab
 
 Enter your site and up to 10 competitors. Each site gets the Bot Access check and a readiness crawl of up to the page limit (default 200; same host only, robots.txt respected, 2 workers, 0.5 s delay). Your site is re-crawled with the same limit so the comparison is fair. The table ranks your site on each metric (1 = best, "tie" = all equal). **Comparison report** opens a printable page; **Comparison CSV** exports the table. The latest finished comparison is included in the results bundle.

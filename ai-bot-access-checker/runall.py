@@ -161,7 +161,7 @@ class RunAll:
             raise RuntimeError(r.error)
         sm = r.summary()
         miss = f"; no key for {', '.join(r.missing_keys)}" if r.missing_keys else ""
-        return f"{sm['done']} of {sm['total']} answers, category mention {sm['category_mention']}%{miss}"
+        return f"{sm['done']} of {sm['total']} answers, broad mention {sm.get('broad_mention')}%, citation share (broad) {sm.get('citation_share_broad')}%{miss}"
 
     def _save(self):
         if self.crawl is None or not self.crawl.results:

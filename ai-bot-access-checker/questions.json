@@ -48,7 +48,8 @@
       "must_contain": [
         "Fayetteville"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B02",
@@ -56,7 +57,8 @@
       "topic": "cost",
       "q": "How much does Methodist University cost after financial aid?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B03",
@@ -66,7 +68,8 @@
       "must_contain": [
         "scholarship"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B04",
@@ -78,7 +81,8 @@
       ],
       "must_not_contain": [
         "does not have a medical school|no medical school"
-      ]
+      ],
+      "scope": "branded"
     },
     {
       "id": "B05",
@@ -88,7 +92,8 @@
       "must_contain": [
         "Monarch Momentum"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B06",
@@ -100,7 +105,8 @@
         "physical therapy|DPT",
         "occupational therapy|OTD"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B07",
@@ -112,7 +118,8 @@
       ],
       "must_not_contain": [
         "not (be )?ABET|isn.t ABET|is not accredited|no ABET"
-      ]
+      ],
+      "scope": "branded"
     },
     {
       "id": "B08",
@@ -122,7 +129,8 @@
       "must_contain": [
         "golf"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B09",
@@ -132,7 +140,8 @@
       "must_contain": [
         "100"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B10",
@@ -144,7 +153,8 @@
       ],
       "must_not_contain": [
         "(?<!formerly )(?<!previously )(?<!renamed from )Fort Liberty(?! \\((formerly|previously|renamed))"
-      ]
+      ],
+      "scope": "branded"
     },
     {
       "id": "B11",
@@ -154,7 +164,8 @@
       "must_contain": [
         "online"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B12",
@@ -162,7 +173,8 @@
       "topic": "campus",
       "q": "What is campus life like at Methodist University?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B13",
@@ -172,7 +184,8 @@
       "must_contain": [
         "Division III|D-?III|DIII"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B14",
@@ -180,7 +193,8 @@
       "topic": "outcomes",
       "q": "What is the graduation rate at Methodist University and why is it low?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B15",
@@ -190,7 +204,8 @@
       "must_contain": [
         "apply"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B16",
@@ -200,7 +215,8 @@
       "must_contain": [
         "Fayetteville"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B17",
@@ -208,7 +224,8 @@
       "topic": "value",
       "q": "Is Methodist University worth the money?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B18",
@@ -216,7 +233,8 @@
       "topic": "compare",
       "q": "Methodist University vs Campbell University: which is better for pre-med?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B19",
@@ -224,7 +242,8 @@
       "topic": "compare",
       "q": "Methodist University vs Wingate University: which should I choose?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B20",
@@ -234,7 +253,8 @@
       "must_contain": [
         "tour|visit"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B21",
@@ -242,7 +262,8 @@
       "topic": "parents",
       "q": "Is Methodist University safe?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B22",
@@ -250,7 +271,8 @@
       "topic": "support",
       "q": "What support does Methodist University give first-year students?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B23",
@@ -258,7 +280,8 @@
       "topic": "admissions",
       "q": "What GPA and test scores do I need to get into Methodist University?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B24",
@@ -266,7 +289,8 @@
       "topic": "admissions",
       "q": "Does Methodist University accept the Common App, and is there an application fee?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B25",
@@ -274,7 +298,8 @@
       "topic": "transfer",
       "q": "How do I transfer credits from Fayetteville Technical Community College to Methodist University?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B26",
@@ -284,7 +309,8 @@
       "must_contain": [
         "United Methodist|Wesleyan|Methodist"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "B27",
@@ -294,7 +320,8 @@
       "must_contain": [
         "Fayetteville"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "C01",
@@ -302,7 +329,8 @@
       "topic": "value",
       "q": "What are the best value private universities in North Carolina?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C02",
@@ -310,7 +338,8 @@
       "topic": "size",
       "q": "What are the best small private universities in North Carolina?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C03",
@@ -318,7 +347,8 @@
       "topic": "medicine",
       "q": "Which small universities in the Southeast have their own medical school?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C04",
@@ -326,7 +356,8 @@
       "topic": "medicine",
       "q": "What are good pre-med colleges in North Carolina with a pathway into a medical school?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C05",
@@ -334,7 +365,8 @@
       "topic": "health",
       "q": "Which North Carolina colleges have physician assistant, physical therapy and occupational therapy programs?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "niche"
     },
     {
       "id": "C06",
@@ -342,7 +374,8 @@
       "topic": "health",
       "q": "What are the best colleges in North Carolina for health professions?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C07",
@@ -350,7 +383,8 @@
       "topic": "military",
       "q": "What are the best colleges near Fort Bragg, NC for active-duty military and veterans?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C08",
@@ -358,7 +392,8 @@
       "topic": "online",
       "q": "What are the best online universities in the Southeast for working adults?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C09",
@@ -366,7 +401,8 @@
       "topic": "golf",
       "q": "Which colleges have a PGA Golf Management program?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "niche"
     },
     {
       "id": "C10",
@@ -374,7 +410,8 @@
       "topic": "engineering",
       "q": "Which small private colleges in North Carolina have ABET accredited engineering?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C11",
@@ -382,7 +419,8 @@
       "topic": "nursing",
       "q": "What are the best nursing programs in North Carolina with high NCLEX pass rates?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C12",
@@ -390,7 +428,8 @@
       "topic": "aid",
       "q": "Which private colleges in North Carolina give the most financial aid?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C13",
@@ -398,7 +437,8 @@
       "topic": "athletics",
       "q": "Which Division III colleges in North Carolina are good for student-athletes who want to play and get a professional degree?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C14",
@@ -406,7 +446,8 @@
       "topic": "local",
       "q": "What colleges and universities are in Fayetteville, North Carolina?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "niche"
     },
     {
       "id": "C15",
@@ -414,7 +455,8 @@
       "topic": "first-gen",
       "q": "What are good private colleges in North Carolina for first-generation students who need financial aid?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C16",
@@ -422,7 +464,8 @@
       "topic": "programs",
       "q": "Which colleges in North Carolina offer a bachelor's in cybersecurity?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C17",
@@ -430,7 +473,8 @@
       "topic": "programs",
       "q": "What are the best psychology programs at small colleges in North Carolina?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C18",
@@ -438,7 +482,8 @@
       "topic": "programs",
       "q": "Which North Carolina colleges offer a Doctor of Occupational Therapy?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "niche"
     },
     {
       "id": "C19",
@@ -446,7 +491,8 @@
       "topic": "transfer",
       "q": "Which private universities in North Carolina are good for community college transfer students?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C20",
@@ -454,7 +500,8 @@
       "topic": "methodist",
       "q": "Which universities in North Carolina are affiliated with the United Methodist Church?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "niche"
     },
     {
       "id": "C21",
@@ -462,7 +509,8 @@
       "topic": "cost",
       "q": "How much does a private college in North Carolina cost after financial aid?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C22",
@@ -470,7 +518,8 @@
       "topic": "aid",
       "q": "Which North Carolina private colleges offer full-tuition or merit scholarships for a 3.5 GPA?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C23",
@@ -478,7 +527,8 @@
       "topic": "aid",
       "q": "Which private colleges in North Carolina accept the NC Need-Based Scholarship?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C24",
@@ -486,7 +536,8 @@
       "topic": "value",
       "q": "Is a private college in North Carolina worth it compared to UNC Charlotte or East Carolina?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C25",
@@ -494,7 +545,8 @@
       "topic": "outcomes",
       "q": "Which small colleges in North Carolina have the best job placement rates?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C26",
@@ -502,7 +554,8 @@
       "topic": "health",
       "q": "Which North Carolina colleges give their own graduates an advantage getting into a physician assistant program?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "niche"
     },
     {
       "id": "C27",
@@ -510,7 +563,8 @@
       "topic": "engineering",
       "q": "Which North Carolina colleges have a 100% job placement rate for engineering graduates?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C28",
@@ -518,7 +572,8 @@
       "topic": "military",
       "q": "What are the best colleges near Fayetteville, NC (Fort Bragg) for military spouses?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "niche"
     },
     {
       "id": "C29",
@@ -526,7 +581,8 @@
       "topic": "online",
       "q": "Which online bachelor's programs in North Carolina are good for working adults with transfer credits?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C30",
@@ -534,7 +590,8 @@
       "topic": "first-gen",
       "q": "Which colleges in North Carolina have strong support for first-generation students?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "C31",
@@ -542,7 +599,8 @@
       "topic": "medicine",
       "q": "Which North Carolina colleges recently opened a medical school?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "niche"
     },
     {
       "id": "C32",
@@ -550,7 +608,8 @@
       "topic": "golf",
       "q": "Which colleges in North Carolina have an on-campus golf course?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "M01",
@@ -563,7 +622,8 @@
       ],
       "must_not_contain": [
         "not (yet )?accredited|applicant (school|program)|pending (LCME )?accreditation|seeking accreditation"
-      ]
+      ],
+      "scope": "branded"
     },
     {
       "id": "M02",
@@ -573,7 +633,8 @@
       "must_contain": [
         "\\b64\\b"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "M03",
@@ -585,7 +646,8 @@
       ],
       "must_not_contain": [
         "will open in 2027|opens? in 2027|not yet open"
-      ]
+      ],
+      "scope": "branded"
     },
     {
       "id": "M04",
@@ -595,7 +657,8 @@
       "must_contain": [
         "rural|underserved|community|primary care"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "M05",
@@ -603,7 +666,8 @@
       "topic": "medicine",
       "q": "What MCAT score and GPA do I need for Methodist University's School of Medicine?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "M06",
@@ -613,7 +677,8 @@
       "must_contain": [
         "no (required )?prerequisite|not have required prerequisite|does not require (specific )?prerequisite|suggested"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "M07",
@@ -623,7 +688,8 @@
       "must_contain": [
         "scholarship"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "M08",
@@ -633,7 +699,8 @@
       "must_contain": [
         "AMCAS"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "M09",
@@ -641,7 +708,8 @@
       "topic": "medicine",
       "q": "Does Methodist University's medical school give preference to North Carolina residents?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "M10",
@@ -651,7 +719,8 @@
       "must_contain": [
         "Cape Fear Valley"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "M11",
@@ -663,7 +732,8 @@
       ],
       "must_not_contain": [
         "is an? (DO|osteopathic)|grants? (the |a )?D\\.?O\\.?\\b"
-      ]
+      ],
+      "scope": "branded"
     },
     {
       "id": "M12",
@@ -673,7 +743,8 @@
       "must_contain": [
         "Monarch Momentum"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "M13",
@@ -684,7 +755,8 @@
         "\\bM\\.?D\\.?\\b|allopathic",
         "osteopathic|\\bD\\.?O\\.?\\b"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "M14",
@@ -694,7 +766,8 @@
       "must_contain": [
         "residenc"
       ],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "branded"
     },
     {
       "id": "M15",
@@ -702,7 +775,8 @@
       "topic": "medicine",
       "q": "What are the newest medical schools in North Carolina?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "niche"
     },
     {
       "id": "M16",
@@ -710,7 +784,8 @@
       "topic": "medicine",
       "q": "Which new medical schools opened in 2026?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "niche"
     },
     {
       "id": "M17",
@@ -718,7 +793,8 @@
       "topic": "medicine",
       "q": "What new MD programs are accepting applications for 2027?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "niche"
     },
     {
       "id": "M18",
@@ -726,7 +802,8 @@
       "topic": "medicine",
       "q": "Which medical schools in North Carolina focus on rural or primary care medicine?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "M19",
@@ -734,7 +811,8 @@
       "topic": "medicine",
       "q": "Is there a medical school in Fayetteville, North Carolina?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "niche"
     },
     {
       "id": "M20",
@@ -742,7 +820,8 @@
       "topic": "medicine",
       "q": "List all of the medical schools in North Carolina.",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "niche"
     },
     {
       "id": "M21",
@@ -750,7 +829,8 @@
       "topic": "medicine",
       "q": "Which new medical schools offer free or reduced tuition?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "broad"
     },
     {
       "id": "M22",
@@ -760,7 +840,8 @@
       "must_contain": [],
       "must_not_contain": [
         "(?<!formerly )(?<!previously )(?<!renamed from )Fort Liberty(?! \\((formerly|previously|renamed))"
-      ]
+      ],
+      "scope": "niche"
     },
     {
       "id": "M23",
@@ -768,7 +849,8 @@
       "topic": "medicine",
       "q": "Which new U.S. medical schools have preliminary LCME accreditation?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "niche"
     },
     {
       "id": "M24",
@@ -776,7 +858,8 @@
       "topic": "medicine",
       "q": "Where should I go to medical school if I want to practice in southeastern North Carolina?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [],
+      "scope": "niche"
     }
   ],
   "colleges": {
@@ -845,5 +928,24 @@
     "Southern Methodist": "Southern Methodist|\\bSMU\\b",
     "NC Wesleyan": "(North Carolina|N\\.?C\\.?) Wesleyan",
     "Johnson & Wales": "Johnson (&|and) Wales"
+  },
+  "scope_note": "scope: branded = names the school; niche = a general question where the school is one of only a few correct answers (PGA Golf Management, OT doctorate, Fayetteville, United Methodist, new medical schools); broad = a general question with many possible answers. Compare broad mention and citation share with EAB's audit.",
+  "peer_sets": {
+    "EAB AI visibility peer set": [
+      "Methodist University",
+      "Campbell",
+      "Wingate",
+      "Catawba",
+      "Barton",
+      "Pfeiffer",
+      "Belmont Abbey"
+    ]
+  },
+  "benchmarks": {
+    "EAB AI Visibility audit, Oct. 19, 2026": {
+      "brand_mention_peer_set": 24.1,
+      "citation_share": 4.6,
+      "model_visibility_avg": 18.0
+    }
   }
 }

@@ -197,7 +197,7 @@
       <label class="chk"><input type="checkbox" id="po" checked> ChatGPT</label>
       <label class="chk"><input type="checkbox" id="pp" checked> Perplexity</label>
       <label class="chk"><input type="checkbox" id="pg" checked> Gemini</label>
-      <label class="chk">Questions <select id="aset"><option value="all">All</option><option value="branded">Branded only</option><option value="category">Category only</option><option value="medicine">Medical school only (24)</option><option value="smoke">Quick test (2)</option></select></label>
+      <label class="chk">Questions <select id="aset"><option value="all">All</option><option value="branded">Branded only</option><option value="category">General only (niche + broad)</option><option value="broad">Broad only</option><option value="medicine">Medical school only (24)</option><option value="smoke">Quick test (2)</option></select></label>
       <button id="ago">Run answer test</button>
       <button id="astop" class="sec" type="button" disabled>Stop</button>
       <button id="acsv" class="sec" type="button" disabled>Answers CSV</button>
@@ -605,7 +605,7 @@ $("#rbundle").onclick = () => {
   setTimeout(() => { b.disabled = false; b.textContent = "Download results bundle"; }, 8000);
 };
 /* ---------------- AI Answers ---------------- */
-let ajob = null, atimer = null, QIDS = {branded: [], category: [], medicine: []};
+let ajob = null, atimer = null, QIDS = {branded: [], category: [], medicine: [], broad: []};
 async function loadKeys() {
   const k = await (await fetch("/api/answers/keys")).json();
   $("#kanth").textContent = k.anthropic ? "(saved)" : "(not set)"; $("#koai").textContent = k.openai ? "(saved)" : "(not set)";
@@ -614,7 +614,7 @@ async function loadKeys() {
   $("#kpmodel").value = k.perplexity_model || ""; $("#kgmodel").value = k.gemini_model || "";
 }
 loadKeys();
-fetch("/api/answers/questions").then(r => r.json()).then(b => { for (const q of b.questions) { QIDS[q.type].push(q.id); if (q.topic === "medicine") QIDS.medicine.push(q.id); } });
+fetch("/api/answers/questions").then(r => r.json()).then(b => { for (const q of b.questions) { QIDS[q.type].push(q.id); if (q.topic === "medicine") QIDS.medicine.push(q.id); if (q.scope === "broad") QIDS.broad.push(q.id); } });
 $("#klist").onclick = async () => {
   $("#klistmsg").textContent = "Checking…";
   const res = await fetch("/api/answers/openai-models"); const d = await res.json();
@@ -649,12 +649,16 @@ function renderAnswers(d) {
   $("#aout").innerHTML = `<div class="card">${prog}
     <div class="summary" style="margin-top:10px">
       <div><b>Branded mention</b><span class="big">${pct(s.branded_mention)}</span></div>
-      <div><b>Category mention</b><span class="big" style="color:${(s.category_mention || 0) < 30 ? "var(--bad)" : "var(--ok)"}">${pct(s.category_mention)}</span></div>
+      <div><b>Niche mention</b><span class="big">${pct(s.niche_mention)}</span></div>
+      <div><b>Broad mention</b><span class="big" style="color:${(s.broad_mention || 0) < 30 ? "var(--bad)" : "var(--ok)"}">${pct(s.broad_mention)}</span></div>
+      <div><b>Citation share (broad)</b><span class="big">${pct(s.citation_share_broad)}</span></div>
       <div><b>Cites methodist.edu</b><span class="big">${pct(s.citation_rate)}</span></div>
       <div><b>Accurate (branded)</b><span class="big">${pct(s.accuracy)}</span></div>
       <div><b>Confused with another school</b><span class="big" style="color:${s.confusions ? "var(--bad)" : "var(--ok)"}">${s.confusions}</span></div>
     </div></div>
-    ${s.peer_mentions.length || s.category_total ? `<div class="card"><h2>Who gets named on category questions</h2><div class="tablewrap"><table><tbody>
+    <div class="card note">Branded = names MU. Niche = general question with few right answers (PGA, OT doctorate, Fayetteville, new medical schools). Broad = general question with many answers. <b>Broad mention and citation share (MU's share of all sources) are the numbers to compare with EAB</b>${Object.values(s.benchmarks || {}).length ? ` (EAB: ${Object.values(s.benchmarks)[0].brand_mention_peer_set}% mention, ${Object.values(s.benchmarks)[0].citation_share}% citation share)` : ""}.</div>
+    ${Object.entries(s.peer_sets || {}).map(([n, ms]) => `<div class="card"><h2>Share of voice: ${esc(n)} (broad questions)</h2><div class="tablewrap"><table><tbody>${ms.map(m => `<tr><td>${m.college === "Methodist University" ? "<b>" + esc(m.college) + "</b>" : esc(m.college)}</td><td>${m.answers} of ${s.broad_total}</td><td>${pct(m.rate)}</td></tr>`).join("")}</tbody></table></div></div>`).join("")}
+    ${s.peer_mentions.length || s.category_total ? `<div class="card"><h2>Who gets named on general questions</h2><div class="tablewrap"><table><tbody>
       <tr><td><b>Methodist University</b></td><td><b>${s.category_mention == null ? "-" : Math.round(s.category_mention / 100 * s.category_total)} of ${s.category_total}</b></td></tr>
       ${s.peer_mentions.slice(0, 10).map(x => `<tr><td>${esc(x.peer)}</td><td>${x.answers} of ${s.category_total}</td></tr>`).join("")}</tbody></table></div></div>` : ""}
     ${s.top_sources.length ? `<div class="card"><h2>Sources the AIs used instead of methodist.edu</h2><div class="note" style="margin-bottom:6px">Check each site's listing for MU is current.</div>${s.top_sources.map(x => `<span class="pill muted">${esc(x.host)} · ${x.answers}</span>`).join(" ")}</div>` : ""}
@@ -674,7 +678,7 @@ $("#af").onsubmit = async e => {
   e.preventDefault();
   const provs = [$("#pa").checked ? "anthropic" : "", $("#po").checked ? "openai" : "", $("#pp").checked ? "perplexity" : "", $("#pg").checked ? "gemini" : ""].filter(Boolean).join(",");
   const set = $("#aset").value;
-  const ids = set === "branded" ? QIDS.branded : set === "category" ? QIDS.category : set === "medicine" ? QIDS.medicine : set === "smoke" ? [QIDS.branded[0], QIDS.category[0]] : [];
+  const ids = set === "branded" ? QIDS.branded : set === "category" ? QIDS.category : set === "medicine" ? QIDS.medicine : set === "broad" ? QIDS.broad : set === "smoke" ? [QIDS.branded[0], QIDS.category[0]] : [];
   const res = await fetch("/api/answers/start?" + new URLSearchParams({ providers: provs, ids: ids.join(",") }));
   const data = await res.json();
   if (!res.ok) { $("#aout").innerHTML = `<div class="card err">Error: ${esc(data.error)}</div>`; return; }

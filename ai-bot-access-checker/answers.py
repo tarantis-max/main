@@ -464,6 +464,17 @@ def colleges_named(text: str, bank: dict) -> list[str]:
     return out
 
 
+def scope_of(qd: dict) -> str:
+    """branded (names the school), niche (general, few correct answers) or broad (general, many answers)."""
+    return "branded" if qd["type"] == "branded" else (qd.get("scope") if qd.get("scope") in ("niche", "broad") else "broad")
+
+
+def citation_share(rows: list[dict]) -> float | None:
+    """The school's share of all sources cited (EAB's 'citation share'), not the share of answers that cite it."""
+    tot = sum(r.get("n_sources") or 0 for r in rows)
+    return round(100 * sum(r.get("n_home_sources") or 0 for r in rows) / tot, 1) if tot else None
+
+
 def score(qd: dict, bank: dict, text: str, urls: list[str], home_domain: str) -> dict:
     alias_rx = "|".join(f"(?:{a})" for a in bank["institution_aliases"])
     mentioned = bool(re.search(alias_rx, text, re.I))
@@ -482,7 +493,9 @@ def score(qd: dict, bank: dict, text: str, urls: list[str], home_domain: str) ->
         ok = mentioned and not confused and accurate is not False
     else:
         ok = mentioned
+    all_urls = {u for u in urls if _host(u)}
     return {"mentioned": mentioned, "cited": bool(cited_urls), "cited_urls": cited_urls[:5], "other_sources": other_hosts[:8],
+            "n_sources": len(all_urls), "n_home_sources": len(cited_urls),
             "peers_mentioned": peers, "colleges_named": colleges, "confused_with": confused, "missing_facts": missing, "forbidden_found": forbidden,
             "accurate": accurate, "pass": ok}
 
@@ -530,7 +543,7 @@ class AnswerRun:
                         a = {"text": "", "urls": [], "usage": {}, "error": str(ex)}
                     if not a.get("error") and not a.get("text"):
                         a["error"] = f"{prov} returned no answer text"
-                    row = {"id": qd["id"], "type": qd["type"], "topic": qd["topic"], "question": qd["q"], "provider": prov,
+                    row = {"id": qd["id"], "type": qd["type"], "scope": scope_of(qd), "topic": qd["topic"], "question": qd["q"], "provider": prov,
                            "answer": a["text"], "error": a.get("error", ""), "seconds": round(time.time() - t0, 1), "usage": a.get("usage", {})}
                     row.update(score(qd, self.bank, a["text"], a["urls"], self.home_domain) if not a.get("error") else
                                {"mentioned": None, "cited": None, "cited_urls": [], "other_sources": [], "peers_mentioned": [], "colleges_named": [],
@@ -557,10 +570,15 @@ class AnswerRun:
             xs = [r for r in xs if r.get(key) is not None]
             return round(100 * sum(1 for r in xs if r[key]) / len(xs)) if xs else None
 
+        for r in rows:  # results saved by older versions have no scope
+            r.setdefault("scope", scope_of({"type": r["type"], "scope": next((q.get("scope") for q in self.bank["questions"] if q["id"] == r["id"]), None)}))
         by_prov = {}
         for p in self.providers:
             pr = [r for r in ok if r["provider"] == p]
             by_prov[p] = {
+                "niche_mention": rate([r for r in pr if r["scope"] == "niche"], "mentioned"),
+                "broad_mention": rate([r for r in pr if r["scope"] == "broad"], "mentioned"),
+                "citation_share_broad": citation_share([r for r in pr if r["scope"] == "broad"]),
                 "answered": len(pr), "errors": sum(1 for r in rows if r["provider"] == p and r["error"]),
                 "branded_mention": rate([r for r in pr if r["type"] == "branded"], "mentioned"),
                 "category_mention": rate([r for r in pr if r["type"] == "category"], "mentioned"),
@@ -578,6 +596,17 @@ class AnswerRun:
                 for p in r["peers_mentioned"]:
                     peer[p] = peer.get(p, 0) + 1
         cat = [r for r in ok if r["type"] == "category"]
+        broad = [r for r in ok if r["scope"] == "broad"]
+        inst = self.bank.get("institution", "")
+        peer_sets = {}
+        for name, members in (self.bank.get("peer_sets") or {}).items():
+            counts = {m: 0 for m in members}
+            for r in broad:
+                named = set(r.get("colleges_named") or colleges_named(r["answer"], self.bank))
+                for m in members:
+                    counts[m] += (m in named) or (m == inst and bool(r["mentioned"]))
+            peer_sets[name] = sorted(({"college": m, "answers": n, "rate": round(100 * n / len(broad), 1) if broad else None}
+                                      for m, n in counts.items()), key=lambda x: -x["answers"])
         named = {}
         for r in cat:
             for c in r.get("colleges_named") or []:
@@ -593,6 +622,16 @@ class AnswerRun:
             "elapsed_s": round((self.finished or time.time()) - self.started),
             "branded_mention": rate([r for r in ok if r["type"] == "branded"], "mentioned"),
             "category_mention": rate(cat, "mentioned"),
+            "niche_mention": rate([r for r in ok if r["scope"] == "niche"], "mentioned"),
+            "broad_mention": rate(broad, "mentioned"),
+            "niche_total": sum(1 for r in ok if r["scope"] == "niche"),
+            "broad_total": len(broad),
+            "broad_cited": rate(broad, "cited"),
+            "citation_share": citation_share(ok),
+            "citation_share_category": citation_share(cat),
+            "citation_share_broad": citation_share(broad),
+            "peer_sets": peer_sets,
+            "benchmarks": self.bank.get("benchmarks", {}),
             "citation_rate": rate(ok, "cited"),
             "accuracy": rate([r for r in ok if r["type"] == "branded"], "accurate"),
             "confusions": sum(1 for r in ok if r["confused_with"]),
@@ -610,12 +649,12 @@ class AnswerRun:
     def to_csv(self) -> str:
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow(["id", "type", "topic", "question", "provider", "pass", "mentioned", "cited", "accurate", "confused_with",
+        w.writerow(["id", "type", "scope", "topic", "question", "provider", "pass", "mentioned", "cited", "accurate", "confused_with",
                     "peers_mentioned", "colleges_named", "missing_facts", "cited_urls", "other_sources", "error", "answer"])
         with self._lock:
             rows = list(self.results)
         for r in rows:
-            w.writerow([r["id"], r["type"], r["topic"], r["question"], r["provider"], r["pass"], r["mentioned"], r["cited"], r["accurate"],
+            w.writerow([r["id"], r["type"], r.get("scope", ""), r["topic"], r["question"], r["provider"], r["pass"], r["mentioned"], r["cited"], r["accurate"],
                         "; ".join(r["confused_with"]), "; ".join(r["peers_mentioned"]), "; ".join(r.get("colleges_named") or []), "; ".join(r["missing_facts"]),
                         " ".join(r["cited_urls"]), " ".join(r["other_sources"]), r["error"], r["answer"]])
         return buf.getvalue()
@@ -638,11 +677,21 @@ def build_answers_report(s: dict, rows: list[dict], bank: dict) -> str:
         return f'<span class="pill {"ok" if bool(v) == good else "bad"}">{"yes" if v else "no"}</span>'
 
     prov_rows = "".join(
-        f"<tr><td>{e(p)}</td><td>{d['answered']}</td><td>{pct(d['branded_mention'])}</td><td>{pct(d['category_mention'])}</td>"
-        f"<td>{pct(d['cited'])}</td><td>{pct(d['accurate'])}</td><td>{d['confused']}</td><td>{d['errors']}</td></tr>"
+        f"<tr><td>{e(p)}</td><td>{d['answered']}</td><td>{pct(d['branded_mention'])}</td><td>{pct(d.get('niche_mention'))}</td><td>{pct(d.get('broad_mention'))}</td>"
+        f"<td>{pct(d['cited'])}</td><td>{pct(d.get('citation_share_broad'))}</td><td>{pct(d['accurate'])}</td><td>{d['confused']}</td><td>{d['errors']}</td></tr>"
         for p, d in s["by_provider"].items())
+    bench_rows = ""
+    for bname, b in (s.get("benchmarks") or {}).items():
+        bench_rows += (f"<tr><td>Brand mention, general questions (peer set)</td><td>{b.get('brand_mention_peer_set')}%</td><td><b>{pct(s.get('broad_mention'))}</b> broad questions</td></tr>"
+                       f"<tr><td>Citation share (school's share of all sources)</td><td>{b.get('citation_share')}%</td><td><b>{pct(s.get('citation_share_broad'))}</b> broad questions</td></tr>"
+                       f"<tr><td colspan='3' class='note'>{e(bname)}. EAB tested 11 models (some without web search); this test uses {len(s['providers'])} with web search on, so expect differences.</td></tr>")
+    peer_html = ""
+    for pname, members in (s.get("peer_sets") or {}).items():
+        peer_html += (f"<h2>Share of voice: {e(pname)} (broad questions)</h2><table><thead><tr><th>College</th><th>Named in</th><th>Rate</th></tr></thead><tbody>"
+                      + "".join(("<tr class='mu'>" if m["college"] == inst else "<tr>") + f"<td>{e(m['college'])}</td><td>{m['answers']} of {s.get('broad_total', 0)}</td><td>{pct(m['rate'])}</td></tr>" for m in members)
+                      + "</tbody></table>")
     q_rows = "".join(
-        f"<tr><td class='nw'>{e(r['id'])}</td><td>{e(r['question'])}</td><td>{e(r['provider'])}</td>"
+        f"<tr><td class='nw'>{e(r['id'])}</td><td>{e(r.get('scope', ''))}</td><td>{e(r['question'])}</td><td>{e(r['provider'])}</td>"
         f"<td>{pill(r['mentioned'])}</td><td>{pill(r['cited'])}</td><td>{pill(r['accurate']) if r['type'] == 'branded' else '-'}</td>"
         f"<td>{e(', '.join(r.get('colleges_named') or r['peers_mentioned'])) or '-'}</td>"
         f"<td>{('<span class=\"bad\">' + e(', '.join(r['confused_with'])) + '</span>') if r['confused_with'] else ('<span class=\"bad\">missing: ' + e(', '.join(r['missing_facts'])) + '</span>') if r['missing_facts'] else (e(r['error'][:80]) if r['error'] else '-')}</td></tr>"
@@ -675,22 +724,24 @@ pre{{white-space:pre-wrap;background:#f5f5f7;padding:10px;border-radius:6px;font
 <h1>AI Answer Test: {e(inst)}</h1>
 <div class="meta">{e(s['date'])} · {s['questions']} questions · {e(', '.join(s['providers']))} · web search on · {s['elapsed_s']}s</div>
 <div class="tiles">
-<div class="tile"><b>{pct(s['branded_mention'])}</b><span>branded questions that mention {e(inst)}</span></div>
-<div class="tile"><b>{pct(s['category_mention'])}</b><span>category questions that mention {e(inst)}</span></div>
-<div class="tile"><b>{pct(s['citation_rate'])}</b><span>answers citing {e(bank.get('home_domain', 'methodist.edu'))}</span></div>
-<div class="tile"><b>{pct(s['accuracy'])}</b><span>branded answers with all required facts</span></div>
+<div class="tile"><b>{pct(s['branded_mention'])}</b><span>branded: questions that name {e(inst)}</span></div>
+<div class="tile"><b>{pct(s.get('niche_mention'))}</b><span>niche: general questions with few right answers ({s.get('niche_total', 0)} answers)</span></div>
+<div class="tile"><b>{pct(s.get('broad_mention'))}</b><span>broad: general questions with many answers ({s.get('broad_total', 0)} answers)</span></div>
+<div class="tile"><b>{pct(s.get('citation_share_broad'))}</b><span>citation share on broad questions: {e(bank.get('home_domain', 'methodist.edu'))}'s share of all sources</span></div>
 </div>
-<p><b>Reading this.</b> Branded questions name the school; category questions do not. EAB's audit standard: branded mention near 100% is expected; the growth opportunity is category mention. Confusions = answers that mixed {e(inst)} up with another "Methodist" institution ({s['confusions']} found).</p>
+<p><b>Reading this.</b> <b>Branded</b> questions name the school; AI should name it nearly every time. <b>Niche</b> questions are general but have few right answers (PGA Golf Management, OT doctorate, Fayetteville, new medical schools); a high rate there is expected. <b>Broad</b> questions have many possible answers; <b>broad mention and citation share are the numbers to grow and the ones to compare with EAB.</b> Accuracy on branded questions: {pct(s['accuracy'])}. Answers citing the site at all: {pct(s['citation_rate'])}. Confusions with another "Methodist" institution: {s['confusions']}.</p>
+{('<h2>Compared with EAB</h2><table><thead><tr><th>Measure</th><th>EAB</th><th>This test</th></tr></thead><tbody>' + bench_rows + '</tbody></table>') if bench_rows else ''}
 <h2>By provider</h2>
-<table><thead><tr><th>Provider</th><th>Answered</th><th>Branded mention</th><th>Category mention</th><th>Cites site</th><th>Accurate</th><th>Confusions</th><th>Errors</th></tr></thead><tbody>{prov_rows}</tbody></table>
-<h2>Every college named on category questions</h2>
+<table><thead><tr><th>Provider</th><th>Answered</th><th>Branded</th><th>Niche</th><th>Broad</th><th>Cites site</th><th>Citation share (broad)</th><th>Accurate</th><th>Confusions</th><th>Errors</th></tr></thead><tbody>{prov_rows}</tbody></table>
+{peer_html}
+<h2>Every college named on general questions (niche and broad)</h2>
 <p class="note">Every school the AIs named when the question did not name {e(inst)}, most-named first. This is AI share of voice: the schools students hear about instead.</p>
 <table><thead><tr><th>College</th><th>All providers</th>{''.join(f"<th>{e(p)}</th>" for p in provs)}</tr></thead><tbody>{colleges}</tbody></table>
 <h2>Sources the AIs used instead of {e(inst)}'s site</h2>
 <p class="note">These third-party sites shape what AI says. Check that each one's listing for {e(inst)} is current.</p>
 <table><thead><tr><th>Source</th><th>Answers</th></tr></thead><tbody>{src}</tbody></table>
 <h2>Every question</h2>
-<table><thead><tr><th>ID</th><th>Question</th><th>Provider</th><th>Mentioned</th><th>Cited</th><th>Accurate</th><th>Colleges named</th><th>Issue</th></tr></thead><tbody>{q_rows}</tbody></table>
+<table><thead><tr><th>ID</th><th>Scope</th><th>Question</th><th>Provider</th><th>Mentioned</th><th>Cited</th><th>Accurate</th><th>Colleges named</th><th>Issue</th></tr></thead><tbody>{q_rows}</tbody></table>
 <h2>Answers</h2>
 {answers}
 <p class="note">Method: each question is sent once per provider with web search enabled and a neutral system prompt. Mentioned = the answer names the institution. Cited = a search result or citation is on the institution's domain. Accurate = every required fact in questions.json appears and no forbidden term does (branded questions with rules only). Tokens used: {s['tokens']['input']:,} in, {s['tokens']['output']:,} out. {"Cost reported by providers: $%.2f." % s["reported_cost_usd"] if s.get("reported_cost_usd") else "No provider reported a cost; check each provider's billing page."}</p>
@@ -743,7 +794,7 @@ def main() -> int:
     if a.json:
         with open(a.json, "w", encoding="utf-8") as f:
             json.dump({"summary": s, "results": run.results}, f, indent=2)
-    print(f"branded mention {s['branded_mention']}%, category mention {s['category_mention']}%, cited {s['citation_rate']}%, accurate {s['accuracy']}%", file=sys.stderr)
+    print(f"branded mention {s['branded_mention']}%, niche {s['niche_mention']}%, broad {s['broad_mention']}%, citation share (broad) {s['citation_share_broad']}%, accurate {s['accuracy']}%", file=sys.stderr)
     print(f"wrote {a.out}", file=sys.stderr)
     return 0
 
