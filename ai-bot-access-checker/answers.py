@@ -423,7 +423,7 @@ def _host(u: str) -> str:
     return urlsplit(u).netloc.lower().removeprefix("www.")
 
 
-_COLLEGE_RX = re.compile(r"\b(?:University of(?: (?:the )?[A-Z][\w.'&-]+){1,4}|(?:[A-Z][\w.'&-]+ ){1,4}(?:University|College)(?: of(?: [A-Z][\w.'-]+){1,3})?)")
+_COLLEGE_RX = re.compile(r"\b(?:University of(?: (?:the )?[A-Z][\w'&-]+){1,4}|(?:[A-Z][\w.'&-]*[\w'&-] ){1,4}(?:University|College)(?: of(?: [A-Z][\w'-]+){1,3})?)")
 _NOT_A_NAME = re.compile(r"^(?:The|A|An|Best|Top|Private|Public|Small|Christian|Liberal|Arts|Value|Many|Most|Other|Some|Each|Every|Community|"
                          r"Consider|Try|Look|Choose|See|Visit|Attend|Like|Also|Both|Then|Unlike|Compared|Education|Health|Medicine|Nursing|Business|Engineering|Law|Graduate|Online|Medical|Arts|Sciences|Science|State|"
                          r"Niche|Forbes|Kiplinger|Princeton|Review|Report|News|World|U\.S\.|US|Methodist|North|Carolina|NC|In|At|For|And|Or|Its|Our|Your|This|These|Their)$")
