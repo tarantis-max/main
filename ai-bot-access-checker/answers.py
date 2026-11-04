@@ -106,6 +106,28 @@ def _post(url: str, headers: dict, body: dict) -> dict:
     raise RuntimeError("unreachable")
 
 
+def list_openai_models(key: str) -> list[str]:
+    """Model ids the key can use, chat-capable ones first (gpt-*, o*), newest first."""
+    req = urllib.request.Request("https://api.openai.com/v1/models", headers={"Authorization": f"Bearer {key}"})
+    try:
+        with urllib.request.urlopen(req, timeout=30, context=ssl.create_default_context()) as r:
+            data = json.loads(r.read().decode("utf-8", "replace")).get("data", [])
+    except urllib.error.HTTPError as ex:
+        raise RuntimeError(f"HTTP {ex.code}: {ex.read().decode('utf-8', 'replace')[:300]}") from None
+    except (urllib.error.URLError, TimeoutError, OSError) as ex:
+        raise RuntimeError(f"{type(ex).__name__}: {ex}") from None
+    skip = ("embedding", "whisper", "tts", "dall-e", "moderation", "realtime", "audio", "transcribe", "image", "search", "babbage", "davinci", "instruct")
+    ids = [m.get("id", "") for m in data if m.get("id")]
+    chat = [i for i in ids if i.startswith(("gpt-", "o1", "o3", "o4")) and not any(s in i for s in skip)]
+
+    def key_(i: str):
+        m = re.match(r"gpt-(\d+(?:\.\d+)?)", i)
+        ver = float(m.group(1)) if m else -1.0
+        small = ("-mini" in i or "-nano" in i)
+        return (0 if m else 1, -ver, small, i.count("-"), i)  # gpt-* first, newest version first, full size before mini/nano
+    return sorted(chat, key=key_)
+
+
 # ---------------------------------------------------------------- providers
 
 def ask_anthropic(q: str, key: str) -> dict:

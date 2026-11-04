@@ -152,7 +152,8 @@
       <form id="kf" class="setgrid" style="display:grid">
         <label>Anthropic API key <span id="kanth" class="muted"></span><input type="password" id="kanthropic" placeholder="sk-ant-…" autocomplete="off"></label>
         <label>OpenAI API key <span id="koai" class="muted"></span><input type="password" id="kopenai" placeholder="sk-…" autocomplete="off"></label>
-        <label>OpenAI model <input type="text" id="kmodel" placeholder="gpt-5"></label>
+        <label>OpenAI model <input type="text" id="kmodel" placeholder="gpt-5" list="kmodels"><datalist id="kmodels"></datalist>
+          <button type="button" class="sec" id="klist" style="margin-top:4px;padding:6px 10px">List my models</button> <span id="klistmsg" class="note"></span></label>
         <div style="align-self:end"><button id="ksave">Save keys</button></div>
       </form>
     </div>
@@ -523,6 +524,14 @@ async function loadKeys() {
 }
 loadKeys();
 fetch("/api/answers/questions").then(r => r.json()).then(b => { for (const q of b.questions) QIDS[q.type].push(q.id); });
+$("#klist").onclick = async () => {
+  $("#klistmsg").textContent = "Checking…";
+  const res = await fetch("/api/answers/openai-models"); const d = await res.json();
+  if (!res.ok) { $("#klistmsg").innerHTML = `<span class="err">${esc(d.error)}</span>`; return; }
+  $("#kmodels").innerHTML = d.models.map(m => `<option value="${esc(m)}">`).join("");
+  $("#klistmsg").textContent = d.models.length ? `${d.models.length} chat models available. Click the model box to pick one, then Save keys. First listed: ${d.models[0]}` : "No chat models found for this key.";
+  if (d.models.length && !$("#kmodel").value) $("#kmodel").value = d.models[0];
+};
 $("#kf").onsubmit = async e => {
   e.preventDefault();
   const body = {}; if ($("#kanthropic").value) body.anthropic = $("#kanthropic").value; if ($("#kopenai").value) body.openai = $("#kopenai").value; if ($("#kmodel").value) body.openai_model = $("#kmodel").value;

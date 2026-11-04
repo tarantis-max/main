@@ -22,7 +22,7 @@ from readiness import CHECKS, DEFAULTS, MESSAGES, Crawl
 from report import build as build_report
 from bundle import make_bundle
 from compare import Compare
-from answers import AnswerRun, key_status, save_keys, load_questions
+from answers import AnswerRun, key_status, save_keys, load_questions, list_openai_models, load_keys
 
 JOBS: dict[str, Crawl] = {}
 
@@ -134,6 +134,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, json.dumps(cmp_.status()).encode(), "application/json")
         elif u.path == "/api/answers/keys":
             self._send(200, json.dumps(key_status()).encode(), "application/json")
+        elif u.path == "/api/answers/openai-models":
+            key = load_keys().get("openai", "")
+            if not key:
+                self._send(400, b'{"error":"Save an OpenAI key first."}', "application/json")
+                return
+            try:
+                self._send(200, json.dumps({"models": list_openai_models(key)}).encode(), "application/json")
+            except RuntimeError as ex:
+                self._send(502, json.dumps({"error": str(ex)}).encode(), "application/json")
         elif u.path == "/api/answers/questions":
             self._send(200, json.dumps(load_questions()).encode(), "application/json")
         elif u.path == "/api/answers/start":
