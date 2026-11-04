@@ -429,6 +429,9 @@ _NOT_A_NAME = re.compile(r"^(?:The|A|An|Best|Top|Private|Public|Small|Christian|
                          r"Niche|Forbes|Kiplinger|Princeton|Review|Report|News|World|U\.S\.|US|Methodist|North|Carolina|NC|In|At|For|And|Or|Its|Our|Your|This|These|Their)$")
 
 
+JUNK_NAME = re.compile(r"\b(Honors|Independent|Golf|Management|Fort Bragg|Fort Liberty|Online|Community|Junior)\b", re.I)
+
+
 def colleges_named(text: str, bank: dict) -> list[str]:
     """Every college an answer names: known schools by their short names (questions.json "colleges"), plus any other
     'X University' / 'X College' / 'University of X' phrase. In order of first appearance."""
@@ -445,6 +448,8 @@ def colleges_named(text: str, bank: dict) -> list[str]:
         words = m.group(0).rstrip(".,;:'").split()
         while words and _NOT_A_NAME.match(words[0]):
             words.pop(0)
+        if JUNK_NAME.search(" ".join(words)):
+            continue
         if len(words) >= 2 and words[0] not in ("University", "College"):
             hits.append((m.start(), " ".join(words), m.end()))
             covered.append((m.start(), m.end()))
@@ -688,7 +693,7 @@ pre{{white-space:pre-wrap;background:#f5f5f7;padding:10px;border-radius:6px;font
 <table><thead><tr><th>ID</th><th>Question</th><th>Provider</th><th>Mentioned</th><th>Cited</th><th>Accurate</th><th>Colleges named</th><th>Issue</th></tr></thead><tbody>{q_rows}</tbody></table>
 <h2>Answers</h2>
 {answers}
-<p class="note">Method: each question is sent once per provider with web search enabled and a neutral system prompt. Mentioned = the answer names the institution. Cited = a search result or citation is on the institution's domain. Accurate = every required fact in questions.json appears and no forbidden term does (branded questions with rules only). Tokens used: {s['tokens']['input']:,} in, {s['tokens']['output']:,} out. Cost reported by providers that return it (Perplexity): ${s.get('reported_cost_usd', 0):.2f}.</p>
+<p class="note">Method: each question is sent once per provider with web search enabled and a neutral system prompt. Mentioned = the answer names the institution. Cited = a search result or citation is on the institution's domain. Accurate = every required fact in questions.json appears and no forbidden term does (branded questions with rules only). Tokens used: {s['tokens']['input']:,} in, {s['tokens']['output']:,} out. {"Cost reported by providers: $%.2f." % s["reported_cost_usd"] if s.get("reported_cost_usd") else "No provider reported a cost; check each provider's billing page."}</p>
 </main></body></html>"""
 
 

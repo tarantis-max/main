@@ -93,6 +93,8 @@ def rank(rows: list[dict]) -> dict:
             continue
         vals = []
         for r in rows:
+            if r.get("incomplete") and r is not rows[0]:
+                continue  # too few pages checked to compare fairly
             v = r.get(mid)
             if v in ("yes", "no"):
                 v = 1 if v == "yes" else 0
@@ -157,6 +159,8 @@ class Compare:
                     access = None
                 row = site_metrics(c, access)
                 row["state"] = c.state
+                # blocked by bot protection, JavaScript-only, or redirected away: not enough pages to compare
+                row["incomplete"] = len(c.results) < max(10, self.max_pages // 4) and c.state != "stopped"
                 self.rows.append(row)
             self.state = "stopped" if self._stop.is_set() else "done"
         except Exception as ex:
@@ -217,7 +221,12 @@ def build_compare_report(st: dict) -> str:
     partial = ("" if st["state"] == "done" else
                f'<p style="background:#fff4d6;padding:8px 12px;border-radius:6px"><b>Partial results:</b> {len(rows)} of {len(st["sites"])} sites checked '
                f'(status: {e(st["state"])}). Ranks compare only the sites checked so far.</p>')
-    head = "".join(f"<th>{e(r['site'])}{' (you)' if i == 0 else ''}</th>" for i, r in enumerate(rows))
+    inc = [r for r in rows[1:] if r.get("incomplete")]
+    if inc:
+        partial += (f'<p style="background:#fff4d6;padding:8px 12px;border-radius:6px"><b>Not ranked:</b> '
+                    + ", ".join(f"{e(r['site'])} ({r['pages']} of {st['max_pages']} pages)" for r in inc)
+                    + ". The crawl could check too few pages (usually bot protection or JavaScript-only pages), so these sites are shown but left out of every rank.</p>")
+    head = "".join(f"<th>{e(r['site'])}{' (you)' if i == 0 else ''}{' *' if r.get('incomplete') and i else ''}</th>" for i, r in enumerate(rows))
     body = "".join(
         f"<tr><td>{e(label)}</td><td class='rk'>{'tie' if ranks.get(mid, {}).get('tie') else '' if mid not in ranks or ranks[mid]['rank'] is None else ranks[mid]['rank']}</td>"
         + "".join(f"<td>{cell(r, mid, fmt)}</td>" for r in rows) + "</tr>"

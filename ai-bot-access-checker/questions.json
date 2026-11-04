@@ -348,7 +348,7 @@
       "id": "C07",
       "type": "category",
       "topic": "military",
-      "q": "What are the best colleges near Fort Liberty (Fort Bragg) for active-duty military and veterans?",
+      "q": "What are the best colleges near Fort Bragg, NC for active-duty military and veterans?",
       "must_contain": [],
       "must_not_contain": []
     },
@@ -516,7 +516,7 @@
       "id": "C28",
       "type": "category",
       "topic": "military",
-      "q": "What are the best colleges near Fayetteville, NC (Fort Liberty, formerly Fort Bragg) for military spouses?",
+      "q": "What are the best colleges near Fayetteville, NC (Fort Bragg) for military spouses?",
       "must_contain": [],
       "must_not_contain": []
     },
@@ -828,11 +828,11 @@
     "St. Andrews": "St\\.? Andrews|Saint Andrews",
     "UNC Chapel Hill": "UNC[- ]Chapel Hill|University of North Carolina at Chapel Hill|\\bUNC\\b(?![- ](?:Pembroke|Charlotte|Wilmington|Greensboro|Asheville|System))",
     "NC State": "NC State|N\\.C\\. State|North Carolina State",
-    "UNC Pembroke": "UNC[- ]Pembroke|UNCP\\b",
-    "UNC Charlotte": "UNC[- ]Charlotte|UNCC\\b",
-    "UNC Wilmington": "UNC[- ]Wilmington|UNCW\\b",
-    "UNC Greensboro": "UNC[- ]Greensboro|UNCG\\b",
-    "UNC Asheville": "UNC[- ]Asheville",
+    "UNC Pembroke": "UNC[- ]Pembroke|UNCP\\b|University of North Carolina (at |- ?)?Pembroke",
+    "UNC Charlotte": "UNC[- ]Charlotte|UNCC\\b|University of North Carolina (at |- ?)?Charlotte",
+    "UNC Wilmington": "UNC[- ]Wilmington|UNCW\\b|University of North Carolina (at |- ?)?Wilmington",
+    "UNC Greensboro": "UNC[- ]Greensboro|UNCG\\b|University of North Carolina (at |- ?)?Greensboro",
+    "UNC Asheville": "UNC[- ]Asheville|University of North Carolina (at |- ?)?Asheville",
     "East Carolina": "East Carolina|\\bECU\\b",
     "Appalachian State": "Appalachian State|App State",
     "Western Carolina": "Western Carolina",
@@ -842,6 +842,8 @@
     "Winston-Salem State": "Winston[- ]Salem State",
     "Elizabeth City State": "Elizabeth City State",
     "Fayetteville Tech": "Fayetteville Technical|FTCC\\b",
-    "Southern Methodist": "Southern Methodist|\\bSMU\\b"
+    "Southern Methodist": "Southern Methodist|\\bSMU\\b",
+    "NC Wesleyan": "(North Carolina|N\\.?C\\.?) Wesleyan",
+    "Johnson & Wales": "Johnson (&|and) Wales"
   }
 }
