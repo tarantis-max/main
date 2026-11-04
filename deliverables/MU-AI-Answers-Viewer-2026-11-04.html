@@ -1,5 +1,13 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><style>body{margin:0}[hidden]{display:none!important}</style>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><style>body{margin:0}[hidden]{display:none!important}
+/* Two panes on wide screens: the question list and the answers each scroll on their own, so the answers stay in view. */
+@media (min-width: 861px) {
+  .layout { height: calc(100dvh - 150px); min-height: 420px; }
+  .list, .detail { height: 100%; overflow-y: auto; overscroll-behavior: contain; padding-right: 6px; }
+  .wrap { padding-block: 20px 12px; }
+  #foot { margin: 0; }
+}
+</style>
 <title>MU AI Answers Full Run</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -164,6 +172,8 @@ function select(id, push) {
   current = id;
   if (push) try { history.replaceState(null, "", "#" + id); } catch (e) {}
   renderList(); renderDetail();
+  const det = document.getElementById("detail"); if (det) det.scrollTop = 0;
+  const btn = document.querySelector('.q[aria-current="true"]'); if (btn) btn.scrollIntoView({ block: "nearest" });
 }
 function step(d) {
   const qs = questions().map(x => x.id); const i = Math.max(0, qs.indexOf(current));
