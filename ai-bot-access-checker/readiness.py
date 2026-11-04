@@ -1375,14 +1375,15 @@ class Crawl:
         w = csv.writer(buf)
         w.writerow(["url", "status", "score", "grade", "failed_checks", "title", "words", "ms",
                     "blocked_ai_search_bots", "blocked_training_bots", "directives",
-                    "schema_types", "former_names_found", "past_terms"] + CHECK_IDS)
+                    "schema_types", "former_names_found", "past_terms", "in_sitemap", "linked_from"] + CHECK_IDS)
         with self._lock:
             pages = list(self.results)
         for p in sorted(pages, key=lambda p: p["score"]):
             d = p["detail"]
             w.writerow([p["url"], p["status"], p["score"], p["grade"], " ".join(p["failed"]), d["title"], d["words"], d["ms"],
                         " ".join(d["blocked_ai_search_bots"]), " ".join(d["blocked_training_bots"]), " ".join(d["directives"]),
-                        " ".join(d["schema_types"]), "; ".join(d["former_names_found"]), "; ".join(d["past_terms"])]
+                        " ".join(d["schema_types"]), "; ".join(d["former_names_found"]), "; ".join(d["past_terms"]),
+                        "yes" if p["url"] in self.sitemap_urls else "no", " ".join(self.referrers.get(p["url"], []))]
                        + [{True: "PASS", False: "FAIL"}.get(p["checks"].get(c), "N/A") for c in CHECK_IDS])
         return buf.getvalue()
 

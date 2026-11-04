@@ -16,7 +16,7 @@ from html import escape as e
 from urllib.parse import urlsplit
 
 from ai_bot_check import deny_robots_snippet, fully_blocked
-from readiness import MESSAGES, CHECKS, CATEGORY, Crawl
+from readiness import NOT_KEY_PATH, MESSAGES, CHECKS, CATEGORY, Crawl
 
 LABEL = {c[0]: c[1] for c in CHECKS}
 CRITICAL = {c[0] for c in CHECKS if c[3]}
@@ -93,7 +93,11 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     search_partial = [b for b in search if not blocked(b) and partial(b)]
 
     # ---- priority pages
-    prio = [p for p in pages if p["url"].rstrip("/") == s["start"].rstrip("/") or PRIORITY_RE.search(urlsplit(p["url"]).path)]
+    # by address; news, events and filtered (?query) copies are not key pages
+    key_all = [p for p in pages if p["url"].rstrip("/") == s["start"].rstrip("/")
+               or (PRIORITY_RE.search(urlsplit(p["url"]).path) and not NOT_KEY_PATH.search(urlsplit(p["url"]).path) and not urlsplit(p["url"]).query)]
+    prio = [p for p in key_all if p["status"] == 200]  # a broken address is a broken link (Site-level findings), not a page to grade
+    key_broken = len(key_all) - len(prio)
     prio.sort(key=lambda p: (p["score"], p["url"]))
     prio_ready = sum(1 for p in prio if p["grade"] == "Ready")
 
@@ -141,7 +145,7 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         findings.append("<b>The site has no structured data.</b> Search engines and AI get no machine-readable statement of the "
                         "school's official name, address, logo or accounts. Low-to-moderate impact; about one hour to fix.")
     if prio:
-        findings.append(f"<b>{prio_ready} of {len(prio)} priority pages</b> (admissions, tuition, aid, programs, contact) are Ready.")
+        findings.append(f"<b>{prio_ready} of {len(prio)} key student pages</b> (admissions, tuition, aid, programs, contact) are Ready.")
     other.append(f"Homepage organization schema: <b>{org['passed']} of {org['total']}</b> checks pass." if org["total"] else "Homepage organization schema was not checked.")
     pc = s["pdf_counts"]
     if pc["total"]:
@@ -367,7 +371,8 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     def action_row(i, a):
         return "<tr><td>%d</td><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>" % ((i,) + tuple(e(x) for x in a))
 
-    prio_html = "".join(prio_row(p) for p in prio[:10]) or '<tr><td colspan="4">No priority pages found in this crawl.</td></tr>'
+    prio_html = "".join(prio_row(p) for p in prio[:10]) or '<tr><td colspan="4">No key student pages found in this crawl.</td></tr>'
+    key_broken_note = (f" {key_broken} more key-page addresses are broken links (not found or server error); they are listed under Site-level findings, with the page that links to each." if key_broken else "")
     checks_html = "".join(check_row(c) for c in s["check_failures"])
     org_html = "".join(org_row(r) for r in org["rows"] if not r["pass"]) or '<tr><td colspan="3">All checks pass.</td></tr>'
     pdf_html = "".join(pdf_row(p) for p in [x for x in pdfs if x["topics"] or x["past_terms"]][:10]) or '<tr><td colspan="4">None flagged.</td></tr>'
@@ -615,7 +620,7 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
   <div class="tile"><b>{pct_ready}%</b><span>pages Ready</span></div>
   <div class="tile"><b>{s['avg_score']}</b><span>average page score (of 100)</span></div>
   <div class="tile"><b>{search_tile}</b><span>AI search bots allowed</span></div>
-  <div class="tile"><b>{prio_tile}</b><span>priority pages Ready</span></div>
+  <div class="tile"><b>{prio_tile}</b><span>key student pages Ready</span></div>
 </div>
 
 {areas_html}
@@ -633,8 +638,8 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 {more_actions_html}
 {sd_html}
 {site_html}
-<h2>Priority pages</h2>
-<p class="note">Homepage plus pages whose address mentions admissions, apply, tuition, cost, financial aid, scholarships, academics, programs, majors, degrees, deadlines, calendar, visit, contact, about, graduate or undergraduate. Worst 10 shown; the Pages CSV has the full list and every failed check.</p>
+<h2>Key student pages</h2>
+<p class="note">Picked automatically by web address: the homepage plus live pages whose address contains admissions, apply, tuition, cost, financial aid, scholarships, academics, programs, majors, degrees, deadlines, calendar, visit, contact, about, graduate or undergraduate (news, events and filtered copies excluded). Not the same as the 20 EAB priority pages in Appendix F. Worst 10 shown; the Pages CSV has the full list and every failed check.{key_broken_note}</p>
 <table><thead><tr><th>Score</th><th>Grade</th><th style="width:38%">Page</th><th>Failed checks</th></tr></thead><tbody>
 {prio_html}
 </tbody></table>
