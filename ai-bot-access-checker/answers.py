@@ -4,7 +4,7 @@ whether the institution is mentioned, cited, accurate, and not confused with ano
 Providers (raw HTTP, standard library only):
   anthropic   POST https://api.anthropic.com/v1/messages   (web_search_20260209 server tool)
   openai      POST https://api.openai.com/v1/responses      (web_search tool)
-  perplexity  POST https://api.perplexity.ai/chat/completions (search built in)
+  perplexity  POST https://api.perplexity.ai/v1/responses   (Agent API, Responses-style; search built in)
   gemini      POST generativelanguage.googleapis.com/v1beta/models/{model}:generateContent (google_search grounding)
 
 Keys are read from the environment (ANTHROPIC_API_KEY, OPENAI_API_KEY, PERPLEXITY_API_KEY, GEMINI_API_KEY) or from
@@ -227,16 +227,52 @@ def ask_openai(q: str, key: str, model: str) -> dict:
     return {"text": out, "urls": urls, "usage": usage}
 
 
-def ask_perplexity(q: str, key: str, model: str) -> dict:
-    """OpenAI-compatible chat completions; search is built in. Citations come back as `citations` (URLs) and/or `search_results`."""
-    resp = _post("https://api.perplexity.ai/chat/completions", {"Authorization": f"Bearer {key}"}, {
-        "model": model, "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": q}], "max_tokens": 2048,
-    })
-    text = "".join((c.get("message") or {}).get("content", "") for c in resp.get("choices", []))
-    urls = [u for u in resp.get("citations") or [] if isinstance(u, str)]
+def _parse_responses_output(resp: dict) -> tuple[str, list[str]]:
+    """Text and source URLs from a Responses-style payload (OpenAI and Perplexity's Agent API).
+    Accepts output[].message.content[].output_text (+ url annotations), a top-level output_text,
+    and Perplexity's top-level citations / search_results."""
+    text, urls = [], []
+    for item in resp.get("output") or []:
+        t = item.get("type")
+        if t == "message":
+            for c in item.get("content") or []:
+                if c.get("type") in ("output_text", "text"):
+                    text.append(c.get("text", ""))
+                    for a in c.get("annotations") or []:
+                        if a.get("url"):
+                            urls.append(a["url"])
+        elif t in ("web_search_call", "search_results", "web_search"):
+            for r in ((item.get("action") or {}).get("sources") or item.get("results") or item.get("search_results") or []):
+                if isinstance(r, dict) and r.get("url"):
+                    urls.append(r["url"])
+    if not text and isinstance(resp.get("output_text"), str):
+        text.append(resp["output_text"])
+    urls += [u for u in resp.get("citations") or [] if isinstance(u, str)]
     urls += [r.get("url") for r in resp.get("search_results") or [] if isinstance(r, dict) and r.get("url")]
+    return "\n".join(text).strip(), urls
+
+
+def ask_perplexity(q: str, key: str, model: str) -> dict:
+    """Perplexity Agent API (POST /v1/responses, Responses-style). Search is built into Sonar models;
+    if the API asks for an explicit tool, retry with web_search."""
+    headers = {"Authorization": f"Bearer {key}"}
+    body = {"model": model, "instructions": SYSTEM, "input": q, "max_output_tokens": 4096}
+    try:
+        resp = _post("https://api.perplexity.ai/v1/responses", headers, body)
+    except RuntimeError as ex:
+        msg = str(ex)
+        if "HTTP 400" in msg and ("instructions" in msg or "max_output_tokens" in msg):
+            body = {"model": model, "input": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": q}]}
+            resp = _post("https://api.perplexity.ai/v1/responses", headers, body)
+        else:
+            raise
+    text, urls = _parse_responses_output(resp)
     u = resp.get("usage", {})
-    return {"text": text.strip(), "urls": urls, "usage": {"input": u.get("prompt_tokens", 0), "output": u.get("completion_tokens", 0), "searches": 0}}
+    usage = {"input": u.get("input_tokens", u.get("prompt_tokens", 0)), "output": u.get("output_tokens", u.get("completion_tokens", 0)), "searches": 0}
+    if not text:
+        reason = (resp.get("incomplete_details") or {}).get("reason") or resp.get("status") or "empty answer"
+        return {"text": "", "urls": urls, "usage": usage, "error": f"perplexity returned no answer text ({reason}); raw keys: {sorted(resp.keys())}"}
+    return {"text": text, "urls": urls, "usage": usage}
 
 
 def ask_gemini(q: str, key: str, model: str) -> dict:
