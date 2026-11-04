@@ -250,10 +250,16 @@ def _shape(obj, depth: int = 0):
     """Structure only (keys and types, no values) for diagnosing an unexpected response."""
     if depth > 4:
         return "..."
-    if isinstance(obj, dict):
-        return {k: _shape(v, depth + 1) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_shape(obj[0], depth + 1)] if obj else []
+    if isinstance(obj, dict):  # "type" values are kept (they name item kinds, never content)
+        return {k: (v if k == "type" and isinstance(v, str) else _shape(v, depth + 1)) for k, v in obj.items()}
+    if isinstance(obj, list):  # one example per distinct item type
+        seen, out = set(), []
+        for v in obj:
+            t = v.get("type") if isinstance(v, dict) else type(v).__name__
+            if t not in seen:
+                seen.add(t)
+                out.append(_shape(v, depth + 1))
+        return out
     return type(obj).__name__
 
 
@@ -325,14 +331,17 @@ def ask_perplexity(q: str, key: str, model: str) -> dict:
     return {"text": text, "urls": urls, "usage": usage}
 
 
-def smoke_test(provider: str) -> int:
+SHAPE_Q = "What is Methodist University in Fayetteville, NC known for?"  # needs a web search, so sources appear
+
+
+def smoke_test(provider: str, shape: bool = False) -> int:
     """One minimal real request; prints only the HTTP status and response shape, never the key."""
     keys = load_keys()
     if not keys.get(provider):
         env = {"perplexity": "PERPLEXITY_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}[provider]
         print(f"No {provider} key. Create one in the provider's console and export {env} in your terminal (or save it on the AI Answers tab).")
         return 2
-    fn = {"perplexity": lambda: ask_perplexity("What is the capital of France? One word.", keys["perplexity"], keys.get("perplexity_model") or PERPLEXITY_MODEL),
+    fn = {"perplexity": lambda: ask_perplexity(SHAPE_Q if shape else "What is the capital of France? One word.", keys["perplexity"], keys.get("perplexity_model") or PERPLEXITY_MODEL),
           "anthropic": lambda: ask_anthropic("What is the capital of France? One word.", keys["anthropic"]),
           "openai": lambda: ask_openai("What is the capital of France? One word.", keys["openai"], keys.get("openai_model") or OPENAI_MODEL),
           "gemini": lambda: ask_gemini("What is the capital of France? One word.", keys["gemini"], keys.get("gemini_model") or GEMINI_MODEL)}[provider]
@@ -648,10 +657,10 @@ def main() -> int:
 
             def spy(url, headers, body):
                 resp = real(url, headers, body)
-                print(json.dumps(_shape(resp), indent=1)[:4000])
+                print(json.dumps(_shape(resp), indent=1)[:8000])
                 return resp
             _post = spy
-        return smoke_test(a.smoke)
+        return smoke_test(a.smoke, a.shape)
     run = AnswerRun([p.strip() for p in a.providers.split(",") if p.strip()], [x.strip() for x in a.ids.split(",") if x.strip()], a.domain)
     if run.missing_keys:
         print("no key for: " + ", ".join(run.missing_keys), file=sys.stderr)
