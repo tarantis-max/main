@@ -127,6 +127,15 @@ Optimized = all five. The report also counts key student pages site-wide that me
 
 **Content inventory.** Net price calculator, tuition/cost page, parents page, virtual tour (and whether it is linked from the admissions, academics, student life, housing and visit pages), Instagram/YouTube/TikTok on the homepage, and whether every program home page states an outcome.
 
+## WordPress check
+
+If the site runs WordPress and exposes its public page list (`/wp-json/wp/v2/`), the crawl also reads every published page, post and media file. It then:
+
+- crawls published pages that are not in the sitemap, and lists the ones no page links to ("hidden"). These go stale unnoticed.
+- flags media addresses that look like an old page, such as `/academics/medicine-2/` opening `medicine.jpg` because `/academics/medicine/` is a page. These were usually real pages once, and search results may still show their old text.
+
+If the list is turned off or blocked, the report says so and the crawl continues as normal. Competitor crawls skip this check.
+
 ## Outdated wording and manual actions
 
 `messages.json` has two more lists:

@@ -513,6 +513,10 @@ function siteCard(s) {
     row("Program pages have program schema", si.program_pages > 0 && si.program_schema_pages === si.program_pages, `${si.program_schema_pages} of ${si.program_pages} program pages`),
     row("Median reading grade 12 or below", si.median_reading_grade != null && si.median_reading_grade <= 12, `grade ${si.median_reading_grade ?? "-"}`),
     ...Object.entries(si.trust || {}).map(([k, v]) => row("Homepage: " + k, v, v ? "found" : "not found")),
+    ...((si.wordpress || {}).available ? [
+      row("Every published WordPress page is linked or in the sitemap", !si.wordpress.hidden, `${si.wordpress.hidden || 0} of ${si.wordpress.published || 0} published page(s)/post(s) have no links and no sitemap entry; ${si.wordpress.not_in_sitemap || 0} missing from the sitemap`, si.wordpress.hidden_sample),
+      row("No former page addresses that open a file", !si.wordpress.file_redirects, `${si.wordpress.file_redirects || 0} address(es) look like an old page but open a file`, (si.wordpress.file_redirect_sample || []).map(x => `${x.url} → ${x.goes_to || x.file}  (live page: ${x.page})`)),
+    ] : []),
   ].join("");
   return `<div class="card"><h2>Site-level SEO and GEO findings</h2>
     <div class="tablewrap"><table><thead><tr><th>Check</th><th>Result</th><th>Detail</th></tr></thead><tbody>${rows}</tbody></table></div>

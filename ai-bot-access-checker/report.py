@@ -176,6 +176,15 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         other.append(f"Section <b>{e(sec['section'])}</b>: {sec['noindex']} of {sec['pages']} pages are marked noindex, so search engines and AI skip them.")
     for h in si.get("hosting_links", [])[:3]:
         other.append(f"{h['links']} links point to the hosting provider's domain <b>{e(h['host'])}</b> instead of the school's domain.")
+    wpo = si.get("wordpress", {})
+    if wpo.get("available"):
+        other.append(f"WordPress lists {wpo.get('published', 0)} published pages and posts and {wpo.get('media', 0)} media files. "
+                     f"{wpo.get('not_in_sitemap', 0)} published page(s) are missing from the sitemap; {wpo.get('hidden', 0)} of those have no links either.")
+        for x in wpo.get("file_redirect_sample", [])[:5]:
+            other.append(f"<b>{e(urlsplit(x['url']).path)}</b> opens a file ({e((x.get('goes_to') or x.get('file') or '').rsplit('/', 1)[-1])}) "
+                         f"but looks like a former version of <b>{e(x['page'])}</b>.")
+    elif wpo.get("checked"):
+        other.append("WordPress page list not checked (" + e(wpo.get("note") or "not available") + "): pages with no links and no sitemap entry cannot be found.")
     if si.get("former_name_pages"):
         other.append(f"{si['former_name_pages']} pages mention a former name. Review list only (not scored): history pages and bios are expected.")
 
@@ -274,6 +283,17 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         actions.append(("Stop indexing of filter URLs", "Filtered list pages (e.g. ?category=, ?department=) are near-duplicates that compete with real pages and waste crawl budget.",
                         "Add noindex, or a canonical tag pointing to the unfiltered page, on filtered list URLs; keep them out of the sitemap.", "Web team",
                         f"{fq['count']} URL(s)"))
+    wpi = si.get("wordpress", {})
+    if wpi.get("file_redirects"):
+        actions.append(("Redirect former page addresses that now open a file",
+                        "These addresses were probably pages once (a \"-2\" version of a live page). Search results and AI may still show the old page text; clicking opens an image or PDF.",
+                        "301-redirect each to the live page it duplicates (shown in Site-level findings), not to the file; request a recrawl in Google Search Console.",
+                        "Web team", f"{wpi['file_redirects']} address(es)"))
+    if wpi.get("hidden"):
+        actions.append(("Link, redirect or unpublish hidden WordPress pages",
+                        "Published pages with no links and no sitemap entry go stale unnoticed, and search engines that already know them keep showing them.",
+                        "For each page: link it from its section and add it to the sitemap, or redirect it to its replacement, or unpublish it.",
+                        "Content owners + Web team", f"{wpi['hidden']} page(s)"))
     if orph.get("count"):
         actions.append(("Link to orphan pages", "Pages with no internal links get little authority and are hard for crawlers to reach.",
                         "Link to each orphan page from its parent section, or retire it.", "Content owners", f"{orph['count']} page(s)"))
@@ -468,6 +488,16 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
              f"{si.get('program_schema_pages', 0)} of {si.get('program_pages', 0)} program pages"),
             ("Median reading grade 12 or below", si.get("median_reading_grade") is not None and si["median_reading_grade"] <= 12, f"grade {si.get('median_reading_grade')}"),
         ] + [("Homepage: " + k, bool(v), "found" if v else "not found") for k, v in si.get("trust", {}).items()]
+        wpi = si.get("wordpress", {})
+        if wpi.get("available"):
+            site_rows += [
+                ("Every published WordPress page is linked or in the sitemap", not wpi.get("hidden"),
+                 f"{wpi.get('hidden', 0)} of {wpi.get('published', 0)} published page(s)/post(s) hidden: "
+                 + (", ".join(urlsplit(u).path for u in wpi.get("hidden_sample", [])[:5]) or "none")),
+                ("No former page addresses that open a file", not wpi.get("file_redirects"),
+                 ", ".join(f"{urlsplit(x['url']).path} -> {urlsplit(x.get('goes_to') or x.get('file') or '').path.rsplit('/', 1)[-1]}" for x in wpi.get("file_redirect_sample", [])[:5]) or "none"),
+            ]
+
     site_html = ('<h2>Site-level SEO and GEO findings</h2><table><thead><tr><th>Check</th><th>Result</th><th>Detail</th></tr></thead><tbody>'
                  + "".join("<tr><td>%s</td><td>%s</td><td>%s</td></tr>" % (e(a), yn(b), e(c)) for a, b, c in site_rows)
                  + "</tbody></table>") if site_rows else ""

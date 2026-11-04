@@ -660,7 +660,19 @@ def site_issues(c: "Crawl", pages: list[dict]) -> dict:
         return {"pages": sum(len(v) for v in groups), "groups": len(groups),
                 "top": [{"text": (crawled[v[0]]["detail"].get(key) or "")[:120], "pages": len(v), "sample": v[:3]} for v in groups[:5]]}
     trust = (c.home or {}).get("trust", {})
+    wp = getattr(c, "wp", None) or {"checked": False}
+    wordpress = {"checked": wp.get("checked", False), "available": wp.get("available", False), "note": wp.get("note", "")}
+    if wp.get("available"):
+        pub = wp.get("published") or {}
+        not_sm = [u for u in pub if u not in c.sitemap_urls] if c.sitemap_urls else []
+        hidden = [u for u in not_sm if c.inlinks.get(u, 0) == 0 and u.rstrip("/") != c.start.rstrip("/")]
+        file_redirects = [x for x in wp.get("suspects", []) if x.get("opens_file", True)]
+        wordpress.update({"published": len(pub), "by_type": wp.get("by_type", {}), "media": wp.get("media", 0),
+                          "not_in_sitemap": len(not_sm), "not_in_sitemap_sample": not_sm[:15],
+                          "hidden": len(hidden), "hidden_sample": hidden[:15],
+                          "file_redirects": len(file_redirects), "file_redirect_sample": file_redirects[:15]})
     return {
+        "wordpress": wordpress,
         "legacy_hosts": [{"host": h, "pages": hosts[h]} for h in legacy],
         "hosting_links": sorted(({"host": h, "links": n} for h, n in hosting_links.items()), key=lambda r: -r["links"]),
         "noindex_sections": [{"section": k, "pages": n, "noindex": x} for k, n, x in noindex],
@@ -1021,13 +1033,42 @@ def norm(u: str) -> str:
     return urlunsplit((sp.scheme.lower(), sp.netloc.lower(), path, sp.query, ""))
 
 
+WP_SKIP_TYPES = {"attachment", "nav_menu_item", "wp_block", "wp_template", "wp_template_part", "wp_navigation",
+                 "wp_global_styles", "wp_font_family", "wp_font_face"}
+FILE_PATH = re.compile(r"/wp-content/uploads/|\.(jpe?g|png|gif|webp|svg|pdf|docx?|pptx?|xlsx?|mp4|mp3|zip)$", re.I)
+
+
+def wp_list(origin: str, rest_base: str, fields: str, cap: int, delay: float) -> tuple[list[dict] | None, str]:
+    """One WordPress REST collection, 100 per request. None if the site does not expose it."""
+    out, page = [], 1
+    while len(out) < cap:
+        r = fetch(f"{origin}/wp-json/wp/v2/{rest_base}?per_page=100&page={page}&_fields={fields}", CRAWLER_UA, max_bytes=8_000_000)
+        if r["status"] == 400 and page > 1:  # past the last page
+            break
+        if r["status"] != 200:
+            return (out, "") if page > 1 else (None, f"HTTP {r['status'] or r['error']}")
+        try:
+            items = json.loads(r["body"])
+        except ValueError:
+            return (out, "") if page > 1 else (None, "not a WordPress JSON response")
+        if not isinstance(items, list) or not items:
+            break
+        out.extend(x for x in items if isinstance(x, dict))
+        total = _header(r["headers"], "x-wp-totalpages")
+        if (total.isdigit() and page >= int(total)) or len(items) < 100:
+            break
+        page += 1
+        time.sleep(delay)
+    return out, ""
+
+
 class Crawl:
     """Breadth-first, same-site crawl. Thread-safe progress for the web UI."""
 
     def __init__(self, start: str, max_pages: int = 500, subdomains: bool = False,
                  workers: int = 4, delay: float = 0.5, exclude: str = "",
                  official_name: str | None = None, city: str | None = None, region: str | None = None,
-                 former_names: list[str] | None = None, priority_pages: list[str] | None = None):
+                 former_names: list[str] | None = None, priority_pages: list[str] | None = None, wordpress: bool = True):
         if "://" not in start:
             start = "https://" + start
         self.start = norm(start)
@@ -1057,6 +1098,8 @@ class Crawl:
         self.skipped: dict[str, int] = {}
         self.unchecked: list[str] = []
         self.sitemap_urls: set[str] = set()
+        self.wp: dict = {"checked": False}
+        self.check_wordpress = wordpress
         self.inlinks: Counter = Counter()
         self.referrers: dict[str, list[str]] = {}
         self.hosting_links: Counter = Counter()
@@ -1071,6 +1114,55 @@ class Crawl:
         self._sitemaps: dict[str, list[str]] = {}
 
     # -- scope
+    def wordpress(self) -> dict:
+        """Published pages/posts and media from the WordPress REST API (/wp-json/wp/v2/), when the site exposes it.
+        Finds pages no link or sitemap points to, and media addresses that look like a former page
+        (e.g. /academics/medicine-2/ opening an image because /academics/medicine/ is a page)."""
+        groups = self.robots(self.origin)
+        if robots_verdict(groups, "AIReadinessChecker", "/wp-json/wp/v2/pages")[0] == "blocked":
+            return {"checked": True, "available": False, "note": "robots.txt blocks /wp-json/"}
+        types_r = fetch(f"{self.origin}/wp-json/wp/v2/types", CRAWLER_UA)
+        bases = {"pages": "page", "posts": "post"}
+        if types_r["status"] == 200:
+            try:
+                for slug, t in (json.loads(types_r["body"]) or {}).items():
+                    if slug not in WP_SKIP_TYPES and isinstance(t, dict) and t.get("rest_base") and t.get("viewable", True):
+                        bases[t["rest_base"]] = slug
+            except (ValueError, AttributeError):
+                pass
+        published: dict[str, str] = {}
+        by_type: Counter = Counter()
+        note = ""
+        for base, slug in bases.items():
+            items, err = wp_list(self.origin, base, "link", 20_000, self.delay)
+            if items is None:
+                if base == "pages":
+                    return {"checked": True, "available": False, "note": err}
+                continue
+            for x in items:
+                u = norm(str(x.get("link") or ""))
+                if u and self.in_scope(u) and u not in published:
+                    published[u] = slug
+                    by_type[slug] += 1
+        media, err = wp_list(self.origin, "media", "link,source_url", 20_000, self.delay)
+        page_paths = {urlsplit(u).path.rstrip("/") for u in list(published) + list(self.sitemap_urls)}
+        suspects = []
+        for x in media or []:
+            link = str(x.get("link") or "")
+            path = urlsplit(link).path.rstrip("/")
+            m = re.search(r"-\d+$", path)
+            if m and path[: m.start()] in page_paths and path not in page_paths:
+                suspects.append({"url": norm(link), "page": path[: m.start()] + "/", "file": str(x.get("source_url") or "")})
+        if media is None:
+            note = "media list not available (" + err + ")"
+        for sx in suspects[:50]:  # confirm where the address actually goes
+            r = fetch(sx["url"], CRAWLER_UA, max_bytes=2048)
+            sx["status"], sx["goes_to"] = r["status"], r["final_url"]
+            sx["opens_file"] = bool(FILE_PATH.search(urlsplit(r["final_url"] or "").path)) or "html" not in _header(r["headers"], "content-type").lower()
+            time.sleep(self.delay)
+        return {"checked": True, "available": True, "note": note, "published": published, "by_type": dict(by_type),
+                "media": len(media or []), "suspects": suspects}
+
     def in_scope(self, u: str) -> bool:
         sp = urlsplit(u)
         if sp.scheme not in ("http", "https"):
@@ -1175,6 +1267,16 @@ class Crawl:
                 if u not in seen and self.in_scope(u):
                     seen.add(u)
                     frontier.append(u)
+            try:
+                if self.check_wordpress:
+                    self.wp = self.wordpress()
+            except Exception as ex:  # never let the WordPress check stop the crawl
+                self.wp = {"checked": True, "available": False, "note": f"{type(ex).__name__}: {ex}"}
+            extra = [u for u in (self.wp.get("published") or {}) if u not in seen]
+            for u in extra:
+                seen.add(u)
+            at = 1 + len(self.priority_pages)
+            frontier[at:at] = extra  # published but not in the sitemap: crawl before the long tail
             done_urls: set[str] = set()
             with ThreadPoolExecutor(max_workers=self.workers) as ex:
                 running = {}

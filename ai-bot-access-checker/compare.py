@@ -143,7 +143,7 @@ class Compare:
                 own = i == 0
                 c = Crawl(u, self.max_pages, subdomains=False, workers=2, delay=0.5,
                           official_name=None if own else "", city=None if own else "",
-                          region=None if own else "", former_names=None if own else [])
+                          region=None if own else "", former_names=None if own else [], wordpress=False)
                 self.current_crawl = c
                 t = threading.Thread(target=c.run, daemon=True)
                 t.start()
