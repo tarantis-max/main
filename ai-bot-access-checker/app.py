@@ -23,7 +23,7 @@ from report import build as build_report
 from bundle import make_bundle, VERSION
 from compare import Compare
 from answers import AnswerRun, key_status, save_keys, load_questions, list_openai_models, list_gemini_models, load_keys
-from runall import RunAll, load_settings, save_settings
+from runall import RunAll, load_settings, save_settings, PRESETS
 
 JOBS: dict[str, Crawl] = {}
 
@@ -248,7 +248,7 @@ class Handler(BaseHTTPRequestHandler):
                 pages = [{k: v for k, v in p.items() if not k.startswith("_")} for p in list(c.results)]
                 self._send(200, json.dumps({"summary": c.summary(), "pages": pages, "pdfs": c.pdf_report()}).encode(), "application/json")
         elif u.path == "/api/all/settings":
-            self._send(200, json.dumps(load_settings()).encode(), "application/json")
+            self._send(200, json.dumps({**load_settings(), "presets": PRESETS}).encode(), "application/json")
         elif u.path in ("/api/all/status", "/api/all/stop", "/api/all/bundle", "/api/all/report"):
             r = RUNALLS.get((parse_qs(u.query).get("id") or [""])[0])
             if not r:

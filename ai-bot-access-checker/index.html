@@ -60,6 +60,7 @@
   details.settings summary { cursor:pointer; }
   .setgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin-top:10px; }
   .setgrid label { display:flex; flex-direction:column; gap:4px; }
+  .setgrid label.chk { flex-direction:row; align-items:center; gap:6px; display:inline-flex; margin-right:10px; }
   .explain { margin:4px 0 12px; padding:12px 14px; border-left:3px solid var(--warn); background:var(--warnbg); border-radius:6px; font-size:14px; }
   .explain p { margin:6px 0 0; }
   pre.snip { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:12px; overflow-x:auto; font-size:12px; margin:8px 0 0; }
@@ -90,7 +91,7 @@
             <label class="chk"><input type="checkbox" class="xprov" value="perplexity"> Perplexity</label>
             <label class="chk"><input type="checkbox" class="xprov" value="gemini"> Gemini</label></div>
         </div>
-        <label style="display:flex;flex-direction:column;gap:4px;margin-top:10px">Competitors, one per line (up to 10)
+        <label style="display:flex;flex-direction:column;gap:4px;margin-top:10px">Competitors, one per line (up to 10) <span id="xpresets"></span>
           <textarea id="xcomp" rows="6" style="padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);font:inherit"></textarea></label>
         <div class="note">API keys come from the Keys box on the AI Answers tab. Providers without a key are skipped.</div>
       </details>
@@ -161,6 +162,7 @@
       <label class="chk" style="flex-basis:100%">Your site <input type="text" class="url" id="cself" value="https://www.methodist.edu" style="flex:1"></label>
       <label class="chk" style="flex-basis:100%;align-items:flex-start">Competitors, one per line (up to 10)
         <textarea id="csites" rows="5" style="flex:1;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);font:inherit" placeholder="https://www.campbell.edu&#10;https://www.uncfsu.edu"></textarea></label>
+      <span id="cpresets" style="flex-basis:100%"></span>
       <label class="chk">Pages per site <input type="number" id="cmax" value="200" min="20" max="1000"></label>
       <button id="cgo">Start comparison</button>
       <button id="cstop" class="sec" type="button" disabled>Stop</button>
@@ -219,6 +221,12 @@ let xjob = null, xtimer = null;
   $("#xexcl").value = st.exclude || ""; $("#xsub").checked = !!st.subdomains;
   $("#xcomp").value = (st.competitors || []).join("\n");
   document.querySelectorAll(".xprov").forEach(c => c.checked = (st.providers || []).includes(c.value));
+  for (const [box, area] of [["#xpresets", "#xcomp"], ["#cpresets", "#csites"]]) {
+    $(box).innerHTML = Object.entries(st.presets || {}).map(([k, p]) =>
+      `<button type="button" class="sec" data-preset="${esc(k)}" style="padding:4px 10px;margin-right:6px">Use ${esc(p.label)}</button>`).join("");
+    $(box).querySelectorAll("button").forEach(b => b.onclick = () => { $(area).value = st.presets[b.dataset.preset].sites.join("\n"); });
+  }
+  if (!$("#csites").value.trim()) $("#csites").value = (st.competitors || []).join("\n");
 })();
 const xicon = s => ({done: "✅", running: "⏳", waiting: "·", skipped: "–", stopped: "⏹", error: "❌"}[s] || s);
 async function xpoll() {

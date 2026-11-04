@@ -32,14 +32,22 @@ DEFAULTS = {
     "max_pages": 5000,
     "subdomains": True,
     "exclude": "",
-    "competitors": [
-        "https://www.campbell.edu", "https://www.wingate.edu", "https://www.lr.edu", "https://www.barton.edu",
-        "https://umo.edu", "https://www.pfeiffer.edu", "https://gardner-webb.edu", "https://catawba.edu",
-    ],
+    "competitors": None,  # filled from PRESETS below
     "compare_pages": 200,
     "providers": ["anthropic", "openai", "perplexity", "gemini"],
     "out_dir": "results",
 }
+PRESETS = {
+    # EAB "Methodist's Application Overlaps" (Digital and Virtual Engagement deck, p. 25): top 9 by overlap, plus Campbell
+    "eab_overlap": {"label": "EAB application overlap (top 9) + Campbell", "sites": [
+        "https://www.wingate.edu", "https://www.charlotte.edu", "https://www.ncat.edu", "https://www.ecu.edu", "https://www.lr.edu",
+        "https://www.ncsu.edu", "https://www.nccu.edu", "https://www.unc.edu", "https://www.uncg.edu", "https://www.campbell.edu"]},
+    # EAB AI Visibility audit, Oct. 19, 2026: seven-institution peer set (MU plus these six)
+    "eab_ai_peers": {"label": "EAB AI visibility peer set", "sites": [
+        "https://www.campbell.edu", "https://www.wingate.edu", "https://catawba.edu", "https://www.barton.edu",
+        "https://www.pfeiffer.edu", "https://belmontabbeycollege.edu"]},
+}
+DEFAULTS["competitors"] = list(PRESETS["eab_overlap"]["sites"])
 STEPS = [("access", "Bot access"), ("crawl", "Site crawl"), ("compare", "Competitors"), ("answers", "AI answers"), ("save", "Save results")]
 
 
