@@ -16,6 +16,27 @@ python3 app.py
 
 The browser opens at http://localhost:8000. Use `--port 9000` to change the port. Press Ctrl+C to stop.
 
+## Run everything
+
+The **Run everything** button at the top runs every check in order: bot access, full site crawl, competitor comparison, AI answer test. It then saves the results bundle and executive report to `results/<date-time>/`. A failed or skipped step does not stop the later ones. Stop saves whatever finished.
+
+Settings (site, max pages, subdomains, competitors, providers) are in the panel under the button and are saved to `runall.json`. API keys are never stored there.
+
+Scheduled runs (cron on Linux, Task Scheduler on Windows) use the same settings:
+
+```bash
+python3 runall.py
+```
+
+Skip steps with `--skip`, e.g. `python3 runall.py --skip compare,answers`. Exit code 0 means every step finished.
+
+## Running on a dedicated VM
+
+- Keep the app on 127.0.0.1 (the default). It has no login and holds API keys. Never expose it to the network.
+- Reach it with an SSH tunnel (`ssh -L 8000:127.0.0.1:8000 you@vm`), or behind an IT-managed proxy with university sign-in.
+- Set keys as environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`), not in `keys.json`.
+- Run `python3 app.py --no-browser` as a service (systemd on Linux, NSSM on Windows). Schedule `python3 runall.py` monthly.
+
 ## Bot Access tab
 
 Checks 38 AI crawlers (OpenAI, Anthropic, Google, Apple, Microsoft, Perplexity, Meta, Amazon, ByteDance, Common Crawl, Cohere, Mistral, and others). For each bot it reports:

@@ -23,12 +23,15 @@ from report import build as build_report
 from bundle import make_bundle, VERSION
 from compare import Compare
 from answers import AnswerRun, key_status, save_keys, load_questions, list_openai_models, list_gemini_models, load_keys
+from runall import RunAll, load_settings, save_settings
 
 JOBS: dict[str, Crawl] = {}
 
 
 def busy() -> str:
     """A crawl and a comparison at the same time slow each other down and distort response times."""
+    if any(r.state in ("pending", "running") for r in RUNALLS.values()):
+        return "Run everything is in progress. Wait for it to finish or stop it first."
     if any(c.state in ("pending", "running") for c in JOBS.values()):
         return "A Site Readiness crawl is running. Wait for it to finish or stop it first, so response times stay accurate."
     if any(c.state in ("pending", "running") for c in COMPARES.values()):
@@ -36,6 +39,12 @@ def busy() -> str:
     return ""
 COMPARES: dict[str, Compare] = {}
 ANSWERS: dict[str, AnswerRun] = {}
+RUNALLS: dict[str, RunAll] = {}
+
+
+def _register(kind: str, obj) -> None:
+    """Steps of Run everything also appear in their own tabs (and the bundle/report buttons there)."""
+    {"crawl": JOBS, "compare": COMPARES, "answers": ANSWERS}[kind][kind[0] + "-" + uuid.uuid4().hex[:6]] = obj
 
 
 def safe_name(s: str) -> str:
@@ -238,6 +247,29 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 pages = [{k: v for k, v in p.items() if not k.startswith("_")} for p in list(c.results)]
                 self._send(200, json.dumps({"summary": c.summary(), "pages": pages, "pdfs": c.pdf_report()}).encode(), "application/json")
+        elif u.path == "/api/all/settings":
+            self._send(200, json.dumps(load_settings()).encode(), "application/json")
+        elif u.path in ("/api/all/status", "/api/all/stop", "/api/all/bundle", "/api/all/report"):
+            r = RUNALLS.get((parse_qs(u.query).get("id") or [""])[0])
+            if not r:
+                self._send(404, b'{"error":"unknown run"}', "application/json")
+            elif u.path.endswith("stop"):
+                r.stop()
+                self._send(200, b'{"ok":true}', "application/json")
+            elif u.path.endswith("status"):
+                self._send(200, json.dumps(r.status()).encode(), "application/json")
+            elif not r.saved:
+                self._send(409, b"Results are saved when the run finishes.", "text/plain")
+            elif u.path.endswith("bundle"):
+                body = Path(r.saved["bundle"]).read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Disposition", f'attachment; filename="{Path(r.saved["bundle"]).stem}-{time.strftime("%Y%m%d-%H%M")}.zip"')
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self._send(200, Path(r.saved["report"]).read_bytes(), "text/html; charset=utf-8")
         elif u.path == "/api/version":
             self._send(200, json.dumps({"version": VERSION}).encode(), "application/json")
         elif u.path == "/api/defaults":
@@ -251,7 +283,21 @@ class Handler(BaseHTTPRequestHandler):
         u = urlsplit(self.path)
         n = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(n) if n else b""
-        if u.path == "/api/answers/keys":
+        if u.path == "/api/all/start":
+            if busy() or any(a.state == "running" for a in ANSWERS.values()):
+                self._send(409, json.dumps({"error": busy() or "An AI answer test is running. Wait for it to finish or stop it first."}).encode(), "application/json")
+                return
+            try:
+                settings = save_settings({**load_settings(), **json.loads(raw or b"{}")})
+            except Exception as ex:
+                self._send(400, json.dumps({"error": f"settings: {ex}"}).encode(), "application/json")
+                return
+            r = RunAll(settings, register=_register)
+            rid = uuid.uuid4().hex[:8]
+            RUNALLS[rid] = r
+            threading.Thread(target=r.run, daemon=True).start()
+            self._send(200, json.dumps({"id": rid}).encode(), "application/json")
+        elif u.path == "/api/answers/keys":
             try:
                 d = json.loads(raw or b"{}")
                 save_keys(**{k: v for k, v in d.items() if isinstance(v, str)})

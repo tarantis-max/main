@@ -70,6 +70,34 @@
   <h1>AI Access & Readiness <span id="ver" class="muted" style="font-size:13px;font-weight:400"></span></h1>
   <p class="sub">Shows which AI crawlers can reach a site, and how ready each page is to be found and cited by AI search.</p>
 
+  <div class="card" id="allcard">
+    <form id="allf" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <button id="allgo">Run everything</button>
+      <button id="allstop" class="sec" type="button" disabled>Stop</button>
+      <button id="allreport" type="button" disabled>Executive report</button>
+      <button id="allbundle" type="button" disabled>Download results bundle</button>
+      <span class="note">Bot access → full site crawl → competitors → AI answers → saves the bundle and report to the <code>results</code> folder. Takes 1-3 hours.</span>
+      <details class="settings" style="flex-basis:100%">
+        <summary>Run everything settings (saved to <code>runall.json</code>; also used by <code>python3 runall.py</code> for scheduled runs)</summary>
+        <div class="setgrid">
+          <label>Site <input type="text" id="xsite"></label>
+          <label>Max pages <input type="number" id="xmax" min="1" max="20000"></label>
+          <label>Pages per competitor <input type="number" id="xcmp" min="20" max="1000"></label>
+          <label>Exclude regex <input type="text" id="xexcl" placeholder="/calendar|/events/"></label>
+          <label class="chk"><input type="checkbox" id="xsub"> Include subdomains</label>
+          <div><label class="chk"><input type="checkbox" class="xprov" value="anthropic"> Claude</label>
+            <label class="chk"><input type="checkbox" class="xprov" value="openai"> ChatGPT</label>
+            <label class="chk"><input type="checkbox" class="xprov" value="perplexity"> Perplexity</label>
+            <label class="chk"><input type="checkbox" class="xprov" value="gemini"> Gemini</label></div>
+        </div>
+        <label style="display:flex;flex-direction:column;gap:4px;margin-top:10px">Competitors, one per line (up to 10)
+          <textarea id="xcomp" rows="6" style="padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);font:inherit"></textarea></label>
+        <div class="note">API keys come from the Keys box on the AI Answers tab. Providers without a key are skipped.</div>
+      </details>
+    </form>
+    <div id="allout"></div>
+  </div>
+
   <div class="tabs">
     <button data-tab="access" class="on">Bot Access</button>
     <button data-tab="ready">Site Readiness</button>
@@ -182,6 +210,42 @@
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// ---------------- Run everything
+let xjob = null, xtimer = null;
+(async () => {
+  const st = await (await fetch("/api/all/settings")).json();
+  $("#xsite").value = st.site; $("#xmax").value = st.max_pages; $("#xcmp").value = st.compare_pages;
+  $("#xexcl").value = st.exclude || ""; $("#xsub").checked = !!st.subdomains;
+  $("#xcomp").value = (st.competitors || []).join("\n");
+  document.querySelectorAll(".xprov").forEach(c => c.checked = (st.providers || []).includes(c.value));
+})();
+const xicon = s => ({done: "✅", running: "⏳", waiting: "·", skipped: "–", stopped: "⏹", error: "❌"}[s] || s);
+async function xpoll() {
+  const st = await (await fetch("/api/all/status?id=" + xjob)).json();
+  $("#allout").innerHTML = `<div class="tablewrap"><table style="margin-top:10px"><tbody>${st.steps.map(x =>
+    `<tr><td class="nw">${xicon(x.state)} ${esc(x.label)}</td><td>${esc(x.state)}</td><td>${esc(x.state === "running" ? st.progress : x.detail)}</td><td class="nw muted">${x.seconds == null ? "" : Math.round(x.seconds / 60) + " min"}</td></tr>`).join("")}</tbody></table></div>
+    <div class="note">${st.state === "running" ? "Running" : "Finished: " + esc(st.state)} · ${Math.round(st.elapsed_s / 60)} min${st.saved.folder ? " · saved to <code>" + esc(st.saved.folder) + "</code>" : ""}</div>`;
+  if (st.state !== "running" && st.state !== "pending") {
+    clearInterval(xtimer); $("#allgo").disabled = false; $("#allstop").disabled = true;
+    $("#allreport").disabled = $("#allbundle").disabled = !st.saved.bundle;
+  }
+}
+$("#allf").onsubmit = async ev => {
+  ev.preventDefault();
+  const body = {site: $("#xsite").value.trim(), max_pages: +$("#xmax").value, compare_pages: +$("#xcmp").value,
+    exclude: $("#xexcl").value.trim(), subdomains: $("#xsub").checked,
+    competitors: $("#xcomp").value.split("\n").map(x => x.trim()).filter(Boolean),
+    providers: [...document.querySelectorAll(".xprov")].filter(c => c.checked).map(c => c.value)};
+  const res = await fetch("/api/all/start", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  const d = await res.json();
+  if (!res.ok) { $("#allout").innerHTML = `<p class="note" style="color:var(--bad)">${esc(d.error)}</p>`; return; }
+  xjob = d.id; $("#allgo").disabled = true; $("#allstop").disabled = false; $("#allreport").disabled = $("#allbundle").disabled = true;
+  if (xtimer) clearInterval(xtimer); xtimer = setInterval(xpoll, 3000); xpoll();
+};
+$("#allstop").onclick = () => xjob && fetch("/api/all/stop?id=" + xjob);
+$("#allreport").onclick = () => xjob && window.open("/api/all/report?id=" + xjob, "_blank");
+$("#allbundle").onclick = () => xjob && (location.href = "/api/all/bundle?id=" + xjob);
 
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));

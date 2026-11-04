@@ -345,13 +345,14 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     if an.get("done"):
         pr = "".join(f"<tr><td>{e(p)}</td><td>{d['answered']}</td><td>{d['branded_mention']}%</td><td>{d['category_mention']}%</td><td>{d['cited']}%</td><td>{'-' if d['accurate'] is None else str(d['accurate']) + '%'}</td><td>{d['confused']}</td></tr>"
                      for p, d in an.get("by_provider", {}).items())
-        peers = ", ".join(f"{x['peer']} ({x['answers']})" for x in an.get("peer_mentions", [])[:6]) or "none"
+        named = an.get("colleges_named") or [{"college": x["peer"], "answers": x["answers"]} for x in an.get("peer_mentions", [])]
+        peers = ", ".join(f"{x['college']} ({x['answers']})" for x in named[:10]) or "none"
         srcs = ", ".join(f"{x['host']} ({x['answers']})" for x in an.get("top_sources", [])[:8]) or "none"
         brand_html += ('<h2>Appendix I: AI answer test</h2><p class="note">%s · %d questions, web search on. Branded = question names the school; category = it does not. '
                        'Full answers are in answers.html in the results bundle.</p>'
                        '<table><thead><tr><th>Provider</th><th>Answered</th><th>Branded mention</th><th>Category mention</th><th>Cites site</th><th>Accurate</th><th>Confusions</th></tr></thead><tbody>%s</tbody></table>'
-                       '<p class="note"><b>Named on category questions:</b> %s. <b>Sources used instead of the site:</b> %s.</p>'
-                       % (e(an["date"]), an["questions"], pr, e(peers), e(srcs)))
+                       '<p class="note"><b>Most-named colleges on category questions (answers out of %d):</b> %s. <b>Sources used instead of the site:</b> %s.</p>'
+                       % (e(an["date"]), an["questions"], pr, an.get("category_total", 0), e(peers), e(srcs)))
     if ppr.get("total"):
         els = ppr.get("elements", [])
         brand_html += ('<h2>Appendix F: Priority pages (EAB standard)</h2><p class="note">'

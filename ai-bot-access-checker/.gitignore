@@ -1,3 +1,5 @@
 __pycache__/
 *.csv
 keys.json
+results/
+runall.json

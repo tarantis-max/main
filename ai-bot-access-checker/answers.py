@@ -638,7 +638,7 @@ def build_answers_report(s: dict, rows: list[dict], bank: dict) -> str:
     q_rows = "".join(
         f"<tr><td class='nw'>{e(r['id'])}</td><td>{e(r['question'])}</td><td>{e(r['provider'])}</td>"
         f"<td>{pill(r['mentioned'])}</td><td>{pill(r['cited'])}</td><td>{pill(r['accurate']) if r['type'] == 'branded' else '-'}</td>"
-        f"<td>{e(', '.join(r['peers_mentioned'])) or '-'}</td>"
+        f"<td>{e(', '.join(r.get('colleges_named') or r['peers_mentioned'])) or '-'}</td>"
         f"<td>{('<span class=\"bad\">' + e(', '.join(r['confused_with'])) + '</span>') if r['confused_with'] else ('<span class=\"bad\">missing: ' + e(', '.join(r['missing_facts'])) + '</span>') if r['missing_facts'] else (e(r['error'][:80]) if r['error'] else '-')}</td></tr>"
         for r in rows)
     answers = "".join(
@@ -646,8 +646,14 @@ def build_answers_report(s: dict, rows: list[dict], bank: dict) -> str:
         f"<pre>{e(r['answer'] or r['error'])}</pre><p class='note'>Cited {inst}: {e(', '.join(r['cited_urls'])) or 'no'} · Other sources: {e(', '.join(r['other_sources'])) or 'none'}</p></details>"
         for r in rows)
     src = "".join(f"<tr><td>{e(x['host'])}</td><td>{x['answers']}</td></tr>" for x in s["top_sources"])
-    peers = "".join(f"<tr><td>{e(x['peer'])}</td><td>{x['answers']} of {s['category_total']}</td></tr>" for x in s["peer_mentions"][:12])
-    mu_cat = round(s["category_mention"] / 100 * s["category_total"]) if s["category_mention"] is not None else 0
+    provs = s["providers"]
+    cat_by_prov = {p: sum(1 for r in rows if r["type"] == "category" and r["provider"] == p and not r["error"]) for p in provs}
+    colleges = "".join(
+        f"<tr{' class=\'mu\'' if x['college'] == inst else ''}><td>{e(x['college'])}</td><td><b>{x['answers']}</b> of {s['category_total']}</td>"
+        + "".join(f"<td>{x['by_provider'].get(p, 0)} of {cat_by_prov[p]}</td>" for p in provs) + "</tr>"
+        for x in s.get("colleges_named", []))
+    if inst not in [x["college"] for x in s.get("colleges_named", [])]:
+        colleges = f"<tr class='mu'><td>{e(inst)}</td><td><b>0</b> of {s['category_total']}</td>" + "".join(f"<td>0 of {cat_by_prov[p]}</td>" for p in provs) + "</tr>" + colleges
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AI Answer Test</title><style>
 body{{margin:0;background:#fff;color:#1b1b1f;font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}} main{{max-width:1000px;margin:0 auto;padding:32px 24px}}
@@ -655,7 +661,7 @@ h1{{font-size:24px;margin:0}} h2{{font-size:16px;margin:24px 0 8px;border-bottom
 .meta,.note,.muted{{color:#5f6068;font-size:12px}} table{{width:100%;border-collapse:collapse;font-size:13px}}
 th,td{{text-align:left;padding:6px 8px;border-bottom:1px solid #dcdce2;vertical-align:top}} th{{font-size:11px;text-transform:uppercase;color:#5f6068}} td.nw{{white-space:nowrap}}
 .tiles{{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}} .tile{{border:1px solid #dcdce2;border-radius:8px;padding:10px 12px}} .tile b{{display:block;font-size:24px}} .tile span{{color:#5f6068;font-size:12px}}
-.pill{{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600}} .ok{{color:#1a7f37;background:#e7f6ec}} .bad{{color:#b42318;background:#fdecea}}
+.pill{{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600}} .ok{{color:#1a7f37;background:#e7f6ec}} tr.mu td{{background:#fff7d6;font-weight:600}} .bad{{color:#b42318;background:#fdecea}}
 pre{{white-space:pre-wrap;background:#f5f5f7;padding:10px;border-radius:6px;font-size:12px}} details{{margin:6px 0}}
 .bar{{position:sticky;top:0;background:#fff;border-bottom:1px solid #dcdce2;padding:10px 24px;text-align:right}} .bar button{{padding:8px 16px;border:0;border-radius:6px;background:#2f5bd3;color:#fff;font-weight:600;cursor:pointer}}
 @media print{{.bar{{display:none}} details{{break-inside:avoid}}}}
@@ -671,13 +677,14 @@ pre{{white-space:pre-wrap;background:#f5f5f7;padding:10px;border-radius:6px;font
 <p><b>Reading this.</b> Branded questions name the school; category questions do not. EAB's audit standard: branded mention near 100% is expected; the growth opportunity is category mention. Confusions = answers that mixed {e(inst)} up with another "Methodist" institution ({s['confusions']} found).</p>
 <h2>By provider</h2>
 <table><thead><tr><th>Provider</th><th>Answered</th><th>Branded mention</th><th>Category mention</th><th>Cites site</th><th>Accurate</th><th>Confusions</th><th>Errors</th></tr></thead><tbody>{prov_rows}</tbody></table>
-<h2>Who gets named on category questions</h2>
-<table><thead><tr><th>Institution</th><th>Mentioned in</th></tr></thead><tbody><tr><td><b>{e(inst)}</b></td><td><b>{mu_cat} of {s['category_total']}</b></td></tr>{peers}</tbody></table>
+<h2>Every college named on category questions</h2>
+<p class="note">Every school the AIs named when the question did not name {e(inst)}, most-named first. This is AI share of voice: the schools students hear about instead.</p>
+<table><thead><tr><th>College</th><th>All providers</th>{''.join(f"<th>{e(p)}</th>" for p in provs)}</tr></thead><tbody>{colleges}</tbody></table>
 <h2>Sources the AIs used instead of {e(inst)}'s site</h2>
 <p class="note">These third-party sites shape what AI says. Check that each one's listing for {e(inst)} is current.</p>
 <table><thead><tr><th>Source</th><th>Answers</th></tr></thead><tbody>{src}</tbody></table>
 <h2>Every question</h2>
-<table><thead><tr><th>ID</th><th>Question</th><th>Provider</th><th>Mentioned</th><th>Cited</th><th>Accurate</th><th>Peers named</th><th>Issue</th></tr></thead><tbody>{q_rows}</tbody></table>
+<table><thead><tr><th>ID</th><th>Question</th><th>Provider</th><th>Mentioned</th><th>Cited</th><th>Accurate</th><th>Colleges named</th><th>Issue</th></tr></thead><tbody>{q_rows}</tbody></table>
 <h2>Answers</h2>
 {answers}
 <p class="note">Method: each question is sent once per provider with web search enabled and a neutral system prompt. Mentioned = the answer names the institution. Cited = a search result or citation is on the institution's domain. Accurate = every required fact in questions.json appears and no forbidden term does (branded questions with rules only). Tokens used: {s['tokens']['input']:,} in, {s['tokens']['output']:,} out. Cost reported by providers that return it (Perplexity): ${s.get('reported_cost_usd', 0):.2f}.</p>
