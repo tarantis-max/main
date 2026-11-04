@@ -127,6 +127,13 @@ Optimized = all five. The report also counts key student pages site-wide that me
 
 **Content inventory.** Net price calculator, tuition/cost page, parents page, virtual tour (and whether it is linked from the admissions, academics, student life, housing and visit pages), Instagram/YouTube/TikTok on the homepage, and whether every program home page states an outcome.
 
+## Outdated wording and manual actions
+
+`messages.json` has two more lists:
+
+- `outdated_phrases`: wording that was true once and is not now (LCME applicant/candidate status, School of Medicine "will open" or "pending approval", "MU College of Medicine", Fort Liberty, Pope Air Force Base, Twitter, COVID-era notices, old copyright years). The crawl lists every page that uses each one, separates news posts (add an update note) from live pages (rewrite), and marks phrases on nearly every page as a site-template fix. Results are in Appendix G and the Action plan.
+- `manual_actions`: fixes found outside the crawl (for example a page no link points to). They are added to the Action plan; `"priority": "high"` puts them near the top.
+
 ## AI Answers tab
 
 Sends a question bank to AI assistants with web search on and scores the answers. Needs API keys (Anthropic Console, OpenAI Platform, Perplexity API settings, Google AI Studio). Run any subset of providers. Keys are saved to `keys.json` on your computer only; it is gitignored and never enters the results bundle.

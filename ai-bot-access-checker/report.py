@@ -16,7 +16,7 @@ from html import escape as e
 from urllib.parse import urlsplit
 
 from ai_bot_check import deny_robots_snippet, fully_blocked
-from readiness import CHECKS, CATEGORY, Crawl
+from readiness import MESSAGES, CHECKS, CATEGORY, Crawl
 
 LABEL = {c[0]: c[1] for c in CHECKS}
 CRITICAL = {c[0] for c in CHECKS if c[3]}
@@ -225,6 +225,35 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     if nb:
         actions.append(("Remove off-brand phrases", "The message guide bars these phrases.", "Rewrite the pages listed in Appendix G.",
                         "Marketing", f"{sum(b['pages'] for b in nb)} page(s)"))
+    od = [x for x in msr.get("outdated", []) if x["pages"] or x["news"]]
+    od_live = [x for x in od if x["pages"]]
+    od_news = [x for x in od if x["news"] and not x.get("template")]
+    pos = min(3, len(actions))
+    for ma in MESSAGES.get("manual_actions", []):
+        row = (ma["title"], ma["why"], ma["fix"], ma["owner"], ma.get("scope", ""))
+        if ma.get("priority") == "high":
+            actions.insert(pos, row)
+            pos += 1
+        else:
+            actions.append(row)
+    tmpl = [x for x in od if x.get("template")]
+    if tmpl:
+        actions.insert(pos, ("Fix outdated wording in the site template",
+                        "These appear on nearly every page: " + "; ".join(x["phrase"] for x in tmpl) + ".",
+                        "Change the shared header/footer: " + "; ".join(f"{x['phrase']} -> {x['use_instead']}" for x in tmpl) + ".",
+                        "Web team", "Site-wide"))
+        pos += 1
+    od_live = [x for x in od_live if not x.get("template")]
+    if od_live:
+        actions.insert(pos, ("Update outdated wording",
+                        "Out-of-date facts on live pages get repeated by AI as current: " + "; ".join(f"{x['phrase']} ({x['pages']})" for x in od_live[:5]) + ".",
+                        "Replace each with the current wording in Appendix G (\"Use instead\"). Pages are listed there.",
+                        "Content owners", f"{sum(x['pages'] for x in od_live)} page(s)"))
+    if od_news:
+        actions.append(("Add update notes to dated news posts",
+                        "Older posts are accurate for their date, but AI quotes them as current.",
+                        "Add a one-line \"Update:\" note at the top of each post with today's fact; do not rewrite the post. Posts are listed in Appendix G.",
+                        "Marketing", f"{sum(x['news'] for x in od_news)} post(s)"))
     inv_fail = [r for r in inr.get("rows", []) if not r["pass"]]
     if inv_fail:
         actions.append(("Close content gaps", "Students look for cost, outcomes and a virtual visit before they inquire.",
@@ -340,6 +369,12 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     def fmt_vals(x):
         return ", ".join("%s (%d)" % (v["value"], v["pages"]) for v in x["values"])
 
+    def outdated_row(x):
+        snip = ('<br><span class="note">"...' + e(x["snippet"][:140]) + '..."</span>') if x["snippet"] else ""
+        where = ", ".join(urlsplit(u).path for u in (x["sample"] + x["news_sample"])[:8]) or "-"
+        return "<tr><td>%s%s</td><td>%s</td><td>%d</td><td>%d</td><td class='url'>%s</td></tr>" % (
+            e(x["phrase"]) + (" <b>(site template)</b>" if x.get("template") else ""), snip, e(x["use_instead"]), x["pages"], x["news"], e(where))
+
     tick = lambda b: '<span class="pill ok">pass</span>' if b else '<span class="pill bad">fail</span>'
     brand_html = ""
     if an.get("done"):
@@ -371,7 +406,12 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
                        + '</tbody></table><table style="margin-top:10px"><thead><tr><th>Number</th><th>Approved</th><th>Found on site (pages)</th><th>Result</th></tr></thead><tbody>'
                        + "".join(f"<tr><td>{e(x['label'])}</td><td>{x['approved']}</td><td>{e(fmt_vals(x)) or 'not stated'}</td><td>{tick(x['consistent']) if x['found'] else '-'}</td></tr>" for x in msr["claims"])
                        + "</tbody></table>"
-                       + "".join(f"<p class='note'><b>\"{e(b['phrase'])}\"</b> on {b['pages']} page(s): {e(', '.join(urlsplit(u).path for u in b['sample'][:5]))}</p>" for b in msr.get("banned", []) if b["pages"]))
+                       + "".join(f"<p class='note'><b>\"{e(b['phrase'])}\"</b> on {b['pages']} page(s): {e(', '.join(urlsplit(u).path for u in b['sample'][:5]))}</p>" for b in msr.get("banned", []) if b["pages"])
+                       + ('<h3 style="font-size:14px;margin:14px 0 6px">Outdated wording</h3><p class="note">Source: messages.json (outdated_phrases). '
+                          'Live pages: rewrite. News posts: add an update note.</p>'
+                          '<table><thead><tr><th>Outdated</th><th>Use instead</th><th>Live pages</th><th>News posts</th><th>Where</th></tr></thead><tbody>'
+                          + "".join(outdated_row(x) for x in msr.get("outdated", []))
+                          + "</tbody></table>" if msr.get("outdated") else ""))
     if inr.get("rows"):
         brand_html += ('<h2>Appendix H: Content inventory</h2><table><thead><tr><th>Item</th><th>Result</th><th>Detail</th></tr></thead><tbody>'
                        + "".join(f"<tr><td>{e(r['label'])}</td><td>{tick(r['pass'])}</td><td>{e(r['detail'])}</td></tr>" for r in inr["rows"])

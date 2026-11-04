@@ -142,7 +142,9 @@
       "must_contain": [
         "military|veteran"
       ],
-      "must_not_contain": []
+      "must_not_contain": [
+        "(?<!formerly )(?<!previously )(?<!renamed from )Fort Liberty(?! \\((formerly|previously|renamed))"
+      ]
     },
     {
       "id": "B11",
@@ -754,9 +756,11 @@
       "id": "M22",
       "type": "category",
       "topic": "medicine",
-      "q": "What medical schools are good for military families near Fort Liberty (Fort Bragg)?",
+      "q": "What medical schools are good for military families near Fort Bragg?",
       "must_contain": [],
-      "must_not_contain": []
+      "must_not_contain": [
+        "(?<!formerly )(?<!previously )(?<!renamed from )Fort Liberty(?! \\((formerly|previously|renamed))"
+      ]
     },
     {
       "id": "M23",

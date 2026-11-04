@@ -49,6 +49,21 @@ def load_messages() -> dict:
 
 
 MESSAGES = load_messages()
+
+
+def _outdated_rules() -> list[tuple[dict, "re.Pattern"]]:
+    """messages.json outdated_phrases, compiled. {OLD_YEARS} = 2000 through two years ago."""
+    old_years = "|".join(str(y) for y in range(2000, dt.date.today().year - 1))
+    out = []
+    for x in MESSAGES.get("outdated_phrases", []):
+        try:
+            out.append((x, re.compile(x["pattern"].replace("{OLD_YEARS}", old_years), re.I)))
+        except re.error:
+            pass
+    return out
+
+
+OUTDATED = _outdated_rules()
 QUANT_RE = re.compile(r"\d+(\.\d+)?\s?%|\$\s?\d|\b\d{1,3}(,\d{3})+\b|\b\d+\s+(students|graduates|programs|years|teams|clubs|scholarships|faculty|alumni|employers)\b", re.I)
 YEAR_RE = re.compile(r"\b20[1-3]\d\b")
 OWNER_RE = re.compile(r"\b(reviewed by|written by|page owner|content owner|maintained by|author:|by dr\.)", re.I)
@@ -517,6 +532,17 @@ def message_report(c: "Crawl", pages: list[dict]) -> dict:
     for x in MESSAGES.get("banned_phrases", []):
         hits = [p["url"] for p in ok if x["phrase"] in p["detail"].get("msg", {}).get("banned", [])]
         banned.append({"phrase": x["phrase"], "pages": len(hits), "sample": hits[:10]})
+    outdated = []
+    for x, _ in OUTDATED:
+        live, news, snip = [], [], ""
+        for p in ok:
+            for oid, sn in p["detail"].get("msg", {}).get("outdated", []):
+                if oid == x["id"]:
+                    (news if NEWS_PATH.search(urlsplit(p["url"]).path) else live).append(p["url"])
+                    snip = snip or sn
+        outdated.append({"id": x["id"], "phrase": x["phrase"], "use_instead": x.get("use_instead", ""), "pages": len(live), "news": len(news),
+                         "template": len(ok) >= 5 and len(live) + len(news) >= 0.8 * len(ok),
+                         "sample": live[:15], "news_sample": news[:10], "snippet": snip})
     claims = []
     for cl in MESSAGES.get("numeric_claims", []):
         vals: dict = {}
@@ -536,6 +562,9 @@ def message_report(c: "Crawl", pages: list[dict]) -> dict:
         "homepage_proof_points": sum(1 for x in proof if x["homepage"]),
         "banned": banned,
         "banned_pages": len({u for b in banned for u in b["sample"]}),
+        "outdated": outdated,
+        "outdated_pages": sum(x["pages"] for x in outdated),
+        "outdated_news": sum(x["news"] for x in outdated),
         "claims": claims,
         "conflicting_claims": sum(1 for x in claims if x["found"] and not x["consistent"]),
         "priority_without_proof": [p["url"] for p in prio_pages if not p["detail"].get("msg", {}).get("proof")],
@@ -745,7 +774,14 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
         "proof": [x["id"] for x in MESSAGES.get("proof_points", []) if re.search(x["pattern"], page_text, re.I)],
         "banned": [x["phrase"] for x in MESSAGES.get("banned_phrases", []) if re.search(x["pattern"], page_text, re.I)],
         "claims": {},
+        "outdated": [],
     }
+    full_text = f"{title} {text}"  # includes header/footer: a stale footer is a site-template fix
+    for x, rx in OUTDATED:
+        m_ = rx.search(full_text)
+        if m_:
+            a, b = max(0, m_.start() - 60), min(len(full_text), m_.end() + 60)
+            msg["outdated"].append([x["id"], " ".join(full_text[a:b].split())])
     dated_page = bool(NEWS_PATH.search(sp.path) or p.meta.get("article:published_time") or '"datePublished"' in jsonld_raw)
     for cl in MESSAGES.get("numeric_claims", []):
         if dated_page:

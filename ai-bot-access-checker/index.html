@@ -479,6 +479,10 @@ function messagesCard(s) {
       ${m.claims.map(c => `<tr><td>${esc(c.label)}</td><td>${c.approved}</td><td>${c.values.length ? c.values.map(v => `<div><b>${v.value}</b> on ${v.pages} page(s) <span class="muted">“…${esc(v.snippet.slice(0, 90))}…”</span>${v.value !== c.approved ? `<details><summary class="muted">pages</summary><code>${v.sample.map(esc).join("<br>")}</code></details>` : ""}</div>`).join("") : '<span class="muted">not stated</span>'}</td><td>${c.found ? tick(c.consistent) : '<span class="muted">-</span>'}</td></tr>`).join("")}</tbody></table></div>
     <h2 style="margin-top:14px">Off-brand phrases</h2>
     ${m.banned.map(b => `<div>${b.pages ? '<span class="pill bad">' + b.pages + ' page(s)</span>' : '<span class="pill ok">none</span>'} “${esc(b.phrase)}”${b.pages ? `<details><summary class="muted">pages</summary><code>${b.sample.map(esc).join("<br>")}</code></details>` : ""}</div>`).join("")}
+    <h2 style="margin-top:14px">Outdated wording</h2>
+    <div class="note">Live pages: rewrite. News posts: add an "Update:" note at the top.</div>
+    <div class="tablewrap"><table><thead><tr><th>Outdated</th><th>Use instead</th><th>Live pages</th><th>News posts</th></tr></thead><tbody>
+      ${(m.outdated || []).map(x => `<tr><td>${esc(x.phrase)}${x.snippet ? `<div class="muted">“…${esc(x.snippet.slice(0, 120))}…”</div>` : ""}${x.pages + x.news ? `<details><summary class="muted">pages</summary><code>${x.sample.concat(x.news_sample).map(esc).join("<br>")}</code></details>` : ""}</td><td>${esc(x.use_instead)}</td><td>${x.pages ? '<span class="pill bad">' + x.pages + '</span>' : '<span class="pill ok">0</span>'}</td><td>${x.news ? '<span class="pill warn">' + x.news + '</span>' : '<span class="pill ok">0</span>'}</td></tr>`).join("")}</tbody></table></div>
   </div>`;
 }
 

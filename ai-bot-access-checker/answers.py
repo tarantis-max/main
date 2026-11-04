@@ -650,7 +650,7 @@ def build_answers_report(s: dict, rows: list[dict], bank: dict) -> str:
     provs = s["providers"]
     cat_by_prov = {p: sum(1 for r in rows if r["type"] == "category" and r["provider"] == p and not r["error"]) for p in provs}
     colleges = "".join(
-        f"<tr{' class=\'mu\'' if x['college'] == inst else ''}><td>{e(x['college'])}</td><td><b>{x['answers']}</b> of {s['category_total']}</td>"
+        "<tr" + (" class='mu'" if x["college"] == inst else "") + f"><td>{e(x['college'])}</td><td><b>{x['answers']}</b> of {s['category_total']}</td>"
         + "".join(f"<td>{x['by_provider'].get(p, 0)} of {cat_by_prov[p]}</td>" for p in provs) + "</tr>"
         for x in s.get("colleges_named", []))
     if inst not in [x["college"] for x in s.get("colleges_named", [])]:

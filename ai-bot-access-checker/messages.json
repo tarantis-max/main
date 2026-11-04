@@ -109,14 +109,6 @@
     {
       "phrase": "liberal arts (school/college/university)",
       "pattern": "liberal arts (school|college|university|institution)"
-    },
-    {
-      "phrase": "outdated: LCME applicant/candidate status (now preliminary accreditation, Oct. 2025)",
-      "pattern": "(applicant|candidate|candidacy) (program|school|status|designation)[^.]{0,150}(LCME|Liaison Committee)|(LCME|Liaison Committee)[^.]{0,150}(applicant|candidate|candidacy) (program|school|status|designation)"
-    },
-    {
-      "phrase": "outdated name: MU College of Medicine (now School of Medicine)",
-      "pattern": "(MU|Methodist University) College of Medicine|College of Medicine at Methodist"
     }
   ],
   "numeric_claims": [
@@ -200,5 +192,97 @@
     "/life-at-mu/housing-residence-life/",
     "/explore-mu/on-a-tour/"
   ],
-  "outcome_pattern": "placement|employed|employment rate|job rate|pass rate|board pass|nclex|salary|graduate school acceptance|career outcomes|alumni work at"
+  "outcome_pattern": "placement|employed|employment rate|job rate|pass rate|board pass|nclex|salary|graduate school acceptance|career outcomes|alumni work at",
+  "outdated_phrases": [
+    {
+      "id": "som_applicant",
+      "phrase": "LCME \"applicant\" or \"candidate\" status",
+      "use_instead": "Preliminary LCME accreditation (October 2025)",
+      "pattern": "(applicant|candidate|candidacy) (program|school|status|designation)[^.]{0,150}(LCME|Liaison Committee)|(LCME|Liaison Committee)[^.]{0,150}(applicant|candidate|candidacy) (program|school|status|designation)"
+    },
+    {
+      "id": "som_future",
+      "phrase": "School of Medicine described as not yet open or pending approval",
+      "use_instead": "Opened July 20, 2026, with 64 students",
+      "pattern": "(School of Medicine|medical school|charter class|inaugural class)[^.]{0,120}(will (open|welcome|enroll|begin|launch)|plans? to (open|enroll)|(expected|anticipated|scheduled) to (open|begin|enroll)|pending (LCME|SACSCOC|accreditation|approval))|(pending (LCME|SACSCOC) (approval|accreditation))"
+    },
+    {
+      "id": "som_old_name",
+      "phrase": "\"MU College of Medicine\"",
+      "use_instead": "Methodist University Cape Fear Valley Health School of Medicine",
+      "pattern": "(MU|Methodist University) College of Medicine|College of Medicine at Methodist"
+    },
+    {
+      "id": "fort_liberty",
+      "phrase": "\"Fort Liberty\"",
+      "use_instead": "Fort Bragg (renamed back Feb. 14, 2025)",
+      "pattern": "(?<!formerly )(?<!previously )(?<!once )(?<!renamed from )Fort Liberty(?! \\((formerly|previously|now|renamed))"
+    },
+    {
+      "id": "pope_afb",
+      "phrase": "\"Pope Air Force Base\"",
+      "use_instead": "Pope Army Airfield (since 2011)",
+      "pattern": "Pope (Air Force Base|AFB)\\b"
+    },
+    {
+      "id": "twitter",
+      "phrase": "\"Twitter\"",
+      "use_instead": "X",
+      "pattern": "\\bTwitter\\b(?! \\(now X\\))"
+    },
+    {
+      "id": "covid_ops",
+      "phrase": "COVID-era operating notices",
+      "use_instead": "Remove, or label as historical",
+      "pattern": "(COVID|coronavirus|pandemic)[^.]{0,100}(protocol|mask|social distanc|until further notice|temporar|remote instruction|virtual only|test-optional for)"
+    },
+    {
+      "id": "old_copyright",
+      "phrase": "Old copyright year",
+      "use_instead": "Current year (set the footer to update automatically)",
+      "pattern": "(©|Copyright)\\s*(?:20\\d\\d\\s*[-–]\\s*)?({OLD_YEARS})\\b"
+    }
+  ],
+  "manual_actions": [
+    {
+      "title": "Redirect the old School of Medicine page",
+      "priority": "high",
+      "why": "/academics/medicine-2/ still says the school is an LCME \"applicant program\" and will not consider applicants. Search engines and AI still find it.",
+      "fix": "301-redirect https://www.methodist.edu/academics/medicine-2/ to the current School of Medicine page, then request removal in Google Search Console.",
+      "owner": "Web team",
+      "scope": "1 page"
+    },
+    {
+      "title": "Add update notes to older School of Medicine news posts",
+      "priority": "high",
+      "why": "Posts from before October 2025 describe applicant or candidate status. AI quotes them as current.",
+      "fix": "Add one line at the top of each: \"Update: The School of Medicine received preliminary LCME accreditation in October 2025 and opened in July 2026.\" Do not rewrite the posts. Start with: Hershey Bell founding dean, $8 million Golden LEAF, Nichols IAMSE, nursing partnership, LCME candidacy designation.",
+      "owner": "Marketing",
+      "scope": "5+ posts"
+    },
+    {
+      "title": "Publish School of Medicine admissions facts",
+      "priority": "high",
+      "why": "No official tuition, MCAT/GPA expectations or in-state policy is published. The only tuition figure online is a third-party $70,500. AI guesses.",
+      "fix": "Publish 2026-27 tuition, MCAT/GPA expectations (or state none), NC-resident policy and the 2027 AMCAS deadline as page text on the SOM admissions FAQ.",
+      "owner": "School of Medicine + Web team",
+      "scope": "SOM admissions FAQ"
+    },
+    {
+      "title": "Approve the facts in the accuracy spreadsheet",
+      "priority": "normal",
+      "why": "AI answers can only be scored for accuracy against approved facts. 38 facts are waiting.",
+      "fix": "Fill the yellow columns in MU-AI-Accuracy-Facts.xlsx (one figure per fact, official source, approver, date) and return it.",
+      "owner": "Institutional Research + Marketing",
+      "scope": "38 facts"
+    },
+    {
+      "title": "Use one School of Medicine building cost",
+      "priority": "normal",
+      "why": "News coverage reports both $60 million and $65 million.",
+      "fix": "Confirm the figure and correct MU pages and press materials that use the other one.",
+      "owner": "Marketing",
+      "scope": "News and SOM pages"
+    }
+  ]
 }
