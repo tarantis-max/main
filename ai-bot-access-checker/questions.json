@@ -72,7 +72,9 @@
       "must_contain": [
         "Cape Fear Valley|School of Medicine"
       ],
-      "must_not_contain": []
+      "must_not_contain": [
+        "does not have a medical school|no medical school"
+      ]
     },
     {
       "id": "B05",
@@ -104,7 +106,9 @@
       "must_contain": [
         "ABET"
       ],
-      "must_not_contain": []
+      "must_not_contain": [
+        "not (be )?ABET|isn.t ABET|is not accredited|no ABET"
+      ]
     },
     {
       "id": "B08",

@@ -229,6 +229,34 @@ def ask_openai(q: str, key: str, model: str) -> dict:
     return {"text": out, "urls": urls, "usage": usage}
 
 
+def _urls_in(obj, depth: int = 0) -> list[str]:
+    """Every http(s) value under url/uri/origin_url keys in a nested structure."""
+    found = []
+    if depth > 6:
+        return found
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k in ("url", "uri", "origin_url", "source_url") and isinstance(v, str) and v.startswith("http"):
+                found.append(v)
+            elif isinstance(v, (dict, list)):
+                found.extend(_urls_in(v, depth + 1))
+    elif isinstance(obj, list):
+        for v in obj:
+            found.extend(_urls_in(v, depth + 1))
+    return found
+
+
+def _shape(obj, depth: int = 0):
+    """Structure only (keys and types, no values) for diagnosing an unexpected response."""
+    if depth > 4:
+        return "..."
+    if isinstance(obj, dict):
+        return {k: _shape(v, depth + 1) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_shape(obj[0], depth + 1)] if obj else []
+    return type(obj).__name__
+
+
 def _parse_responses_output(resp: dict) -> tuple[str, list[str]]:
     """Text and source URLs from a Responses-style payload (OpenAI and Perplexity's Agent API).
     Accepts output[].message.content[].output_text (+ url annotations), a top-level output_text,
@@ -243,10 +271,8 @@ def _parse_responses_output(resp: dict) -> tuple[str, list[str]]:
                     for a in c.get("annotations") or []:
                         if a.get("url"):
                             urls.append(a["url"])
-        elif t in ("web_search_call", "search_results", "web_search"):
-            for r in ((item.get("action") or {}).get("sources") or item.get("results") or item.get("search_results") or []):
-                if isinstance(r, dict) and r.get("url"):
-                    urls.append(r["url"])
+        else:  # search results, tool calls, fetches: take every URL wherever it sits in the item
+            urls.extend(_urls_in(item))
     if not text and isinstance(resp.get("output_text"), str):
         text.append(resp["output_text"])
     urls += [u for u in resp.get("citations") or [] if isinstance(u, str)]
@@ -357,7 +383,14 @@ def ask_gemini(q: str, key: str, model: str) -> dict:
     c = cands[0]
     text = "".join(p.get("text", "") for p in (c.get("content") or {}).get("parts", []))
     gm = c.get("groundingMetadata") or {}
-    urls = [(ch.get("web") or {}).get("uri") for ch in gm.get("groundingChunks") or [] if (ch.get("web") or {}).get("uri")]
+    urls = []
+    for ch in gm.get("groundingChunks") or []:
+        web = ch.get("web") or {}
+        uri, title = web.get("uri") or "", (web.get("title") or "").strip().lower()
+        if "vertexaisearch" in uri and re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}", title):
+            urls.append(f"https://{title}/")  # redirect link: Google puts the source domain in the title
+        elif uri:
+            urls.append(uri)
     u = resp.get("usageMetadata", {})
     return {"text": text.strip(), "urls": urls, "usage": {"input": u.get("promptTokenCount", 0), "output": u.get("candidatesTokenCount", 0), "searches": 0}}
 
@@ -595,8 +628,18 @@ def main() -> int:
     ap.add_argument("--csv")
     ap.add_argument("--json")
     ap.add_argument("--smoke", metavar="PROVIDER", help="send one minimal request to a provider and print only the status")
+    ap.add_argument("--shape", action="store_true", help="with --smoke perplexity: also print the response structure (keys and types only)")
     a = ap.parse_args()
     if a.smoke:
+        if a.shape and a.smoke == "perplexity":
+            global _post
+            real = _post
+
+            def spy(url, headers, body):
+                resp = real(url, headers, body)
+                print(json.dumps(_shape(resp), indent=1)[:4000])
+                return resp
+            _post = spy
         return smoke_test(a.smoke)
     run = AnswerRun([p.strip() for p in a.providers.split(",") if p.strip()], [x.strip() for x in a.ids.split(",") if x.strip()], a.domain)
     if run.missing_keys:
