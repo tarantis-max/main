@@ -423,12 +423,48 @@ def _host(u: str) -> str:
     return urlsplit(u).netloc.lower().removeprefix("www.")
 
 
+_COLLEGE_RX = re.compile(r"\b(?:University of(?: (?:the )?[A-Z][\w.'&-]+){1,4}|(?:[A-Z][\w.'&-]+ ){1,4}(?:University|College)(?: of(?: [A-Z][\w.'-]+){1,3})?)")
+_NOT_A_NAME = re.compile(r"^(?:The|A|An|Best|Top|Private|Public|Small|Christian|Liberal|Arts|Value|Many|Most|Other|Some|Each|Every|Community|"
+                         r"Education|Health|Medicine|Nursing|Business|Engineering|Law|Graduate|Online|Medical|Arts|Sciences|Science|State|"
+                         r"Niche|Forbes|Kiplinger|Princeton|Review|Report|News|World|U\.S\.|US|Methodist|North|Carolina|NC|In|At|For|And|Or|Its|Our|Your|This|These|Their)$")
+
+
+def colleges_named(text: str, bank: dict) -> list[str]:
+    """Every college an answer names: known schools by their short names (questions.json "colleges"), plus any other
+    'X University' / 'X College' / 'University of X' phrase. In order of first appearance."""
+    hits = []
+    for name, rx in (bank.get("colleges") or {}).items():
+        m = re.search(rx, text)
+        if m:
+            hits.append((m.start(), name, m.end()))
+    covered = [(a, b) for a, _, b in hits]
+    for m in _COLLEGE_RX.finditer(text):
+        if any(a < m.end() and m.start() < b for a, b in covered):
+            continue
+        words = m.group(0).split()
+        while words and _NOT_A_NAME.match(words[0]):
+            words.pop(0)
+        if len(words) >= 2 and words[0] not in ("University", "College"):
+            hits.append((m.start(), " ".join(words), m.end()))
+            covered.append((m.start(), m.end()))
+        elif words[:2] == ["University", "of"] and len(words) > 2:
+            hits.append((m.start(), " ".join(words), m.end()))
+            covered.append((m.start(), m.end()))
+    seen, out = set(), []
+    for _, name, _ in sorted(hits):
+        if name.lower() not in seen:
+            seen.add(name.lower())
+            out.append(name)
+    return out
+
+
 def score(qd: dict, bank: dict, text: str, urls: list[str], home_domain: str) -> dict:
     alias_rx = "|".join(f"(?:{a})" for a in bank["institution_aliases"])
     mentioned = bool(re.search(alias_rx, text, re.I))
     cited_urls = sorted({u for u in urls if _host(u) == home_domain or _host(u).endswith("." + home_domain)})
     other_hosts = sorted({_host(u) for u in urls if _host(u) and not (_host(u) == home_domain or _host(u).endswith("." + home_domain))})
     peers = [p for p in bank.get("peers", []) if re.search(r"\b" + re.escape(p), text, re.I)]
+    colleges = colleges_named(text, bank)
     first_mu = (re.search(alias_rx, text, re.I) or type("m", (), {"start": lambda self: 10**9})()).start()
     # a confusion only if the other school is named before (or instead of) the institution; a disambiguation
     # aside after naming the right school ("not Southern Methodist") does not count
@@ -441,7 +477,7 @@ def score(qd: dict, bank: dict, text: str, urls: list[str], home_domain: str) ->
     else:
         ok = mentioned
     return {"mentioned": mentioned, "cited": bool(cited_urls), "cited_urls": cited_urls[:5], "other_sources": other_hosts[:8],
-            "peers_mentioned": peers, "confused_with": confused, "missing_facts": missing, "forbidden_found": forbidden,
+            "peers_mentioned": peers, "colleges_named": colleges, "confused_with": confused, "missing_facts": missing, "forbidden_found": forbidden,
             "accurate": accurate, "pass": ok}
 
 
@@ -491,7 +527,7 @@ class AnswerRun:
                     row = {"id": qd["id"], "type": qd["type"], "topic": qd["topic"], "question": qd["q"], "provider": prov,
                            "answer": a["text"], "error": a.get("error", ""), "seconds": round(time.time() - t0, 1), "usage": a.get("usage", {})}
                     row.update(score(qd, self.bank, a["text"], a["urls"], self.home_domain) if not a.get("error") else
-                               {"mentioned": None, "cited": None, "cited_urls": [], "other_sources": [], "peers_mentioned": [],
+                               {"mentioned": None, "cited": None, "cited_urls": [], "other_sources": [], "peers_mentioned": [], "colleges_named": [],
                                 "confused_with": [], "missing_facts": [], "forbidden_found": [], "accurate": None, "pass": None})
                     with self._lock:
                         self.results.append(row)
@@ -536,6 +572,12 @@ class AnswerRun:
                 for p in r["peers_mentioned"]:
                     peer[p] = peer.get(p, 0) + 1
         cat = [r for r in ok if r["type"] == "category"]
+        named = {}
+        for r in cat:
+            for c in r.get("colleges_named") or []:
+                named.setdefault(c, {"college": c, "answers": 0, "by_provider": {}})
+                named[c]["answers"] += 1
+                named[c]["by_provider"][r["provider"]] = named[c]["by_provider"].get(r["provider"], 0) + 1
         tok_in = sum(r["usage"].get("input", 0) for r in rows)
         tok_out = sum(r["usage"].get("output", 0) for r in rows)
         cost = round(sum(r["usage"].get("cost_usd", 0) or 0 for r in rows), 4)
@@ -552,6 +594,7 @@ class AnswerRun:
             "top_sources": sorted(({"host": h, "answers": n} for h, n in src.items()), key=lambda x: -x["answers"])[:15],
             "peer_mentions": sorted(({"peer": p, "answers": n} for p, n in peer.items()), key=lambda x: -x["answers"]),
             "category_total": len(cat),
+            "colleges_named": sorted(named.values(), key=lambda x: (-x["answers"], x["college"])),
             "tokens": {"input": tok_in, "output": tok_out},
             "reported_cost_usd": cost,
             "model_substitutions": dict(_GEMINI_SUBSTITUTE),
@@ -562,12 +605,12 @@ class AnswerRun:
         buf = io.StringIO()
         w = csv.writer(buf)
         w.writerow(["id", "type", "topic", "question", "provider", "pass", "mentioned", "cited", "accurate", "confused_with",
-                    "peers_mentioned", "missing_facts", "cited_urls", "other_sources", "error", "answer"])
+                    "peers_mentioned", "colleges_named", "missing_facts", "cited_urls", "other_sources", "error", "answer"])
         with self._lock:
             rows = list(self.results)
         for r in rows:
             w.writerow([r["id"], r["type"], r["topic"], r["question"], r["provider"], r["pass"], r["mentioned"], r["cited"], r["accurate"],
-                        "; ".join(r["confused_with"]), "; ".join(r["peers_mentioned"]), "; ".join(r["missing_facts"]),
+                        "; ".join(r["confused_with"]), "; ".join(r["peers_mentioned"]), "; ".join(r.get("colleges_named") or []), "; ".join(r["missing_facts"]),
                         " ".join(r["cited_urls"]), " ".join(r["other_sources"]), r["error"], r["answer"]])
         return buf.getvalue()
 
