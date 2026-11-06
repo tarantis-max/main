@@ -161,6 +161,7 @@ def digest(folder: Path) -> dict:
                             for p in sorted((p for p in pages if (p["detail"].get("key_page") or p["detail"].get("priority")) and p.get("answer_score") is not None),
                                             key=lambda p: p.get("answer_score") or 0)[:12]],
     }
+    d["examples"] = examples(summary, pages)
     if access:
         bots = access.get("bots") or []
         d["bots_blocked"] = [{"bot": x.get("bot"), "purpose": x.get("purpose"), "robots_txt": x.get("robots_txt"), "server": x.get("http_probe"),
@@ -251,6 +252,39 @@ def find_run(arg: str) -> Path:
                      "or run  python3 agent.py --review  with nothing after it to use the newest bundle.")
 
 
+def examples(summary: dict, pages: list[dict]) -> dict:
+    """Real addresses behind the site-wide findings, so every fix can name a page (the ranked actions give only counts)."""
+    from readiness import CHECKS
+    si = summary.get("site_issues") or {}
+    ex: dict = {}
+    bl = si.get("broken_internal_links") or {}
+    if bl.get("sample"):
+        ex["broken_pages"] = {"count": bl.get("count"), "sample": [{"url": x["url"], "status": x.get("status"), "linked_from": (x.get("linked_from") or [])[:2]}
+                                                              for x in bl["sample"][:8]]}
+    if si.get("dead_legacy_links"):
+        ex["links_to_retired_old_site"] = [{"url": x["url"], "linked_from": (x.get("linked_from") or [])[:2]} for x in si["dead_legacy_links"][:5]]
+    out = (summary.get("messages") or {}).get("outdated") or []
+    if out:
+        ex["outdated_wording"] = [{"phrase": o.get("phrase"), "use_instead": o.get("use_instead"), "in_site_template": o.get("template"),
+                                   "pages": o.get("pages"), "news_posts": o.get("news"), "sample": (o.get("sample") or [])[:3],
+                                   "news_sample": (o.get("news_sample") or [])[:2]} for o in out if o.get("pages") or o.get("news") or o.get("template")]
+    labels = {c[0]: c[1] for c in CHECKS}
+    failing: dict = {}
+    for p in pages:
+        if p.get("status") != 200:
+            continue
+        for cid, ok in (p.get("checks") or {}).items():
+            if ok is False:
+                failing.setdefault(cid, []).append(p["url"])
+    ex["failing_checks"] = {labels.get(k, k): {"pages": len(v), "sample": v[:4]} for k, v in sorted(failing.items(), key=lambda kv: -len(kv[1]))[:15]}
+    for k in ("orphans", "indexable_query_urls"):
+        if isinstance(si.get(k), dict) and si[k].get("sample"):
+            ex[k] = {"count": si[k].get("count"), "sample": si[k]["sample"][:4]}
+    if isinstance(si.get("duplicate_titles"), dict) and si["duplicate_titles"].get("top"):
+        ex["duplicate_titles"] = [{"title": t.get("text"), "sample": t.get("sample", [])[:2]} for t in si["duplicate_titles"]["top"][:3]]
+    return ex
+
+
 def previous_digest(folder: Path) -> dict | None:
     """The agent digest of the most recent earlier run, for month-over-month comparison."""
     earlier = sorted(p for p in folder.parent.iterdir() if p.is_dir() and p.name < folder.name and (p / "agent-digest.json").exists())
@@ -270,16 +304,22 @@ The results come from automated checks that match word patterns, so some finding
 1. Check the candidate findings (ranked actions, findability rows, inaccurate AI answers) before you confirm them. Use read_page to open the page on the site and look for the evidence. Confirm a finding only when the page shows it. Typical false matches: a number about something else (a salary, a 1970s history fact, a national statistic), a phrase inside a menu or footer, a page about a different program.
 2. Drop false matches and say why in one sentence.
 3. Compare with the previous run when one is given: what improved, what got worse, what is new.
-4. Write the fix list. Each fix: what is wrong, where (one URL), the evidence (a short quote or what you saw), the exact fix, the owner, and the priority (now = hurts AI answers today or is broken; next = this month; later).
+4. Write the fix list. Each fix: what is wrong, where (one URL), the evidence (a short quote or what you saw), the exact fix, the owner, and the priority:
+   - now: breaks what AI can read or say about the school: pages that error or are missing, broken structured data, wrong or conflicting facts, AI search bots blocked, a key page redirecting to the wrong place.
+   - next: makes answers hard to find or weak: facts buried or only in PDFs, missing links between key pages, policy-denied bots not blocked, stale dates, outdated names.
+   - later: cosmetic or low reach: old labels in the footer (such as "Twitter"), duplicate titles, orphan pages.
+   Order the fix list and the summary by this priority, most harmful first.
 5. Write a draft email to the web team (Marcom). Plain text, short, numbered fixes, no jargon, no hedging. Start with one sentence on how the site is measured and the headline numbers.
 
 Rules:
 - Use only facts from the results or from pages you read; never invent numbers or URLs. Write in plain, definite language.
 - Keep each finding's meaning. Broken is not missing, outdated is not wrong, a menu-only link is not a missing link. If the results say "fix broken structured data", the fix is to repair it, not to add it.
 - Template problems (structured data, meta tags, footer code) live in the HTML source: search them with source=true. A text search that finds nothing does not prove something is absent; read_page tells you when words appear only in the HTML source or only in menus and footers.
+- The results include "examples": real addresses behind the site-wide findings (broken pages and the pages that link to them, outdated wording, failing checks). Use them: give the broken page itself and say which page links to it.
 - Each fix's URL is the page that has the problem. Never give an address that redirects somewhere else, except when the redirect itself is the problem. For a section-wide problem, give the most important page in that section.
 - If a page now shows a finding is already fixed, move it to dismissed with the reason "already fixed".
 - Check at least the top {min_checks} findings with read_page before you submit, highest-ranked first; spend your remaining page reads on the next ones. Mark only what you did not read as status "not_checked".
+- Do not state how many pages you read; that number is added to the report automatically.
 - When you are done, call submit_review once with the complete review."""
 
 
@@ -293,7 +333,8 @@ def _tools(owners: list[str]) -> list[dict]:
         {"name": "read_page",
          "description": "Read one page on the website being reviewed (read-only). Returns the title and the page's own text (menus, header and footer removed). "
                         "With 'find', returns only the sentences containing those words (case-insensitive; separate alternatives with |); if they are not in the page's own text, it says whether they appear in menus/footer or only in the HTML source. "
-                        "With source=true, searches the raw HTML instead (use it for structured data, meta tags and template code).",
+                        "With source=true, searches the raw HTML instead (use it for structured data, meta tags and template code). "
+                        "Plain-text files (robots.txt, sitemap.xml, llms.txt) are returned as lines; 'find' returns the matching lines.",
          "input_schema": {"type": "object", "additionalProperties": False, "required": ["url"],
                           "properties": {"url": {"type": "string"}, "find": {"type": "string"}, "source": {"type": "boolean"}}}},
         {"name": "submit_review", "strict": True,
@@ -333,8 +374,16 @@ def read_page(url: str, find: str = "", source: bool = False, site: str = "") ->
     raw = r["body"].decode("utf-8", "replace")
     final = r["final_url"] or url
     head = f"URL: {final}\n" + (f"(redirected from {url})\n" if final != url else "")
-    if "html" not in _header(r["headers"], "content-type").lower():
-        return head + f"Not an HTML page ({_header(r['headers'], 'content-type')})."
+    ctype = _header(r["headers"], "content-type").lower()
+    if "html" not in ctype:
+        if not any(t in ctype for t in ("text/", "xml", "json")):
+            return head + f"Not a text file ({ctype or 'unknown type'}); it cannot be read here."
+        lines = raw.splitlines()  # robots.txt, sitemaps, llms.txt: return matching lines, or the start of the file
+        if find:
+            rx = _find_rx(find)
+            hits = [f"{i}: {l}" for i, l in enumerate(lines, 1) if rx.search(l)][:40]
+            return head + f"Plain-text file ({ctype}), {len(lines)} lines. Lines matching '{find}':\n" + ("\n".join(hits) if hits else "none")
+        return head + f"Plain-text file ({ctype}), {len(lines)} lines:\n" + raw[:8000] + ("…" if len(raw) > 8000 else "")
     if source:
         if not find:
             return head + raw[:6000]
