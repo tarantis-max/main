@@ -46,6 +46,8 @@ Skip steps with `--skip`, e.g. `python3 runall.py --skip compare,answers`. Exit 
 3. Saves `agent-review.html` (fix list, dismissed matches, draft email to the web team) in the run's results folder.
 4. Emails you the summary and/or posts it to a Teams channel.
 
+It must check at least the top 10 findings against the live pages before it can submit (`min_checks` in agent.json). When words are not in a page's own text, the page reader says whether they are in menus or footers or only in the HTML source, so a broken item is never reported as missing.
+
 It never changes the website and never sends the email to the web team; you review the draft and send it.
 
 ```

@@ -47,6 +47,7 @@ DEFAULTS = {
     "effort": "medium",
     "max_turns": 30,
     "max_page_reads": 40,
+    "min_checks": 10,
     "findability": [
         {"url": "https://www.methodist.edu/", "set": "undergraduate"},
         {"url": "https://www.methodist.edu/academics/medicine/", "set": "medicine"},
@@ -272,7 +273,14 @@ The results come from automated checks that match word patterns, so some finding
 4. Write the fix list. Each fix: what is wrong, where (one URL), the evidence (a short quote or what you saw), the exact fix, the owner, and the priority (now = hurts AI answers today or is broken; next = this month; later).
 5. Write a draft email to the web team (Marcom). Plain text, short, numbered fixes, no jargon, no hedging. Start with one sentence on how the site is measured and the headline numbers.
 
-Rules: use only facts from the results or from pages you read; never invent numbers or URLs. Write in plain, definite language. You have a limited number of page reads, so read the pages behind the highest-ranked findings first and mark the rest status "not_checked". When you are done, call submit_review once with the complete review."""
+Rules:
+- Use only facts from the results or from pages you read; never invent numbers or URLs. Write in plain, definite language.
+- Keep each finding's meaning. Broken is not missing, outdated is not wrong, a menu-only link is not a missing link. If the results say "fix broken structured data", the fix is to repair it, not to add it.
+- Template problems (structured data, meta tags, footer code) live in the HTML source: search them with source=true. A text search that finds nothing does not prove something is absent; read_page tells you when words appear only in the HTML source or only in menus and footers.
+- Each fix's URL is the page that has the problem. Never give an address that redirects somewhere else, except when the redirect itself is the problem. For a section-wide problem, give the most important page in that section.
+- If a page now shows a finding is already fixed, move it to dismissed with the reason "already fixed".
+- Check at least the top {min_checks} findings with read_page before you submit, highest-ranked first; spend your remaining page reads on the next ones. Mark only what you did not read as status "not_checked".
+- When you are done, call submit_review once with the complete review."""
 
 
 def _tools(owners: list[str]) -> list[dict]:
@@ -284,7 +292,7 @@ def _tools(owners: list[str]) -> list[dict]:
     return [
         {"name": "read_page",
          "description": "Read one page on the website being reviewed (read-only). Returns the title and the page's own text (menus, header and footer removed). "
-                        "With 'find', returns only the sentences containing those words (case-insensitive; separate alternatives with |). "
+                        "With 'find', returns only the sentences containing those words (case-insensitive; separate alternatives with |); if they are not in the page's own text, it says whether they appear in menus/footer or only in the HTML source. "
                         "With source=true, searches the raw HTML instead (use it for structured data, meta tags and template code).",
          "input_schema": {"type": "object", "additionalProperties": False, "required": ["url"],
                           "properties": {"url": {"type": "string"}, "find": {"type": "string"}, "source": {"type": "boolean"}}}},
@@ -301,6 +309,15 @@ def _tools(owners: list[str]) -> list[dict]:
                               "email_subject": {"type": "string"},
                               "email_body": {"type": "string"}}}},
     ]
+
+
+def _find_rx(find: str) -> "re.Pattern":
+    """Words to look for: read as a pattern (a|b) and also literally, so 'ld+json' or '$65,000' match as typed."""
+    try:
+        re.compile(find)
+        return re.compile(f"(?:{find})|{re.escape(find)}", re.I)
+    except re.error:
+        return re.compile(re.escape(find), re.I)
 
 
 def read_page(url: str, find: str = "", source: bool = False, site: str = "") -> str:
@@ -321,8 +338,8 @@ def read_page(url: str, find: str = "", source: bool = False, site: str = "") ->
     if source:
         if not find:
             return head + raw[:6000]
-        rx = re.compile(find, re.I)
-        hits = [raw[max(0, m.start() - 200): m.end() + 200] for m in rx.finditer(raw)][:10]
+        rx = _find_rx(find)
+        hits = [raw[max(0, m.start() - 200): m.end() + 300] for m in rx.finditer(raw)][:10]
         return head + ("\n---\n".join(hits) if hits else f"No match for '{find}' in the HTML source.")
     p = PageParser()
     try:
@@ -332,10 +349,20 @@ def read_page(url: str, find: str = "", source: bool = False, site: str = "") ->
     text = " ".join(NAV_TEXT.sub(" ", " ".join(p.body_text)).split())
     head += f"Title: {' '.join(p.title.split())}\n"
     if find:
+        rx = _find_rx(find)
         sents = re.split(r"(?<=[.!?])\s+", text)
-        rx = re.compile(find, re.I)
         hits = [s for s in sents if rx.search(s)][:15]
-        return head + ("\n".join(f"- {s[:400]}" for s in hits) if hits else f"No sentence on this page contains '{find}'.")
+        if hits:
+            return head + "\n".join(f"- {s[:400]}" for s in hits)
+        # not in the page's own text: say where else it is, so absence is never assumed
+        full = " ".join(" ".join(p.text).split())
+        chrome = list(dict.fromkeys(full[max(0, m.start() - 150): m.end() + 150] for m in rx.finditer(full)))[:5]
+        if chrome:
+            return head + f"Not in the page's own text. Found only in menus, header, footer or sidebars:\n" + "\n".join(f"- {c}" for c in chrome)
+        src = [raw[max(0, m.start() - 200): m.end() + 300] for m in rx.finditer(raw)][:5]
+        if src:
+            return head + f"Not in any visible text. Found only in the HTML source (code, structured data, meta tags or hidden elements):\n" + "\n---\n".join(src)
+        return head + f"'{find}' does not appear anywhere on this page: not in the text, the menus, or the HTML source."
     return head + text[:6000] + ("…" if len(text) > 6000 else "")
 
 
@@ -345,6 +372,9 @@ def review(d: dict, prev: dict | None, cfg: dict) -> dict:
         raise SystemExit("No Anthropic API key: set ANTHROPIC_API_KEY or add it to keys.json.")
     headers = {"x-api-key": key, "anthropic-version": "2026-10-21", "anthropic-beta": "server-side-fallback-2026-07-01"}
     tools = _tools(cfg["owners"])
+    min_checks = min(int(cfg.get("min_checks", 10)), int(cfg["max_page_reads"]))
+    system = SYSTEM.replace("{min_checks}", str(min_checks))
+    pushed_back = False
     msg = ("Results of this run:\n```json\n" + json.dumps(d, indent=1) + "\n```\n\n"
            + ("Previous run, for comparison:\n```json\n" + json.dumps(prev, indent=1) + "\n```\n" if prev else "There is no previous run to compare with.\n")
            + f"\nYou may read up to {cfg['max_page_reads']} pages. Review the results, then call submit_review.")
@@ -352,7 +382,7 @@ def review(d: dict, prev: dict | None, cfg: dict) -> dict:
     usage = {"input": 0, "output": 0, "page_reads": 0, "model": cfg["model"]}
     nudges = 0
     for _ in range(int(cfg["max_turns"])):
-        resp = _post(API_URL, headers, {"model": cfg["model"], "max_tokens": 16000, "system": SYSTEM, "tools": tools,
+        resp = _post(API_URL, headers, {"model": cfg["model"], "max_tokens": 16000, "system": system, "tools": tools,
                                         "tool_choice": {"type": "auto"}, "output_config": {"effort": cfg["effort"]},
                                         "fallbacks": "default", "messages": messages})
         u = resp.get("usage") or {}
@@ -364,6 +394,14 @@ def review(d: dict, prev: dict | None, cfg: dict) -> dict:
         messages.append({"role": "assistant", "content": content})  # unchanged, thinking blocks included
         calls = [c for c in content if c.get("type") == "tool_use"]
         done = next((c for c in calls if c["name"] == "submit_review"), None)
+        if done and usage["page_reads"] < min_checks and not pushed_back:
+            pushed_back = True  # once: too few findings were checked against the live pages
+            results = [{"type": "tool_result", "tool_use_id": c["id"], "is_error": True,
+                        "content": f"Not accepted yet: you read {usage['page_reads']} pages. Check at least the top {min_checks} findings with read_page, "
+                                   "update the review, then call submit_review again."} if c["name"] == "submit_review"
+                       else {"type": "tool_result", "tool_use_id": c["id"], "is_error": True, "content": "Not run; read pages first."} for c in calls]
+            messages.append({"role": "user", "content": results})
+            continue
         if done:
             out = dict(done["input"])
             out["usage"] = usage
