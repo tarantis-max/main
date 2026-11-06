@@ -6,6 +6,7 @@
     python3 agent.py --review                review the newest results bundle again (no new checks)
     python3 agent.py --review bundle.zip     review that results bundle (a .zip, or a folder that holds one)
     python3 agent.py --dry-run               do everything except send email / Teams
+    python3 agent.py --update                get the newest version from GitHub (needs a Git copy: see windows-setup.cmd)
 
 Schedule it on the VM (see README, "Agent"). Settings: agent.json (created on first run, not in git).
 Secrets: ANTHROPIC_API_KEY (or keys.json "anthropic"); AGENT_SMTP_PASSWORD (or keys.json "smtp_password");
@@ -571,13 +572,44 @@ def send_teams(text: str) -> str:
         return f"posted to Teams (HTTP {r.status})"
 
 
+def update() -> int:
+    """Pull the newest version of the app from GitHub. Settings, keys and results are not in Git, so they are kept."""
+    import subprocess
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=HERE, capture_output=True, text=True)
+    try:
+        top = git("rev-parse", "--show-toplevel")
+    except FileNotFoundError:
+        print("Git is not installed. Run windows-setup.cmd once (it installs Git and makes an updatable copy).", file=sys.stderr)
+        return 2
+    if top.returncode != 0:
+        print("This folder is not a Git copy, so it cannot update itself. Run windows-setup.cmd once from this folder: it makes an "
+              "updatable copy and moves your keys, settings and results into it.", file=sys.stderr)
+        return 2
+    def version():
+        m = re.search(r'VERSION = "([^"]+)"', (HERE / "bundle.py").read_text(encoding="utf-8"))
+        return m.group(1) if m else "?"
+    before = version()
+    r = git("pull", "-q", "--ff-only")
+    print((r.stdout + r.stderr).strip(), file=sys.stderr)
+    if r.returncode != 0:
+        print("Update failed (see above). Nothing was changed.", file=sys.stderr)
+        return 1
+    after = version()
+    print(f"Version {before} -> {after}" if after != before else f"Already up to date ({after}).", file=sys.stderr)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Run the checks, have Claude verify the findings, and send a summary.")
     ap.add_argument("--skip", default="", help="comma-separated steps to skip: access, crawl, compare, answers, findability")
     ap.add_argument("--review", nargs="?", const="latest",
                     help="review finished results instead of running new checks: a results bundle .zip, a folder, or nothing for the newest bundle")
     ap.add_argument("--dry-run", action="store_true", help="do not send email or Teams")
+    ap.add_argument("--update", action="store_true", help="get the newest version from GitHub, then stop")
     a = ap.parse_args()
+    if a.update:
+        return update()
     cfg = load_config()
     skip = [x.strip() for x in a.skip.split(",") if x.strip()]
     if not secret("ANTHROPIC_API_KEY", "anthropic"):

@@ -37,6 +37,14 @@ Skip steps with `--skip`, e.g. `python3 runall.py --skip compare,answers`. Exit 
 - Set keys as environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`), not in `keys.json`.
 - Run `python3 app.py --no-browser` as a service (systemd on Linux, NSSM on Windows). Schedule `python3 agent.py` monthly (below).
 
+## Updating and setup on Windows
+
+One time: put `windows-setup.cmd` in your current app folder and double-click it (or run it there). It installs Git if needed, downloads an updatable copy of the app to `%USERPROFILE%\AI_Ready_app`, and copies your keys, settings and results into it. Your old folder is left as is.
+
+After that, get new versions with `python agent.py --update`. Settings, keys and results are not in Git, so updates never touch them.
+
+To have an AI agent do setup and upkeep for you, open Claude Code in the app folder. `CLAUDE.md` tells it how to update, configure, schedule and run the app, and how to self-check results before reporting them.
+
 ## Agent (scheduled run + review)
 
 `agent.py` does the whole job on a schedule:
