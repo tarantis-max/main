@@ -872,8 +872,16 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
     links_abs = [urljoin(url, h.strip()) for h in p.links]
     # A. priority page elements (EAB standard)
     fp = p.first_p.get("main") or p.first_p.get("other")
-    conn = [label for label, rx in MESSAGES.get("connections", {}).items()
-            if any(re.search(rx, urlsplit(u).path, re.I) and norm(u) != norm(url) for u in body_links_abs)]
+    # each body link counts once, for its most specific destination (Admissions, aid, outcomes before the general School of Medicine)
+    dests = list(MESSAGES.get("connections", {}).items())
+    order = [d for d in dests if d[0] != "School of Medicine"] + [d for d in dests if d[0] == "School of Medicine"]
+    conn = []
+    for u in body_links_abs:
+        if norm(u) == norm(url):
+            continue
+        hit = next((label for label, rx in order if re.search(rx, urlsplit(u).path, re.I)), None)
+        if hit and hit not in conn:
+            conn.append(hit)
     meta_author = p.meta.get("author", "").strip()
     pp = {
         "direct_answer": bool(fp and 20 <= fp[0] <= 80 and fp[1] == 0),

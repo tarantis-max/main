@@ -24,8 +24,8 @@
   ],
   "connections": {
     "School of Medicine": "/academics/medicine/",
-    "Admissions": "/admissions-aid/(apply|undergraduate|graduate|request)",
-    "Scholarships and aid": "financial-aid|scholarship",
+    "Admissions": "/admissions-aid/(apply|undergraduate|graduate|request)|/academics/medicine/admissions",
+    "Scholarships and aid": "financial-aid|scholarship|/aid/|tuition|cost",
     "Outcomes and careers": "outcome|career|placement|numbers"
   },
   "connections_required": 2,
