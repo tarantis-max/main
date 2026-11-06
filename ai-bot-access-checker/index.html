@@ -425,7 +425,7 @@ function renderFind(s) {
   const n = s.topics.length;
   $("#findout").innerHTML = `
   <div class="card"><h2 style="margin:0">${esc(s.set_label)}: ${s.counts.OK} of ${n} topics easy to find</h2>
-    <div class="note">From ${esc(s.url)} · ${s.pages_read} pages read, up to ${s.max_clicks} clicks${s.stopped ? " · stopped early" : ""}${s.page_cap_hit ? " · page limit reached" : ""} · checked ${esc(s.checked.replace("T", " "))}</div>
+    <div class="note">From ${esc(s.url)} · ${s.pages_read} pages read, up to ${s.max_clicks} clicks${s.stopped ? " · stopped early" : ""}${s.page_cap_hit ? ` · page limit reached, ${s.pages_cut || 0} unrelated pages not read` : ""} · checked ${esc(s.checked.replace("T", " "))}</div>
     ${s.warning ? `<div class="pill warn" style="white-space:normal;margin-top:8px;display:block;padding:8px 10px;border-radius:6px">${esc(s.warning)}</div>` : ""}
     <div style="margin-top:8px">${Object.entries(s.counts).map(([k, v]) => `<span class="pill ${cls[k]}">${esc(k)}: ${v}</span>`).join(" ")}</div></div>
   <div class="card"><div class="tablewrap"><table><thead><tr><th>Topic</th><th>Status</th><th>Closest page that answers it</th><th>Fix</th></tr></thead><tbody>

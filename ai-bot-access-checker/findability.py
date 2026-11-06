@@ -31,7 +31,7 @@ MEANING = {
     "Buried": "Stated in page text, but 2 or more clicks away or reached only through menus.",
     "PDF only": "Not stated on any page reached; a PDF about it is linked (PDF contents not read).",
     "No figure": "A page about it was reached, but no page states the fact.",
-    "Not found": "Nothing about it within the click limit.",
+    "Not found": "Nothing about it within the click limit. A page may exist further away.",
 }
 
 
@@ -91,6 +91,7 @@ class Find:
         self.nodes: dict[str, dict] = {}   # url -> {clicks, menu, path, title, text, status}
         self.pdfs: dict[str, dict] = {}    # pdf url -> {text, clicks, menu, path}
         self.skipped: dict[str, int] = {}
+        self.cut = 0                       # unrelated pages not read because of the page limit
         self.state, self.progress, self.error = "pending", "", ""
         self.result: dict | None = None
         self._stop = threading.Event()
@@ -147,6 +148,10 @@ class Find:
             return bool(re.search(self.tset["fact_pages"], path, re.I))
         return bool(self.topic_section) and path.startswith(self.topic_section)
 
+    def _same_site(self, u: str) -> bool:
+        h, base = urlsplit(u).netloc.lower(), self.host.lower().removeprefix("www.")
+        return h == base or h.endswith("." + base)
+
     def _in_site(self, u: str) -> bool:
         return urlsplit(u).scheme in ("http", "https") and self._crawl.in_scope(u)
 
@@ -162,13 +167,19 @@ class Find:
 
     def _walk(self):
         self.nodes[self.start] = {"clicks": 0, "menu": 0, "path": []}
-        level, fetched = [self.start], 0
+        level, fetched, fetched_off = [self.start], 0, 0
         seen_final: set[str] = set()
         for clicks in range(self.max_clicks + 1):
             if not level or self._stop.is_set():
                 break
-            level.sort(key=lambda u: not self._on_topic(u))  # topic pages first, so the page limit cuts unrelated pages
-            level = level[: max(0, self.max_pages - fetched)]
+            # the topic set's own pages are always read (up to a hard 1,000); the page limit only cuts unrelated pages
+            on = [u for u in level if self._on_topic(u)][: max(0, 1000 - fetched)]
+            off = [u for u in level if not self._on_topic(u)]
+            keep = max(0, self.max_pages - fetched_off)
+            self.cut += max(0, len(off) - keep)
+            off = off[:keep]
+            fetched_off += len(off)
+            level = on + off
             self.progress = f"{clicks} click(s) out: reading {len(level)} page(s); {fetched} read so far"
             with ThreadPoolExecutor(self.workers) as ex:
                 got = list(ex.map(lambda u: (u, None if self._stop.is_set() else self._get(u)), level))
@@ -193,6 +204,8 @@ class Find:
                     cand = {"clicks": clicks + 1, "menu": n["menu"] + (0 if in_body else 1),
                             "path": n["path"] + [{"text": text or urlsplit(v).path, "via": "text" if in_body else "menu", "url": v}]}
                     if urlsplit(v).path.lower().endswith(".pdf"):
+                        if not self._same_site(v):
+                            continue  # another organization's PDF is not this site's answer
                         if not (self._on_topic(g["final"]) or (not self.topic_section and not self.tset.get("fact_pages") and inside)):
                             continue
                         old = self.pdfs.get(v)
@@ -272,7 +285,7 @@ class Find:
                 "set": self.set_id, "set_label": self.tset.get("label", self.set_id), "section": self.section,
                 "topic_section": self.topic_section, "warning": self.warning,
                 "max_clicks": self.max_clicks, "pages_read": len(read), "pdfs_seen": len(self.pdfs),
-                "page_cap_hit": len(self.nodes) > self.max_pages, "skipped": self.skipped,
+                "page_cap_hit": self.cut > 0, "pages_cut": self.cut, "skipped": self.skipped,
                 "stopped": self._stop.is_set(), "error": None if start.get("status") == 200 else f"The start page could not be read ({start.get('status') or 'no response'}).",
                 "counts": {s: sum(1 for r in topics if r["status"] == s) for s in STATUSES},
                 "topics": topics, "meaning": MEANING}
@@ -289,7 +302,8 @@ class Find:
             return f"Put the facts from \"{page}\" in page text and link that page from the start page's text; keep the PDF as a download."
         if r["status"] == "No figure":
             return f"State the fact on \"{page}\" in a sentence that answers the question directly."
-        return f"Add a page or section that answers this, inside {self.topic_section or self.section}, and link it from the start page's text."
+        return (f"Nothing found within {self.max_clicks} clicks. If a page that answers it exists, link it from the start page's text; "
+                f"if not, create one{' under ' + self.topic_section if self.topic_section else ''} and link it.")
 
 
 def report_html(s: dict) -> str:
@@ -318,7 +332,7 @@ code{font-size:11px;overflow-wrap:anywhere}@media (max-width:640px){.tiles{grid-
     n = len(s["topics"])
     lead = (f"<p><b>{c['OK']} of {n} topics are easy to find</b>: stated in page text on the start page or one click away through a link in page text. "
             f"{n - c['OK']} need work. Read {s['pages_read']} pages up to {s['max_clicks']} clicks out"
-            f"{'; stopped early' if s.get('stopped') else ''}{'; page limit reached' if s.get('page_cap_hit') else ''}.</p>")
+            f"{'; stopped early' if s.get('stopped') else ''}{f"; page limit reached, {s.get('pages_cut', 0)} unrelated pages not read" if s.get('page_cap_hit') else ''}.</p>")
     tiles = "<div class='tiles'>" + "".join(f"<div class='tile'><b>{c[k]}</b><span><span class='pill {cls[k]}'>{k}</span></span></div>" for k in STATUSES) + "</div>"
 
     def path(w):
