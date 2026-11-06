@@ -37,6 +37,18 @@ Skip steps with `--skip`, e.g. `python3 runall.py --skip compare,answers`. Exit 
 - Set keys as environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`), not in `keys.json`.
 - Run `python3 app.py --no-browser` as a service (systemd on Linux, NSSM on Windows). Schedule `python3 runall.py` monthly.
 
+## Page Check tab
+
+Checks one page for everything the site crawl looks for and lists what it found, problems first: the 23 page checks, AI bot access in robots.txt for that page, structured data (and, on the homepage, the 8 organization schema checks), EAB's five priority-page elements, approved proof points and numbers, and outdated or off-brand wording. Takes a few seconds; no crawl.
+
+From the command line:
+
+```bash
+python3 pagescan.py https://www.methodist.edu
+```
+
+Add `--json` for the full result.
+
 ## Bot Access tab
 
 Checks 38 AI crawlers (OpenAI, Anthropic, Google, Apple, Microsoft, Perplexity, Meta, Amazon, ByteDance, Common Crawl, Cohere, Mistral, and others). For each bot it reports:

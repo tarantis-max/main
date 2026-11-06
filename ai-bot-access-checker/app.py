@@ -23,6 +23,7 @@ from report import build as build_report
 from bundle import make_bundle, VERSION
 from compare import Compare
 from answers import AnswerRun, AskJob, key_status, save_keys, load_questions, list_openai_models, list_gemini_models, load_keys
+from pagescan import scan as page_scan
 from runall import RunAll, load_settings, save_settings, PRESETS
 
 JOBS: dict[str, Crawl] = {}
@@ -274,6 +275,15 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 pages = [{k: v for k, v in p.items() if not k.startswith("_")} for p in list(c.results)]
                 self._send(200, json.dumps({"summary": c.summary(), "pages": pages, "pdfs": c.pdf_report()}).encode(), "application/json")
+        elif u.path == "/api/scan":
+            target = (parse_qs(u.query).get("url") or [""])[0].strip()
+            if not target:
+                self._send(400, b'{"error":"Type a web address first."}', "application/json")
+                return
+            try:
+                self._send(200, json.dumps(page_scan(target)).encode(), "application/json")
+            except Exception as e:
+                self._send(500, json.dumps({"error": f"The scan failed: {type(e).__name__}: {e}"}).encode(), "application/json")
         elif u.path == "/api/ask/status":
             job = ASKS.get((parse_qs(u.query).get("id") or [""])[0])
             if not job:

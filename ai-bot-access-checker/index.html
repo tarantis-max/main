@@ -100,6 +100,7 @@
   </div>
 
   <div class="tabs">
+    <button data-tab="scan">Page Check</button>
     <button data-tab="access" class="on">Bot Access</button>
     <button data-tab="ready">Site Readiness</button>
     <button data-tab="compare">Competitors</button>
@@ -176,6 +177,16 @@
       Expect about 2-4 minutes per site at 200 pages. Rank 1 = best. Bold = best value. The latest finished comparison is included in the results bundle.</div>
   </section>
   <!-- ===================== AI ANSWERS ===================== -->
+  <section id="tab-scan" hidden>
+    <form id="scanf" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <input type="text" class="url" id="scanurl" value="https://www.methodist.edu" aria-label="Web address to check">
+      <button id="scango">Check this page</button>
+      <span id="scanmsg" class="note"></span>
+    </form>
+    <div class="note" style="margin:6px 0 12px">Checks one page for everything the site crawl looks for: page checks, AI bot access, structured data, EAB’s five elements, approved numbers and proof points, outdated and off-brand wording. Takes a few seconds.</div>
+    <div id="scanout"></div>
+  </section>
+
   <section id="tab-ask" hidden>
     <form id="askf" class="card" style="display:flex;flex-direction:column;align-items:stretch;gap:10px;text-align:left">
       <label for="askq"><b>Ask a question</b> <span class="note">Sent to each AI at the same time, with web search on, the same way the answer test asks. Ctrl+Enter sends.</span></label>
@@ -231,6 +242,61 @@
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// ---------------- Page check (one page)
+function renderScan(s) {
+  if (s.error) { $("#scanout").innerHTML = `<div class="card err">${esc(s.error)}</div>`; return; }
+  const lvl = { problem: ["bad", "Problem"], check: ["warn", "Check"], good: ["ok", "OK"] };
+  const b = s.basics, bots = s.bots || {};
+  const yes = v => v ? '<span class="pill ok">pass</span>' : '<span class="pill bad">fail</span>';
+  $("#scanout").innerHTML = `
+  <div class="card"><h2 style="margin:0">${esc(s.final_url)}</h2>
+    <div class="note">${s.redirected ? "Redirected from " + esc(s.url) + " · " : ""}Checked ${esc(s.checked.replace("T", " "))}</div>
+    <div class="summary" style="margin-top:10px">
+      <div><b>Score</b><span class="big">${s.score}</span></div>
+      <div><b>Grade</b><span class="big" style="color:var(--${s.grade === "Ready" ? "ok" : "bad"})">${esc(s.grade)}</span></div>
+      <div><b>EAB elements</b><span class="big">${s.eab.score} of 5</span></div>
+      <div><b>Reading grade</b><span class="big">${b.reading_grade ?? "-"}</span></div>
+      <div><b>Words</b><span class="big">${b.words}</span></div>
+    </div></div>
+  <div class="card"><h2>What we found</h2>
+    ${s.findings.map(f => `<div style="display:flex;gap:8px;align-items:flex-start;margin:6px 0"><span class="pill ${lvl[f.level][0]}" style="flex:none">${lvl[f.level][1]}</span><span>${esc(f.text)}</span></div>`).join("")}</div>
+  <div class="card"><h2>The basics</h2><div class="tablewrap"><table><tbody>
+    <tr><td>Title</td><td>${esc(b.title) || "-"}</td></tr>
+    <tr><td>Description</td><td>${esc(b.description) || '<span class="muted">none</span>'}</td></tr>
+    <tr><td>Headings</td><td>${b.h1} H1 · ${b.h2} H2 · ${b.question_headings} phrased as questions</td></tr>
+    <tr><td>Structured data</td><td>${esc(b.schema_types.join(", ")) || "none valid"}${b.invalid_structured_data_blocks ? ` · <span class="pill bad">${b.invalid_structured_data_blocks} block(s) with errors</span>` : ""}${b.faq_schema ? " · FAQ schema" : ""}</td></tr>
+    <tr><td>noindex / noai</td><td>${esc(b.noindex_or_noai.join(", ")) || "none"}</td></tr>
+    <tr><td>Canonical</td><td>${esc(b.canonical) || "none"}</td></tr>
+    <tr><td>Response time</td><td>${b.response_ms} ms</td></tr>
+    <tr><td>AI search bots</td><td>${bots.error ? esc(bots.error) : `${(bots.search_allowed || []).length} allowed${(bots.search_blocked || []).length ? ", blocked: " + esc(bots.search_blocked.join(", ")) : ""}`}</td></tr>
+    <tr><td>Deny-list bots not blocked</td><td>${esc((bots.deny_list_not_blocked || []).join(", ")) || "none"}</td></tr>
+  </tbody></table></div></div>
+  <div class="card"><h2>EAB priority-page standard: ${s.eab.score} of 5</h2><div class="tablewrap"><table><tbody>
+    ${s.eab.elements.map(e => `<tr><td class="nw"><b>${esc(e.label)}</b></td><td>${yes(e.pass)}</td><td class="muted">${esc(e.rule)}</td></tr>`).join("")}
+  </tbody></table></div><div class="note">Connections found in the page body: ${esc(s.eab.connections_found.join(", ")) || "none"} · first paragraph: ${s.eab.first_paragraph_words ?? 0} words</div></div>
+  <div class="card"><h2>Messages</h2>
+    <div><b>Approved proof points here:</b> ${esc(s.messages.proof_points.join("; ")) || "none"}</div>
+    <div class="note" style="margin-top:4px">Not on this page: ${esc(s.messages.proof_points_missing.join("; ")) || "none"}</div>
+    ${s.messages.numbers.length ? `<div class="tablewrap" style="margin-top:8px"><table><thead><tr><th>Number</th><th>Approved</th><th>On this page</th><th>Result</th></tr></thead><tbody>${s.messages.numbers.map(n => `<tr><td>${esc(n.label)}</td><td>${n.approved}</td><td>${esc(n.found.join(", "))}</td><td>${yes(n.matches)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+  </div>
+  ${s.organization ? `<div class="card"><h2>Homepage organization schema: ${s.organization.passed} of ${s.organization.total}</h2><div class="tablewrap"><table><tbody>${s.organization.rows.map(r => `<tr><td>${esc(r.label)}</td><td>${yes(r.pass)}</td><td class="muted">${esc(r.found)}</td></tr>`).join("")}</tbody></table></div></div>` : ""}
+  <div class="card"><h2>All page checks</h2><div class="tablewrap"><table><tbody>
+    ${s.checks.map(c => `<tr><td class="nw"><b>${esc(c.label)}</b>${c.critical ? ' <span class="muted">(critical)</span>' : ""}</td><td>${c.result === "pass" ? '<span class="pill ok">pass</span>' : c.result === "fail" ? '<span class="pill bad">fail</span>' : '<span class="muted">n/a</span>'}</td><td class="muted">${esc(c.rule)}</td></tr>`).join("")}
+  </tbody></table></div></div>`;
+}
+$("#scanf").onsubmit = async ev => {
+  ev.preventDefault();
+  const url = $("#scanurl").value.trim();
+  if (!url) { $("#scanmsg").textContent = "Type a web address first."; return; }
+  $("#scango").disabled = true; $("#scanmsg").textContent = "Checking…"; $("#scanout").innerHTML = "";
+  try {
+    const res = await fetch("/api/scan?url=" + encodeURIComponent(url));
+    const d = await res.json();
+    if (!res.ok) $("#scanout").innerHTML = `<div class="card err">${esc(d.error)}</div>`; else renderScan(d);
+  } catch (e) { $("#scanout").innerHTML = `<div class="card err">The app didn’t answer. Is it still running?</div>`; }
+  $("#scango").disabled = false; $("#scanmsg").textContent = "";
+};
 
 // ---------------- Ask the AIs (live)
 let askjob = null, asktimer = null;
@@ -330,6 +396,7 @@ document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   $("#tab-compare").hidden = b.dataset.tab !== "compare";
   $("#tab-answers").hidden = b.dataset.tab !== "answers";
   $("#tab-ask").hidden = b.dataset.tab !== "ask";
+  $("#tab-scan").hidden = b.dataset.tab !== "scan";
   if (b.dataset.tab === "ask") loadAskHistory();
 });
 
