@@ -286,7 +286,7 @@
     }
   ],
   "findability": {
-    "_about": "Findability check: topics a student looks for, starting from a section page. 'page' finds a page about the topic (title, headings or address). 'fact' is the statement that answers it (must be in the page's own text, not menus or footer). Case-insensitive regular expressions.",
+    "_about": "Findability check: topics a student looks for, starting from a section page. 'page' finds a page about the topic (title, headings or address). 'fact' is the statement that answers it (must be in the page's own text, not menus or footer). Case-insensitive regular expressions. 'match' picks the set from the start address. 'section' is where a set's facts belong; elsewhere 'context' must appear next to the fact, unless a topic has \"any_page\": true. 'not_near' skips a match with those words next to it. 'skip_pages' are never counted. 'fact_pages' (a pattern on the address) can replace 'section' when a set's pages are spread across the site.",
     "max_clicks": 3,
     "max_pages": 300,
     "sets": {
@@ -299,7 +299,7 @@
             "id": "cost",
             "label": "Tuition and cost of attendance",
             "page": "tuition|cost of attendance|\\bcost\\b",
-            "fact": "(tuition|cost of attendance)[^.\\n]{0,120}\\$\\s?\\d{1,3}(,\\d{3})+|\\$\\s?\\d{1,3}(,\\d{3})+[^.\\n]{0,60}(tuition|cost of attendance)",
+            "fact": "(tuition|cost of attendance)[^.\\n$]{0,120}\\$\\s?\\d{1,3}(,\\d{3})+|\\$\\s?\\d{1,3}(,\\d{3})+ (in |a year in |per year in |of |for )?(tuition|cost of attendance)",
             "not_near": "remission|scholarship|award|grant"
           },
           {
@@ -342,11 +342,77 @@
             "id": "outcomes",
             "label": "Outcomes: residency match and placement",
             "page": "outcomes?|residenc(y|ies)\\b|\\bmatch\\b",
-            "fact": "match (rate|list|results)|residenc(y|ies)\\b[^.\\n]{0,100}(\\d+%|match(ed)?|placement)|\\d+%[^.\\n]{0,60}(match|residenc(y|ies)\\b)"
+            "fact": "match (rate|list|results)[^.\\n]{0,60}\\d|\\d+%[^.\\n]{0,60}(match|residenc(y|ies)\\b)|residenc(y|ies)\\b[^.\\n]{0,100}\\d+%|\\b\\d+ (students|graduates|seniors) (matched|placed)"
           }
         ],
         "context": "School of Medicine|medical school|medical education|\\bM\\.?D\\.?\\b|LCME|AMCAS|MCAT|medical students?",
-        "skip_pages": "/(directory|news|events?)/"
+        "skip_pages": "/(directory|news|events?)/",
+        "match": "^/academics/medicine/"
+      },
+      "undergraduate": {
+        "label": "Undergraduate (first-year)",
+        "start": "https://www.methodist.edu/",
+        "match": "^/$|^/admissions-aid/(undergraduate|apply|financial-aid|request|admitted)|^/explore-mu/|^/prospective-students/",
+        "section": "",
+        "context": "first-year|first year|freshm[ae]n|undergraduate|high school|incoming (students?|class)|admitted students?|transfer students?|new students",
+        "skip_pages": "/(directory|news|events?)/|^/academics/medicine/|^/provost-search/|^/admissions-aid/graduate/",
+        "topics": [
+          {
+            "id": "cost",
+            "label": "Tuition and cost of attendance",
+            "page": "tuition|cost of attendance|\\bcost\\b",
+            "fact": "(tuition|cost of attendance|cost to attend|average cost)[^.\\n$]{0,120}\\$\\s?\\d{1,3}(,\\d{3})+|\\$\\s?\\d{1,3}(,\\d{3})+ (in |a year in |per year in |of |for )?(tuition|cost of attendance)",
+            "not_near": "per credit hour|graduate program|doctor|MBA|MHA|salary|earn"
+          },
+          {
+            "id": "aid",
+            "label": "Financial aid and scholarships",
+            "page": "financial aid|scholarships?",
+            "fact": "FAFSA|federal school code|scholarships?[^.\\n]{0,80}\\$\\s?\\d|\\d+% of (students|undergraduates|first-year students)[^.\\n]{0,60}(aid|scholarship)",
+            "any_page": true
+          },
+          {
+            "id": "deadline",
+            "label": "Application deadline",
+            "page": "\\bapply\\b|application|deadlines?",
+            "fact": "(priority|application|early action|early decision|regular decision|scholarship) (deadline|date)[^.\\n]{0,80}(January|February|March|April|May|June|July|August|September|October|November|December|Jan\\.?|Feb\\.?|Aug\\.?|Sept?\\.?|Oct\\.?|Nov\\.?|Dec\\.?) \\d{1,2}|(January|February|March|April|May|June|July|August|September|October|November|December|Jan\\.?|Feb\\.?|Aug\\.?|Sept?\\.?|Oct\\.?|Nov\\.?|Dec\\.?) \\d{1,2}[^.\\n]{0,60}(priority|application|early action|regular decision) deadline|rolling admission"
+          },
+          {
+            "id": "test_gpa",
+            "label": "GPA and test score policy",
+            "page": "requirements|admission|test[- ]optional",
+            "fact": "test[- ]optional|GPA[^.\\n]{0,60}\\b[234]\\.\\d|\\b[234]\\.\\d{1,2}\\b[^.\\n]{0,40}GPA|\\b(SAT|ACT)\\b[^.\\n]{0,40}\\b\\d{2,4}\\b"
+          },
+          {
+            "id": "majors",
+            "label": "Number of majors and programs",
+            "page": "programs|majors|areas of study",
+            "fact": "\\b\\d{2,3}\\+? (majors|undergraduate (programs|majors|degrees)|areas of study|programs of study|academic programs|degree programs)",
+            "any_page": true
+          },
+          {
+            "id": "class_size",
+            "label": "Class size or student-faculty ratio",
+            "page": "in brief|numbers|facts|class size",
+            "fact": "\\b\\d{1,2}\\s?(:|to)\\s?1\\b[^.\\n]{0,40}(student|ratio)|student[- ](to[- ])?faculty ratio[^.\\n]{0,30}\\d{1,2}\\s?(:|to)\\s?1|average class size[^.\\n]{0,30}\\d{1,3}",
+            "any_page": true
+          },
+          {
+            "id": "housing",
+            "label": "Housing for first-year students",
+            "page": "housing|residence life|residence halls?",
+            "fact": "(first-year|first year|freshm[ae]n|new) students?[^.\\n]{0,100}(live on campus|residence halls?|on-campus housing)|(live on campus|residence halls?|on-campus housing)[^.\\n]{0,100}(first-year|first year|freshm[ae]n|required)",
+            "any_page": true
+          },
+          {
+            "id": "outcomes",
+            "label": "Outcomes: jobs and graduate school",
+            "page": "outcomes?|career|numbers",
+            "fact": "\\d+%[^.\\n]{0,80}(employed|employment|graduate school|grad school|job|placement|working)|(employed|employment|placement) rate[^.\\n]{0,60}\\d+%",
+            "any_page": true
+          }
+        ],
+        "fact_pages": "^/admissions-aid/(undergraduate|apply|financial-aid|admitted|request)|^/explore-mu/|^/prospective-students/|^/life-at-mu/housing"
       }
     }
   }

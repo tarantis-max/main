@@ -35,20 +35,24 @@ MEANING = {
 }
 
 
-def pick_set(start: str, set_id: str | None) -> tuple[str, dict]:
+def pick_set(start: str, set_id: str | None) -> tuple[str, dict, bool]:
+    """The topic set to use, and whether it matched the start address (False = fallback, worth a warning)."""
     sets = CFG.get("sets", {})
     if not sets:
         raise ValueError("messages.json has no findability topics.")
     if set_id:
         if set_id not in sets:
             raise ValueError(f"Unknown topic set '{set_id}'. Choose one of: {', '.join(sets)}.")
-        return set_id, sets[set_id]
+        return set_id, sets[set_id], True
     path = urlsplit(start).path or "/"
     for k, v in sets.items():
-        if v.get("section") and path.startswith(v["section"]):
-            return k, v
+        if v.get("match") and re.search(v["match"], path, re.I):
+            return k, v, True
     k = next(iter(sets))
-    return k, sets[k]
+    return k, sets[k], False
+
+
+NAV_TEXT = re.compile(r"Skip (Sub |Main )?Navigation|Skip to (main )?content|Skip to site alert|Explore This Section( Close)?", re.I)
 
 
 def _sentence(text: str, m: re.Match) -> str:
@@ -68,12 +72,19 @@ class Find:
         if "://" not in start:
             start = "https://" + start
         self.start = norm(start)
-        self.set_id, self.tset = pick_set(self.start, set_id)
+        self.set_id, self.tset, matched = pick_set(self.start, set_id)
         self.max_clicks = int(max_clicks or CFG.get("max_clicks", 3))
         self.max_pages = int(max_pages or CFG.get("max_pages", 300))
         sp = urlsplit(self.start)
         sec = self.tset.get("section") or ""
         self.section = sec if sec and (sp.path or "/").startswith(sec) else (sp.path.rsplit("/", 1)[0] + "/" if sp.path else "/")
+        self.topic_section = self.tset.get("section") or ""  # where this set's facts belong, wherever the walk starts
+        self.warning = ""
+        if not matched:
+            self.warning = f"No topic set matches this address, so the {self.tset.get('label', self.set_id)} topics were used. Choose a topic set to change this."
+        elif self.topic_section and not (sp.path or "/").startswith(self.topic_section):
+            self.warning = (f"The start page is outside {self.topic_section}. {self.tset.get('label', self.set_id)} facts count only on pages under "
+                            f"{self.topic_section}, or where the subject is named next to the fact.")
         self.host = sp.netloc
         self.delay, self.workers = delay, workers
         self._crawl = Crawl(self.start, max_pages=1, wordpress=False)  # robots.txt and scope rules
@@ -126,7 +137,15 @@ class Find:
                 "text": " ".join(" ".join(p.body_text).split()), "heads": " | ".join(p.subheads)}
 
     def _inside(self, u: str) -> bool:
+        """Inside the part of the site the walk follows."""
         return (urlsplit(u).path or "/").startswith(self.section)
+
+    def _on_topic(self, u: str) -> bool:
+        """On a page where this topic set's facts belong."""
+        path = urlsplit(u).path or "/"
+        if self.tset.get("fact_pages"):
+            return bool(re.search(self.tset["fact_pages"], path, re.I))
+        return bool(self.topic_section) and path.startswith(self.topic_section)
 
     def _in_site(self, u: str) -> bool:
         return urlsplit(u).scheme in ("http", "https") and self._crawl.in_scope(u)
@@ -148,6 +167,7 @@ class Find:
         for clicks in range(self.max_clicks + 1):
             if not level or self._stop.is_set():
                 break
+            level.sort(key=lambda u: not self._on_topic(u))  # topic pages first, so the page limit cuts unrelated pages
             level = level[: max(0, self.max_pages - fetched)]
             self.progress = f"{clicks} click(s) out: reading {len(level)} page(s); {fetched} read so far"
             with ThreadPoolExecutor(self.workers) as ex:
@@ -166,14 +186,14 @@ class Find:
                     n["dup_of"] = g["final"]
                     continue
                 seen_final.add(g["final"])
-                n.update(status=200, final=g["final"], title=g["title"], text=g["text"], heads=g["heads"])
+                n.update(status=200, final=g["final"], title=g["title"], text=" ".join(NAV_TEXT.sub(" ", g["text"]).split()), heads=g["heads"])
                 inside = self._inside(g["final"])
                 expand = clicks < self.max_clicks and inside
                 for v, text, in_body in g["links"]:
                     cand = {"clicks": clicks + 1, "menu": n["menu"] + (0 if in_body else 1),
                             "path": n["path"] + [{"text": text or urlsplit(v).path, "via": "text" if in_body else "menu", "url": v}]}
                     if urlsplit(v).path.lower().endswith(".pdf"):
-                        if not inside:
+                        if not (self._on_topic(g["final"]) or (not self.topic_section and not self.tset.get("fact_pages") and inside)):
                             continue
                         old = self.pdfs.get(v)
                         if clicks + 1 <= self.max_clicks and (not old or (cand["clicks"], cand["menu"]) < (old["clicks"], old["menu"])):
@@ -202,9 +222,9 @@ class Find:
         read = {u: n for u, n in self.nodes.items() if n.get("status") == 200 and "text" in n and not skip.search(urlsplit(n["final"]).path)}
         ctx = re.compile(self.tset.get("context") or ".", re.I)
 
-        def relevant(n, m) -> bool:
-            """Section pages always count; a page outside the section counts only when the topic's subject is named near the fact."""
-            if self._inside(n["final"]):
+        def relevant(n, m, t) -> bool:
+            """Pages in the topic set's section always count; elsewhere the subject must be named near the fact (unless the topic applies to any page)."""
+            if self._on_topic(n["final"]) or t.get("any_page"):
                 return True
             return bool(ctx.search(n["text"][max(0, m.start() - 300): m.end() + 300]))
         topics = []
@@ -213,8 +233,8 @@ class Find:
             notnear = re.compile(t["not_near"], re.I) if t.get("not_near") else None
             stated = []
             for u, n in read.items():
-                m = next((m for m in fact.finditer(n["text"]) if relevant(n, m)
-                          and not (notnear and notnear.search(n["text"][max(0, m.start() - 80): m.end() + 80]))), None)
+                m = next((m for m in fact.finditer(n["text"]) if relevant(n, m, t)
+                          and not (notnear and notnear.search(n["text"][max(0, m.start() - 20): m.end() + 40]))), None)
                 if m:
                     stated.append((n["clicks"], n["menu"] > 0, u, n, m))
             stated.sort(key=lambda x: (x[0], x[1], x[2]))
@@ -232,7 +252,7 @@ class Find:
                               key=lambda x: (x[0], x[1], x[2]))
                 def about_pages(field):
                     return sorted(((n["clicks"], n["menu"] > 0, u, n) for u, n in read.items() if about.search(field(u, n))
-                                   and (self._inside(n["final"]) or ctx.search(n.get("title", "")))), key=lambda x: (x[0], x[1], x[2]))
+                                   and (self._on_topic(n["final"]) or t.get("any_page") or ctx.search(n.get("title", "")))), key=lambda x: (x[0], x[1], x[2]))
                 pages = (about_pages(lambda u, n: n.get("title", "") + " " + urlsplit(n.get("final", u)).path.replace("-", " "))
                          or about_pages(lambda u, n: n.get("heads", "")))  # headings only when no title or address matches
                 if pdfs:
@@ -250,6 +270,7 @@ class Find:
         start = self.nodes[self.start]
         return {"url": self.start, "start_title": start.get("title", ""), "checked": dt.datetime.now().isoformat(timespec="seconds"),
                 "set": self.set_id, "set_label": self.tset.get("label", self.set_id), "section": self.section,
+                "topic_section": self.topic_section, "warning": self.warning,
                 "max_clicks": self.max_clicks, "pages_read": len(read), "pdfs_seen": len(self.pdfs),
                 "page_cap_hit": len(self.nodes) > self.max_pages, "skipped": self.skipped,
                 "stopped": self._stop.is_set(), "error": None if start.get("status") == 200 else f"The start page could not be read ({start.get('status') or 'no response'}).",
@@ -268,7 +289,7 @@ class Find:
             return f"Put the facts from \"{page}\" in page text and link that page from the start page's text; keep the PDF as a download."
         if r["status"] == "No figure":
             return f"State the fact on \"{page}\" in a sentence that answers the question directly."
-        return f"Add a page or section that answers this, inside {self.section}, and link it from the start page's text."
+        return f"Add a page or section that answers this, inside {self.topic_section or self.section}, and link it from the start page's text."
 
 
 def report_html(s: dict) -> str:
@@ -321,14 +342,17 @@ code{font-size:11px;overflow-wrap:anywhere}@media (max-width:640px){.tiles{grid-
     if also:
         also = "<h2>Other pages that state it</h2><table><tbody>" + also + "</tbody></table>"
     meaning = "<h2>What the statuses mean</h2><table><tbody>" + "".join(f"<tr><td><span class='pill {cls[k]}'>{k}</span></td><td>{e(v)}</td></tr>" for k, v in s["meaning"].items()) + "</tbody></table>"
-    method = (f"<h2>Method and limits</h2><ul><li>Starts at the page above and follows links up to {s['max_clicks']} clicks. Pages under <code>{e(s['section'])}</code> are followed; pages outside it are read but not followed.</li>"
+    method = (f"<h2>Method and limits</h2><ul><li>Starts at the page above and follows links up to {s['max_clicks']} clicks. Pages under <code>{e(s['section'])}</code> are followed; pages outside it are read but not followed."
+              + (f" Facts count on pages under <code>{e(s['topic_section'])}</code>; elsewhere only when the subject is named next to the fact." if s.get("topic_section") else
+                 " Facts count only when the subject is named next to the fact, unless the topic applies to any page.") + "</li>"
               "<li>A fact counts only when it is in the page's own text. Menus, headers, footers and sidebars don't count. A menu link still counts as a click, but the path is marked “menu”.</li>"
               "<li>Matching uses word patterns, so unusual wording can be missed. The patterns searched are listed below and can be edited in messages.json (findability).</li>"
               "<li>PDF contents are not read. People and news pages are not counted.</li></ul>"
               "<table><thead><tr><th>Topic</th><th>Page about it</th><th>Fact stated</th></tr></thead><tbody>"
               + "".join(f"<tr><td>{e(r['label'])}</td><td><code>{e(r['terms']['page'])}</code></td><td><code>{e(r['terms']['fact'])}</code></td></tr>" for r in s["topics"])
               + "</tbody></table>")
-    return head + top + lead + tiles + table + also + meaning + method + "</main></body></html>"
+    warn = f"<p class='warn' style='padding:10px;border-radius:6px'>{e(s['warning'])}</p>" if s.get("warning") else ""
+    return head + top + warn + lead + tiles + table + also + meaning + method + "</main></body></html>"
 
 
 def main() -> int:

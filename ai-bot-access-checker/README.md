@@ -70,7 +70,14 @@ Add `--json` for the full result, or `--report page-check.html` to also write a 
 
 ## Findability tab
 
-Starts on one page (default: the School of Medicine page) and follows links up to 3 clicks to find the facts a student looks for: tuition and cost, financial aid, application deadline, MCAT and GPA, Monarch Momentum, accreditation, class size, outcomes. For each topic it reports the closest page that states the fact, the clicks, the path, and the status:
+Starts on one page and follows links up to 3 clicks to find the facts a student looks for. Two topic sets:
+
+- **School of Medicine** (start pages under `/academics/medicine/`): tuition and cost, financial aid, application deadline, MCAT and GPA, Monarch Momentum, accreditation, class size, residency match.
+- **Undergraduate (first-year)** (the homepage and undergraduate admissions pages): tuition and cost, aid and FAFSA, application deadline, GPA and test policy, number of majors, student-faculty ratio, first-year housing, job and graduate-school outcomes.
+
+The set is picked from the start address, or chosen in the Topics menu. A set's facts count only on its own pages (School of Medicine pages; undergraduate admissions, Explore MU and housing pages), or elsewhere when the subject is named next to the fact. Starting from the homepage with the School of Medicine set therefore answers "how far is School of Medicine information from the homepage". The report warns when the start page is outside the set's pages or no set matched.
+
+For each topic it reports the closest page that states the fact, the clicks, the path, and the status:
 
 | Status | Meaning |
 |---|---|
