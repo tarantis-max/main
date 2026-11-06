@@ -23,7 +23,7 @@ from report import build as build_report
 from bundle import make_bundle, VERSION
 from compare import Compare
 from answers import AnswerRun, AskJob, key_status, save_keys, load_questions, list_openai_models, list_gemini_models, load_keys
-from pagescan import scan as page_scan
+from pagescan import scan as page_scan, report_html as page_report
 from runall import RunAll, load_settings, save_settings, PRESETS
 
 JOBS: dict[str, Crawl] = {}
@@ -42,6 +42,7 @@ COMPARES: dict[str, Compare] = {}
 ANSWERS: dict[str, AnswerRun] = {}
 RUNALLS: dict[str, RunAll] = {}
 ASKS: dict[str, AskJob] = {}
+SCANS: dict[str, dict] = {}  # page checks by id, so a report shows exactly what was on screen
 ASK_LOG = Path(__file__).resolve().parent / "ask-history.jsonl"  # every live question and its answers, kept on this computer (not in git)
 
 
@@ -281,9 +282,29 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(400, b'{"error":"Type a web address first."}', "application/json")
                 return
             try:
-                self._send(200, json.dumps(page_scan(target)).encode(), "application/json")
+                res = page_scan(target)
+                sid = uuid.uuid4().hex[:8]
+                SCANS[sid] = res
+                if len(SCANS) > 50:
+                    SCANS.pop(next(iter(SCANS)))
+                self._send(200, json.dumps({**res, "id": sid}).encode(), "application/json")
             except Exception as e:
                 self._send(500, json.dumps({"error": f"The scan failed: {type(e).__name__}: {e}"}).encode(), "application/json")
+        elif u.path == "/api/scan/report":
+            q = parse_qs(u.query)
+            res = SCANS.get((q.get("id") or [""])[0])
+            if not res:
+                self._send(404, b"That page check is no longer in memory. Run it again.", "text/plain")
+                return
+            body = page_report(res).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            if (q.get("download") or ["0"])[0] == "1":
+                host = safe_name(urlsplit(res.get("final_url") or res["url"]).netloc + urlsplit(res.get("final_url") or res["url"]).path)
+                self.send_header("Content-Disposition", f'attachment; filename="page-check-{host}-{time.strftime("%Y%m%d-%H%M")}.html"')
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
         elif u.path == "/api/ask/status":
             job = ASKS.get((parse_qs(u.query).get("id") or [""])[0])
             if not job:

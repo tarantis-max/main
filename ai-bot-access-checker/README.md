@@ -47,7 +47,7 @@ From the command line:
 python3 pagescan.py https://www.methodist.edu
 ```
 
-Add `--json` for the full result.
+Add `--json` for the full result, or `--report page-check.html` to also write a printable report. In the app, **Open report** and **Download report** appear after each check: a one-page summary with problems to fix (each with how to fix it and who owns it), items worth checking, what is working, and every check.
 
 ## Bot Access tab
 

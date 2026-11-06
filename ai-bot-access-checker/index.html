@@ -181,6 +181,8 @@
     <form id="scanf" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
       <input type="text" class="url" id="scanurl" value="https://www.methodist.edu" aria-label="Web address to check">
       <button id="scango">Check this page</button>
+      <button id="scanreport" type="button" disabled>Open report</button>
+      <button id="scandl" class="sec" type="button" disabled>Download report</button>
       <span id="scanmsg" class="note"></span>
     </form>
     <div class="note" style="margin:6px 0 12px">Checks one page for everything the site crawl looks for: page checks, AI bot access, structured data, EAB’s five elements, approved numbers and proof points, outdated and off-brand wording. Takes a few seconds.</div>
@@ -285,7 +287,11 @@ function renderScan(s) {
     ${s.checks.map(c => `<tr><td class="nw"><b>${esc(c.label)}</b>${c.critical ? ' <span class="muted">(critical)</span>' : ""}</td><td>${c.result === "pass" ? '<span class="pill ok">pass</span>' : c.result === "fail" ? '<span class="pill bad">fail</span>' : '<span class="muted">n/a</span>'}</td><td class="muted">${esc(c.rule)}</td></tr>`).join("")}
   </tbody></table></div></div>`;
 }
+let scanid = null;
+$("#scanreport").onclick = () => scanid && window.open("/api/scan/report?id=" + scanid, "_blank");
+$("#scandl").onclick = () => scanid && (location.href = "/api/scan/report?id=" + scanid + "&download=1");
 $("#scanf").onsubmit = async ev => {
+  $("#scanreport").disabled = $("#scandl").disabled = true;
   ev.preventDefault();
   const url = $("#scanurl").value.trim();
   if (!url) { $("#scanmsg").textContent = "Type a web address first."; return; }
@@ -293,7 +299,7 @@ $("#scanf").onsubmit = async ev => {
   try {
     const res = await fetch("/api/scan?url=" + encodeURIComponent(url));
     const d = await res.json();
-    if (!res.ok) $("#scanout").innerHTML = `<div class="card err">${esc(d.error)}</div>`; else renderScan(d);
+    if (!res.ok) $("#scanout").innerHTML = `<div class="card err">${esc(d.error)}</div>`; else { renderScan(d); scanid = d.id; $("#scanreport").disabled = $("#scandl").disabled = !d.id; }
   } catch (e) { $("#scanout").innerHTML = `<div class="card err">The app didn’t answer. Is it still running?</div>`; }
   $("#scango").disabled = false; $("#scanmsg").textContent = "";
 };
