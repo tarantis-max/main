@@ -276,6 +276,7 @@ class Find:
                     row["status"] = "No figure"
                     row["where"] = self._where(pages[0][2], pages[0][3])
                     row["also_on"] = [self._where(u2, n2) for _, _, u2, n2 in pages[1:4]]
+                    row["also_kind"] = "about"  # these pages cover the topic but don't state the fact
                 else:
                     row["status"] = "Not found"
             row["fix"] = self._fix(row)
@@ -352,9 +353,10 @@ code{font-size:11px;overflow-wrap:anywhere}@media (max-width:640px){.tiles{grid-
     also = ""
     for r in s["topics"]:
         if r.get("also_on"):
-            also += f"<tr><td>{e(r['label'])}</td><td>" + "<br>".join(f"<a class='url' href='{e(x['url'])}'>{e(x.get('title') or x['url'])}</a> <span class='muted'>({x['clicks']} click(s){', menu only' if x['menu_only'] else ''})</span>" for x in r["also_on"]) + "</td></tr>"
+            kind = "about it, no figure" if r.get("also_kind") == "about" else "states it"
+            also += f"<tr><td>{e(r['label'])}<div class='muted'>{kind}</div></td><td>" + "<br>".join(f"<a class='url' href='{e(x['url'])}'>{e(x.get('title') or x['url'])}</a> <span class='muted'>({x['clicks']} click(s){', menu only' if x['menu_only'] else ''})</span>" for x in r["also_on"]) + "</td></tr>"
     if also:
-        also = "<h2>Other pages that state it</h2><table><tbody>" + also + "</tbody></table>"
+        also = "<h2>Other pages</h2><table><tbody>" + also + "</tbody></table>"
     meaning = "<h2>What the statuses mean</h2><table><tbody>" + "".join(f"<tr><td><span class='pill {cls[k]}'>{k}</span></td><td>{e(v)}</td></tr>" for k, v in s["meaning"].items()) + "</tbody></table>"
     method = (f"<h2>Method and limits</h2><ul><li>Starts at the page above and follows links up to {s['max_clicks']} clicks. Pages under <code>{e(s['section'])}</code> are followed; pages outside it are read but not followed."
               + (f" Facts count on pages under <code>{e(s['topic_section'])}</code>; elsewhere only when the subject is named next to the fact." if s.get("topic_section") else

@@ -381,7 +381,7 @@
             "id": "test_gpa",
             "label": "GPA and test score policy",
             "page": "requirements|admission|test[- ]optional",
-            "fact": "test[- ]optional|GPA[^.\\n]{0,60}\\b[234]\\.\\d|\\b[234]\\.\\d{1,2}\\b[^.\\n]{0,40}GPA|\\b(SAT|ACT)\\b[^.\\n]{0,40}\\b\\d{2,4}\\b"
+            "fact": "test[- ]optional|GPA[^.\\n]{0,60}\\b[234]\\.\\d|\\b[234]\\.\\d{1,2}\\b[^.\\n]{0,40}GPA|\\b(?-i:SAT|ACT)\\b[^.\\n]{0,40}\\b\\d{2,4}\\b"
           },
           {
             "id": "majors",
@@ -408,7 +408,7 @@
             "id": "outcomes",
             "label": "Outcomes: jobs and graduate school",
             "page": "outcomes?|career|numbers",
-            "fact": "\\d+%[^.\\n]{0,80}(employed|employment|graduate school|grad school|job|placement|working)|(employed|employment|placement) rate[^.\\n]{0,60}\\d+%",
+            "fact": "\\d+(\\.\\d+)?%[^.\\n]{0,40}\\b(graduates|alumni|grads|class of \\d{4})\\b[^.\\n]{0,80}(employed|employment|graduate school|grad school|jobs?|placement|working)|\\b(graduates|alumni|grads)\\b[^.\\n]{0,80}\\d+(\\.\\d+)?%[^.\\n]{0,60}(employed|employment|graduate school|grad school|jobs?|placement)|\\b(employment|placement|job placement|career outcomes?) rate[^.\\n]{0,60}\\d+(\\.\\d+)?%",
             "any_page": true
           }
         ],
