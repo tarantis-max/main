@@ -499,6 +499,7 @@ ANSWER_PARTS = [  # id, label, weight (sums to 100), what earns it
     ("accuracy", "Accurate and current", 10, "No outdated wording, no number that differs from the approved figure, no off-brand phrase."),
 ]
 CITABLE_AT = 70  # answer quality needed for "Ready" on key pages
+TEMPLATE_OUTDATED = {"twitter", "old_copyright"}  # outdated items that normally sit in the shared footer
 GRADES = ("Ready", "Readable, not citable", "Not ready")
 
 
@@ -515,19 +516,38 @@ def answer_parts(p: dict) -> dict:
     msg = d.get("msg", {})
     approved = {c["id"]: c["approved"] for c in MESSAGES.get("numeric_claims", [])}
     wrong_number = any(v != approved.get(k) for k, vals in msg.get("claims", {}).items() if k in approved for v, _ in vals)
+    # outdated wording in the page's own content; footer items (Twitter, copyright) are one site-template fix, not a page's fault
+    if "outdated_body" in msg:
+        own_outdated = msg["outdated_body"]
+    else:  # pages saved before this field existed
+        own_outdated = [o[0] for o in msg.get("outdated", []) if o[0] not in TEMPLATE_OUTDATED]
     return {
         "direct_answer": 1.0 if el["direct_answer"] else 0.0,
         "proof": 1.0 if el["proof"] else 0.0,
         "structure": 1.0 if el["structure"] else 0.0,
         "connections": min(1.0, len(pp.get("connections", [])) / max(1, need)),
         "authority": 0.5 * bool(pp.get("owner")) + 0.5 * bool(pp.get("date_visible") or pp.get("published")),
-        "accuracy": 0.0 if (msg.get("outdated") or msg.get("banned") or wrong_number) else 1.0,
+        "accuracy": 0.0 if (own_outdated or msg.get("banned") or wrong_number) else 1.0,
     }
 
 
 def answer_score(p: dict) -> int:
     parts = answer_parts(p)
     return round(sum(w * parts[i] for i, _, w, _ in ANSWER_PARTS))
+
+
+def apply_key_checks(p: dict) -> None:
+    """A page made key by the priority list or as the homepage gets the key-page-only checks too."""
+    d, ch = p["detail"], p["checks"]
+    if p["status"] != 200:
+        return
+    if ch.get("readable") is None and d.get("reading_grade") is not None:
+        ch["readable"] = d["reading_grade"] <= 12
+    if ch.get("question_headings") is None:
+        ch["question_headings"] = bool(d.get("question_headings") or d.get("faq_schema"))
+    applicable = [v for v in ch.values() if v is not None]
+    p["score"] = round(100 * sum(applicable) / len(applicable)) if applicable else 0
+    p["failed"] = [c for c in CHECK_IDS if ch.get(c) is False]
 
 
 def regrade(p: dict, key: bool) -> dict:
@@ -879,6 +899,9 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
         if m_:
             a, b = max(0, m_.start() - 60), min(len(full_text), m_.end() + 60)
             msg["outdated"].append([x["id"], " ".join(full_text[a:b].split())])
+            if rx.search(page_text):  # in the page's own content, not only the shared header/footer
+                msg.setdefault("outdated_body", []).append(x["id"])
+    msg.setdefault("outdated_body", [])
     dated_page = bool(NEWS_PATH.search(sp.path) or p.meta.get("article:published_time") or '"datePublished"' in jsonld_raw)
     for cl in MESSAGES.get("numeric_claims", []):
         if dated_page:
@@ -1328,6 +1351,7 @@ class Crawl:
             page["redirected_from"] = url
         if (url in self.priority_set or final in self.priority_set or url == self.start) and not page["detail"]["key_page"]:  # the homepage always counts
             page["detail"]["priority"] = True
+            apply_key_checks(page)
             regrade(page, True)
         if url == self.start:
             page["_is_home"] = True

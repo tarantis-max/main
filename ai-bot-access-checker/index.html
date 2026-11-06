@@ -275,7 +275,7 @@ function renderScan(s) {
     <tr><td>Canonical</td><td>${esc(b.canonical) || "none"}</td></tr>
     <tr><td>Response time</td><td>${b.response_ms} ms</td></tr>
     <tr><td>AI search bots</td><td>${bots.error ? esc(bots.error) : `${(bots.search_allowed || []).length} allowed${(bots.search_blocked || []).length ? ", blocked: " + esc(bots.search_blocked.join(", ")) : ""}`}</td></tr>
-    <tr><td>Deny-list bots not blocked</td><td>${esc((bots.deny_list_not_blocked || []).join(", ")) || "none"}</td></tr>
+    <tr><td>Deny-list bots not blocked</td><td>${esc((bots.deny_list_not_blocked || []).join(", ")) || "none"}${(bots.deny_list_blocked_by_server || []).length ? `<div class="muted">Blocked by the server though robots.txt allows them: ${esc(bots.deny_list_blocked_by_server.join(", "))}</div>` : ""}</td></tr>
   </tbody></table></div></div>
   <div class="card"><h2>EAB priority-page standard: ${s.eab.score} of 5</h2><div class="tablewrap"><table><tbody>
     ${s.eab.elements.map(e => `<tr><td class="nw"><b>${esc(e.label)}</b></td><td>${yes(e.pass)}</td><td class="muted">${esc(e.rule)}</td></tr>`).join("")}

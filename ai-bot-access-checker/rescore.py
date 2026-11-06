@@ -15,7 +15,7 @@ import os
 import sys
 import zipfile
 
-from readiness import GRADES, answer_summary, regrade
+from readiness import GRADES, answer_summary, apply_key_checks, regrade
 from report import build as build_report
 
 
@@ -32,6 +32,7 @@ def rescore(path: str) -> tuple[dict, list[dict], dict, dict | None, dict | None
     for p in pages:
         if p["url"] in prio and not p["detail"].get("key_page"):
             p["detail"]["priority"] = True
+            apply_key_checks(p)
         regrade(p, bool(p["detail"].get("key_page") or p["detail"].get("priority")))
     summary["grades"] = {g: sum(1 for p in pages if p["grade"] == g) for g in GRADES}
     summary["answer"] = answer_summary(pages)

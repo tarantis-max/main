@@ -16,7 +16,7 @@ from html import escape as e
 from urllib.parse import urlsplit
 
 from ai_bot_check import deny_robots_snippet, fully_blocked
-from readiness import NOT_KEY_PATH, MESSAGES, CHECKS, CATEGORY, Crawl, regrade, answer_summary, CITABLE_AT, GRADES
+from readiness import NOT_KEY_PATH, MESSAGES, CHECKS, CATEGORY, Crawl, regrade, apply_key_checks, answer_summary, CITABLE_AT, GRADES
 
 LABEL = {c[0]: c[1] for c in CHECKS}
 CRITICAL = {c[0] for c in CHECKS if c[3]}
@@ -71,6 +71,7 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         if "access" not in p:
             if p["url"] in prio_set and not p["detail"].get("key_page"):
                 p["detail"]["priority"] = True
+                apply_key_checks(p)
             regrade(p, bool(p["detail"].get("key_page") or p["detail"].get("priority")))
     g = {k: sum(1 for p in pages if p["grade"] == k) for k in GRADES}
     ans = answer_summary(pages)

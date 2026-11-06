@@ -16,7 +16,7 @@ import json
 import sys
 from urllib.parse import urlsplit
 
-from ai_bot_check import run as bot_access
+from ai_bot_check import BOTS, BROWSER_UA, classify, fetch, run as bot_access
 from readiness import CHECKS, MESSAGES, PP_ELEMENTS, OUTDATED, ANSWER_PARTS, CITABLE_AT, Crawl, org_report, pp_elements, answer_parts, answer_score, access_ok
 
 
@@ -72,8 +72,17 @@ def scan(url: str) -> dict:
             "search_blocked": [b["bot"] for b in bots if b["purpose"] in ("search", "user") and b["policy"] != "deny" and b["robots_txt"] == "blocked"],
             "search_allowed": [b["bot"] for b in bots if b["purpose"] in ("search", "user") and b["policy"] != "deny" and b["robots_txt"] != "blocked"],
             "training_blocked": [b["bot"] for b in bots if b["purpose"] == "training" and b["policy"] != "deny" and b["robots_txt"] == "blocked"],
-            "deny_list_not_blocked": [b["bot"] for b in bots if b["policy"] == "deny" and b["robots_txt"] != "blocked"],
+            "deny_list_not_blocked": [],
+            "deny_list_blocked_by_server": [],
         }
+        # like the site report: a deny-list bot counts as blocked if robots.txt blocks it OR the server refuses it
+        ua = {t: u for t, _, _, u in BOTS}
+        base = fetch(page["url"], BROWSER_UA, max_bytes=200_000)
+        for b in bots:
+            if b["policy"] != "deny" or b["robots_txt"] == "blocked":
+                continue
+            refused = bool(ua.get(b["bot"])) and classify(fetch(page["url"], ua[b["bot"]], max_bytes=200_000), base).startswith(("blocked", "challenged"))
+            out["bots"]["deny_list_blocked_by_server" if refused else "deny_list_not_blocked"].append(b["bot"])
     except Exception as ex:  # robots.txt unreachable: report, carry on
         out["bots"] = {"error": f"{type(ex).__name__}: {ex}"}
 
@@ -146,7 +155,7 @@ def findings(s: dict) -> list[dict]:
             add("problem", f"{n['label']}: the page says {', '.join(map(str, n['found']))}; the approved figure is {n['approved']}.",
                 f"Change it to {n['approved']}, or update the approved figure in messages.json if {n['approved']} is wrong.", "Marketing")
     if b.get("deny_list_not_blocked"):
-        add("check", "Deny-list bots not blocked in robots.txt: " + ", ".join(b["deny_list_not_blocked"]) + ".",
+        add("check", "Deny-list bots not blocked (robots.txt allows them and the server serves them): " + ", ".join(b["deny_list_not_blocked"]) + ".",
             "Add the deny-list group from the executive report (Appendix D) to robots.txt, and block the same bots at the CDN or firewall.", "Web team")
     for p in s.get("messages", {}).get("banned", []):
         add("check", f"Off-brand phrase: “{p}”.", "Rewrite using the approved brand language.", "Marketing")
