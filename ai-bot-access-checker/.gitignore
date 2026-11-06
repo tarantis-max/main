@@ -5,3 +5,4 @@ results/
 runall.json
 *.png
 ask-history.jsonl
+agent.json

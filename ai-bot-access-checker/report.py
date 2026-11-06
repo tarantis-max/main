@@ -63,7 +63,9 @@ def _grade_pill(g: str) -> str:
     return f'<span class="pill {cls}">{e(g)}</span>'
 
 
-def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | None, answers: dict | None = None) -> str:
+def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | None, answers: dict | None = None,
+          collect: dict | None = None) -> str:
+    """collect, if given, receives the ranked action list as data: [(title, why, fix, owner, scope), ...]."""
     s = summary
     n = s["pages"]
     prio_set = {r["url"] for r in (s.get("priority_pages") or {}).get("rows", [])}
@@ -441,6 +443,8 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         act, why, _fix, owner, scope = a
         return "<tr><td>%d</td><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td></tr>" % (i, e(act), e(why), e(owner), e(scope))
 
+    if collect is not None:
+        collect["actions"] = [tuple(x) for x in actions]
     actions_html = "".join(exec_row(i, a) for i, a in enumerate(actions[:5], 1)) or '<tr><td colspan="5">No actions needed.</td></tr>'
     more_note = ('<p class="note">%d more action(s) and the steps for each are in the Action plan.</p>' % (len(actions) - 5)) if len(actions) > 5 else (
         '<p class="note">Steps for each action are in the Action plan.</p>' if actions else "")

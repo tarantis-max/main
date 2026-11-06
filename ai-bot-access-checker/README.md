@@ -35,7 +35,37 @@ Skip steps with `--skip`, e.g. `python3 runall.py --skip compare,answers`. Exit 
 - Keep the app on 127.0.0.1 (the default). It has no login and holds API keys. Never expose it to the network.
 - Reach it with an SSH tunnel (`ssh -L 8000:127.0.0.1:8000 you@vm`), or behind an IT-managed proxy with university sign-in.
 - Set keys as environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`), not in `keys.json`.
-- Run `python3 app.py --no-browser` as a service (systemd on Linux, NSSM on Windows). Schedule `python3 runall.py` monthly.
+- Run `python3 app.py --no-browser` as a service (systemd on Linux, NSSM on Windows). Schedule `python3 agent.py` monthly (below).
+
+## Agent (scheduled run + review)
+
+`agent.py` does the whole job on a schedule:
+
+1. Runs every check (Run everything), then Findability from the homepage (undergraduate and School of Medicine topics) and from the School of Medicine page.
+2. Claude reviews the results. It opens the pages behind the top findings (read-only, this site only) to confirm them, drops false matches with a reason, and compares with the previous run.
+3. Saves `agent-review.html` (fix list, dismissed matches, draft email to the web team) in the run's results folder.
+4. Emails you the summary and/or posts it to a Teams channel.
+
+It never changes the website and never sends the email to the web team; you review the draft and send it.
+
+```
+python3 agent.py                                  full run (several hours: the crawl and AI answer test are the long parts)
+python3 agent.py --review results/20261106-1306   review a finished run again, no new checks
+python3 agent.py --skip answers --dry-run         skip a step; don't send anything
+```
+
+Settings: `agent.json` (created on first run, not in git): `email_to`, `email_from`, `smtp_host`, `smtp_port` (587 STARTTLS, 465 SSL), `smtp_user`, the Findability start pages, `model` (default `claude-sonnet-5-5`), `effort`, `max_page_reads` (default 40), `max_turns`.
+Secrets (environment or `keys.json`, never `agent.json`): `ANTHROPIC_API_KEY`, `AGENT_SMTP_PASSWORD`, `AGENT_TEAMS_WEBHOOK` (a Teams Workflows "post to a channel when a webhook request is received" URL).
+Cost: the review is a few cents to a few dollars per run (printed at the end, from the token counts); the AI answer test costs what it costs today.
+Server-side fallback is on: if the model declines a request, the API retries it on a fallback model.
+
+Schedule monthly, Linux (crontab -e), 6:17 a.m. on the 1st:
+
+```
+17 6 1 * * cd /opt/ai-bot-access-checker && /usr/bin/python3 agent.py >> agent.log 2>&1
+```
+
+Windows: Task Scheduler, action `python`, arguments `agent.py`, start in the app folder.
 
 ## How pages are graded
 
