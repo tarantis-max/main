@@ -101,6 +101,7 @@
 
   <div class="tabs">
     <button data-tab="scan">Page Check</button>
+    <button data-tab="find">Findability</button>
     <button data-tab="access" class="on">Bot Access</button>
     <button data-tab="ready">Site Readiness</button>
     <button data-tab="compare">Competitors</button>
@@ -187,6 +188,20 @@
     </form>
     <div class="note" style="margin:6px 0 12px">Checks one page for everything the site crawl looks for: page checks, AI bot access, structured data, EAB’s five elements, approved numbers and proof points, outdated and off-brand wording. Takes a few seconds.</div>
     <div id="scanout"></div>
+  </section>
+
+  <section id="tab-find" hidden>
+    <form id="findf" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <input type="text" class="url" id="findurl" value="https://www.methodist.edu/academics/medicine/" aria-label="Start page">
+      <select id="findset" aria-label="Topics"></select>
+      <button id="findgo">Check findability</button>
+      <button id="findstop" class="sec" type="button" hidden>Stop</button>
+      <button id="findreport" type="button" disabled>Open report</button>
+      <button id="finddl" class="sec" type="button" disabled>Download report</button>
+      <span id="findmsg" class="note"></span>
+    </form>
+    <div class="note" style="margin:6px 0 12px">Starts on one page and follows links up to 3 clicks to find the facts a student looks for (cost, aid, deadline and more). For each, it reports the closest page that states it in page text, the clicks and the path, and whether the path uses menus only. Topics are editable in <code>messages.json</code> (findability). Takes a minute or two.</div>
+    <div id="findout"></div>
   </section>
 
   <section id="tab-ask" hidden>
@@ -398,6 +413,49 @@ $("#allstop").onclick = () => xjob && fetch("/api/all/stop?id=" + xjob);
 $("#allreport").onclick = () => xjob && window.open("/api/all/report?id=" + xjob, "_blank");
 $("#allbundle").onclick = () => xjob && (location.href = "/api/all/bundle?id=" + xjob);
 
+// ---------------- Findability
+let findid = null, findtimer = null;
+fetch("/api/find/sets").then(r => r.json()).then(sets => {
+  $("#findset").innerHTML = `<option value="">Topics: match the address</option>` + Object.entries(sets).map(([k, v]) => `<option value="${esc(k)}">${esc(v.label)} (${v.topics.length} topics)</option>`).join("");
+}).catch(() => {});
+function renderFind(s) {
+  if (s.error) { $("#findout").innerHTML = `<div class="card err">${esc(s.error)}</div>`; return; }
+  const cls = { "OK": "ok", "Buried": "warn", "PDF only": "warn", "No figure": "bad", "Not found": "bad" };
+  const path = w => ["Start page", ...w.path.map(x => x.text.slice(0, 60) + (x.via === "menu" ? " (menu)" : ""))].map(esc).join(" → ");
+  const n = s.topics.length;
+  $("#findout").innerHTML = `
+  <div class="card"><h2 style="margin:0">${esc(s.set_label)}: ${s.counts.OK} of ${n} topics easy to find</h2>
+    <div class="note">From ${esc(s.url)} · ${s.pages_read} pages read, up to ${s.max_clicks} clicks${s.stopped ? " · stopped early" : ""}${s.page_cap_hit ? " · page limit reached" : ""} · checked ${esc(s.checked.replace("T", " "))}</div>
+    <div style="margin-top:8px">${Object.entries(s.counts).map(([k, v]) => `<span class="pill ${cls[k]}">${esc(k)}: ${v}</span>`).join(" ")}</div></div>
+  <div class="card"><div class="tablewrap"><table><thead><tr><th>Topic</th><th>Status</th><th>Closest page that answers it</th><th>Fix</th></tr></thead><tbody>
+  ${s.topics.map(r => { const w = r.where; return `<tr><td><b>${esc(r.label)}</b></td><td><span class="pill ${cls[r.status]}">${esc(r.status)}</span></td>
+    <td>${w ? `<a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.title || w.url)}</a><div class="note">${w.clicks} click(s): ${path(w)}</div>${w.snippet ? `<div class="note"><i>“${esc(w.snippet)}”</i></div>` : ""}` : "—"}</td>
+    <td>${esc(r.fix)}</td></tr>`; }).join("")}
+  </tbody></table></div>
+  <div class="note" style="margin-top:8px">${Object.entries(s.meaning).map(([k, v]) => `<b>${esc(k)}</b>: ${esc(v)}`).join("<br>")}</div></div>`;
+}
+async function findpoll() {
+  const d = await (await fetch("/api/find/status?id=" + findid)).json();
+  if (d.state === "running" || d.state === "pending") { $("#findmsg").textContent = d.progress || "Starting…"; return; }
+  clearInterval(findtimer); $("#findgo").disabled = false; $("#findstop").hidden = true; $("#findmsg").textContent = "";
+  if (d.result) { renderFind(d.result); $("#findreport").disabled = $("#finddl").disabled = !!d.result.error; }
+  else $("#findout").innerHTML = `<div class="card err">${esc(d.error || "The check failed.")}</div>`;
+}
+$("#findf").onsubmit = async ev => {
+  ev.preventDefault();
+  const url = $("#findurl").value.trim();
+  if (!url) { $("#findmsg").textContent = "Type a start page first."; return; }
+  $("#findreport").disabled = $("#finddl").disabled = true; $("#findout").innerHTML = "";
+  const res = await fetch("/api/find/start?url=" + encodeURIComponent(url) + "&set=" + encodeURIComponent($("#findset").value));
+  const d = await res.json();
+  if (!res.ok) { $("#findmsg").textContent = d.error; return; }
+  findid = d.id; $("#findgo").disabled = true; $("#findstop").hidden = false;
+  if (findtimer) clearInterval(findtimer); findtimer = setInterval(findpoll, 2000); findpoll();
+};
+$("#findstop").onclick = () => findid && fetch("/api/find/stop?id=" + findid);
+$("#findreport").onclick = () => findid && window.open("/api/find/report?id=" + findid, "_blank");
+$("#finddl").onclick = () => findid && (location.href = "/api/find/report?id=" + findid + "&download=1");
+
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
   $("#tab-access").hidden = b.dataset.tab !== "access";
@@ -406,6 +464,7 @@ document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   $("#tab-answers").hidden = b.dataset.tab !== "answers";
   $("#tab-ask").hidden = b.dataset.tab !== "ask";
   $("#tab-scan").hidden = b.dataset.tab !== "scan";
+  $("#tab-find").hidden = b.dataset.tab !== "find";
   if (b.dataset.tab === "ask") loadAskHistory();
 });
 

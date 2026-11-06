@@ -24,6 +24,7 @@ from bundle import make_bundle, VERSION
 from compare import Compare
 from answers import AnswerRun, AskJob, key_status, save_keys, load_questions, list_openai_models, list_gemini_models, load_keys
 from pagescan import scan as page_scan, report_html as page_report
+from findability import Find, report_html as find_report, CFG as FIND_CFG
 from runall import RunAll, load_settings, save_settings, PRESETS
 
 JOBS: dict[str, Crawl] = {}
@@ -42,6 +43,7 @@ COMPARES: dict[str, Compare] = {}
 ANSWERS: dict[str, AnswerRun] = {}
 RUNALLS: dict[str, RunAll] = {}
 ASKS: dict[str, AskJob] = {}
+FINDS: dict[str, Find] = {}
 SCANS: dict[str, dict] = {}  # page checks by id, so a report shows exactly what was on screen
 ASK_LOG = Path(__file__).resolve().parent / "ask-history.jsonl"  # every live question and its answers, kept on this computer (not in git)
 
@@ -305,6 +307,52 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+        elif u.path == "/api/find/sets":
+            self._send(200, json.dumps({k: {"label": v.get("label", k), "start": v.get("start", ""), "topics": [t["label"] for t in v.get("topics", [])]}
+                                        for k, v in FIND_CFG.get("sets", {}).items()}).encode(), "application/json")
+        elif u.path == "/api/find/start":
+            q = parse_qs(u.query)
+            target = (q.get("url") or [""])[0].strip()
+            if not target:
+                self._send(400, b'{"error":"Type a start page first."}', "application/json")
+                return
+            if any(f.state in ("pending", "running") for f in FINDS.values()):
+                self._send(409, b'{"error":"A findability check is already running. Wait for it or stop it."}', "application/json")
+                return
+            try:
+                f = Find(target, (q.get("set") or [""])[0] or None, int((q.get("clicks") or ["0"])[0] or 0) or None)
+            except ValueError as e:
+                self._send(400, json.dumps({"error": str(e)}).encode(), "application/json")
+                return
+            fid = uuid.uuid4().hex[:8]
+            FINDS[fid] = f
+            if len(FINDS) > 20:
+                FINDS.pop(next(iter(FINDS)))
+            threading.Thread(target=f.run, daemon=True).start()
+            self._send(200, json.dumps({"id": fid}).encode(), "application/json")
+        elif u.path in ("/api/find/status", "/api/find/stop", "/api/find/report"):
+            q = parse_qs(u.query)
+            f = FINDS.get((q.get("id") or [""])[0])
+            if not f:
+                self._send(404, json.dumps({"error": "That findability check is no longer in memory. Run it again."}).encode(), "application/json")
+                return
+            if u.path == "/api/find/stop":
+                f.stop()
+                self._send(200, b'{"ok":true}', "application/json")
+            elif u.path == "/api/find/status":
+                self._send(200, json.dumps({"state": f.state, "progress": f.progress, "error": f.error, "result": f.result}).encode(), "application/json")
+            elif not f.result:
+                self._send(409, b"The check has not finished yet.", "text/plain")
+            else:
+                body = find_report(f.result).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                if (q.get("download") or ["0"])[0] == "1":
+                    name = safe_name(urlsplit(f.start).netloc + urlsplit(f.start).path)
+                    self.send_header("Content-Disposition", f'attachment; filename="findability-{name}-{time.strftime("%Y%m%d-%H%M")}.html"')
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
         elif u.path == "/api/ask/status":
             job = ASKS.get((parse_qs(u.query).get("id") or [""])[0])
             if not job:

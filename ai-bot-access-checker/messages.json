@@ -284,5 +284,67 @@
       "owner": "Marketing",
       "scope": "News and SOM pages"
     }
-  ]
+  ],
+  "findability": {
+    "_about": "Findability check: topics a student looks for, starting from a section page. 'page' finds a page about the topic (title, headings or address). 'fact' is the statement that answers it (must be in the page's own text, not menus or footer). Case-insensitive regular expressions.",
+    "max_clicks": 3,
+    "max_pages": 300,
+    "sets": {
+      "medicine": {
+        "label": "School of Medicine",
+        "start": "https://www.methodist.edu/academics/medicine/",
+        "section": "/academics/medicine/",
+        "topics": [
+          {
+            "id": "cost",
+            "label": "Tuition and cost of attendance",
+            "page": "tuition|cost of attendance|\\bcost\\b|\\bfees\\b",
+            "fact": "(tuition|cost of attendance|fees)[^.\\n]{0,120}\\$\\s?\\d{1,3}(,\\d{3})+|\\$\\s?\\d{1,3}(,\\d{3})+[^.\\n]{0,120}(tuition|cost of attendance|per year|annually)"
+          },
+          {
+            "id": "aid",
+            "label": "Financial aid and scholarships",
+            "page": "financial aid|scholarships?|\\baid\\b",
+            "fact": "FAFSA|federal (direct )?(unsubsidized )?loans?|Grad(uate)? PLUS|scholarships? (are|is) (available|awarded|offered)|scholarships?[^.\\n]{0,80}\\$\\s?\\d"
+          },
+          {
+            "id": "deadline",
+            "label": "Application deadline",
+            "page": "apply|application|admissions",
+            "fact": "(deadline|due|accept(s|ing)? applications|AMCAS|secondary application)[^.\\n]{0,100}(January|February|March|April|May|June|July|August|September|October|November|December|Jan\\.?|Feb\\.?|Aug\\.?|Sept?\\.?|Oct\\.?|Nov\\.?|Dec\\.?) \\d{1,2}|(January|February|March|April|May|June|July|August|September|October|November|December|Jan\\.?|Feb\\.?|Aug\\.?|Sept?\\.?|Oct\\.?|Nov\\.?|Dec\\.?) \\d{1,2}[^.\\n]{0,60}(deadline|due)"
+          },
+          {
+            "id": "mcat_gpa",
+            "label": "MCAT and GPA expectations",
+            "page": "MCAT|GPA|requirements|prerequisites",
+            "fact": "MCAT[^.\\n]{0,80}\\b(4[89]\\d|5[0-2]\\d)\\b|\\b(4[89]\\d|5[0-2]\\d)\\b[^.\\n]{0,40}MCAT|GPA[^.\\n]{0,60}\\b[234]\\.\\d|\\b[234]\\.\\d{1,2}\\b[^.\\n]{0,40}GPA"
+          },
+          {
+            "id": "monarch_momentum",
+            "label": "Early pathway for MU undergraduates (Monarch Momentum)",
+            "page": "Monarch Momentum|early assurance|pathway",
+            "fact": "Monarch Momentum"
+          },
+          {
+            "id": "accreditation",
+            "label": "Accreditation status",
+            "page": "accredit",
+            "fact": "(LCME|Liaison Committee on Medical Education|COCA)[^.\\n]{0,160}(accredit|preliminary|provisional|candidate)|(accredit|preliminary|provisional)[^.\\n]{0,160}(LCME|Liaison Committee on Medical Education|COCA)"
+          },
+          {
+            "id": "class_size",
+            "label": "Class size",
+            "page": "class size|class profile|how many students|FAQ",
+            "fact": "\\b\\d{2,3} (students|seats|matriculants|medical students)\\b|class (size|of \\d{4})[^.\\n]{0,60}\\b\\d{2,3}\\b"
+          },
+          {
+            "id": "outcomes",
+            "label": "Outcomes: residency match and placement",
+            "page": "outcomes?|residenc|match",
+            "fact": "match (rate|list|results)|residenc(y|ies)[^.\\n]{0,100}(\\d+%|match(ed)?|placement)|\\d+%[^.\\n]{0,60}(match|residenc)"
+          }
+        ]
+      }
+    }
+  }
 }

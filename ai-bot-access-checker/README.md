@@ -68,6 +68,22 @@ python3 pagescan.py https://www.methodist.edu
 
 Add `--json` for the full result, or `--report page-check.html` to also write a printable report. In the app, **Open report** and **Download report** appear after each check: a one-page summary with problems to fix (each with how to fix it and who owns it), items worth checking, what is working, and every check.
 
+## Findability tab
+
+Starts on one page (default: the School of Medicine page) and follows links up to 3 clicks to find the facts a student looks for: tuition and cost, financial aid, application deadline, MCAT and GPA, Monarch Momentum, accreditation, class size, outcomes. For each topic it reports the closest page that states the fact, the clicks, the path, and the status:
+
+| Status | Meaning |
+|---|---|
+| OK | Stated in page text, on the start page or one click away through a link in page text. |
+| Buried | Stated in page text, but 2 or more clicks away or reached only through menus. |
+| PDF only | Not stated on any page reached; a PDF about it is linked (PDF contents not read). |
+| No figure | A page about it was reached, but no page states the fact. |
+| Not found | Nothing about it within the click limit. |
+
+Rules: menus, headers, footers and sidebars don't count as stating a fact. Pages inside the start page's section are followed; pages outside it are read but not followed. Topics and their word patterns are in `messages.json` under `findability`; add a topic set for another section the same way. Open report gives a printable version.
+
+Command line: `python3 findability.py https://www.methodist.edu/academics/medicine/ --report findability.html`
+
 ## Bot Access tab
 
 Checks 38 AI crawlers (OpenAI, Anthropic, Google, Apple, Microsoft, Perplexity, Meta, Amazon, ByteDance, Common Crawl, Cohere, Mistral, and others). For each bot it reports:
