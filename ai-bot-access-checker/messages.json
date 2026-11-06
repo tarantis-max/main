@@ -28,7 +28,7 @@
     "Scholarships and aid": "financial-aid|scholarship",
     "Outcomes and careers": "outcome|career|placement|numbers"
   },
-  "connections_required": 3,
+  "connections_required": 2,
   "proof_points": [
     {
       "id": "medical_school",

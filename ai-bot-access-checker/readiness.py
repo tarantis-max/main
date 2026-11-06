@@ -488,6 +488,74 @@ def pp_elements(p: dict) -> dict:
     }
 
 
+# ---------------------------------------------------------------- two-part grade: Access + Answer quality
+
+ANSWER_PARTS = [  # id, label, weight (sums to 100), what earns it
+    ("direct_answer", "Direct answer", 25, "The first paragraph of the main content is 20-80 words and comes before the first H2."),
+    ("proof", "Proof", 25, "States a number and a year, plus at least one approved proof point."),
+    ("structure", "Structure", 20, "2+ H2s, a question heading or FAQ schema, 150+ words of server-rendered text, mobile viewport."),
+    ("connections", "Connections", 10, "Body links to 2 of: School of Medicine, Admissions, Scholarships and aid, Outcomes and careers (half credit for 1)."),
+    ("authority", "Authority", 10, "Half for a named owner or author, half for a date a reader can see."),
+    ("accuracy", "Accurate and current", 10, "No outdated wording, no number that differs from the approved figure, no off-brand phrase."),
+]
+CITABLE_AT = 70  # answer quality needed for "Ready" on key pages
+GRADES = ("Ready", "Readable, not citable", "Not ready")
+
+
+def access_ok(p: dict) -> bool:
+    """Can AI reach and read the page: the critical checks (loads, AI search bots allowed, no noindex/noai, text in the HTML)."""
+    return p["status"] == 200 and not any(p["checks"].get(c) is False for c in CRITICAL)
+
+
+def answer_parts(p: dict) -> dict:
+    """Credit 0-1 for each answer-quality part."""
+    d, pp = p["detail"], p["detail"].get("pp", {})
+    el = pp_elements(p)
+    need = MESSAGES.get("connections_required", 2)
+    msg = d.get("msg", {})
+    approved = {c["id"]: c["approved"] for c in MESSAGES.get("numeric_claims", [])}
+    wrong_number = any(v != approved.get(k) for k, vals in msg.get("claims", {}).items() if k in approved for v, _ in vals)
+    return {
+        "direct_answer": 1.0 if el["direct_answer"] else 0.0,
+        "proof": 1.0 if el["proof"] else 0.0,
+        "structure": 1.0 if el["structure"] else 0.0,
+        "connections": min(1.0, len(pp.get("connections", [])) / max(1, need)),
+        "authority": 0.5 * bool(pp.get("owner")) + 0.5 * bool(pp.get("date_visible") or pp.get("published")),
+        "accuracy": 0.0 if (msg.get("outdated") or msg.get("banned") or wrong_number) else 1.0,
+    }
+
+
+def answer_score(p: dict) -> int:
+    parts = answer_parts(p)
+    return round(sum(w * parts[i] for i, _, w, _ in ANSWER_PARTS))
+
+
+def regrade(p: dict, key: bool) -> dict:
+    """Set access, answer_score (key and priority pages only) and the grade. Works on saved pages too (rescore)."""
+    p["access"] = access_ok(p)
+    p["answer_score"] = answer_score(p) if (key and p["access"]) else None
+    if not p["access"]:
+        p["grade"] = "Not ready"
+    elif key:
+        p["grade"] = "Ready" if p["answer_score"] >= CITABLE_AT else "Readable, not citable"
+    else:
+        p["grade"] = "Ready"  # news, directory, events and the like: Access only
+    return p
+
+
+def answer_summary(pages: list[dict]) -> dict:
+    """Key pages = every live key or priority page; one that fails Access counts as not citable."""
+    live = [p for p in pages if p["status"] == 200 and (p["detail"].get("key_page") or p["detail"].get("priority"))]
+    keyp = [p for p in live if p.get("answer_score") is not None]
+    return {"key_pages": len(live), "citable": sum(1 for p in keyp if p["answer_score"] >= CITABLE_AT),
+            "key_pages_no_access": len(live) - len(keyp),
+            "average": round(sum(p["answer_score"] for p in keyp) / len(keyp)) if keyp else None,
+            "access_pass": sum(1 for p in pages if p.get("access")), "pages": len(pages), "citable_at": CITABLE_AT,
+            "parts": [{"id": i, "label": lbl, "weight": w, "rule": r,
+                       "earned_pct": round(100 * sum(answer_parts(p)[i] for p in keyp) / len(keyp)) if keyp else None}
+                      for i, lbl, w, r in ANSWER_PARTS]}
+
+
 def priority_report(c: "Crawl", pages: list[dict]) -> dict:
     """EAB priority-page standard: each listed page scored on five elements; optimized = all five."""
     by = {p["url"]: p for p in pages}
@@ -795,6 +863,8 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
         "published": bool(p.meta.get("article:published_time") or '"datePublished"' in " ".join(p.jsonld) or PUBLISHED_RE.search(text)),
         "updated": bool(p.meta.get("article:modified_time") or '"dateModified"' in " ".join(p.jsonld) or UPDATED_RE.search(text)),
         "first_paragraph_words": fp[0] if fp else 0,
+        # a date a reader can see (or a post's published date); the CMS's hidden modified stamp does not count
+        "date_visible": bool(PUBLISHED_RE.search(text) or UPDATED_RE.search(text) or p.meta.get("article:published_time")),
     }
     # B. messages
     msg = {
@@ -879,11 +949,11 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
     logos = [urljoin(url, x) for x in p.logos]
     logo = next((x for x in logos if urlsplit(x).path.lower().endswith((".svg", ".png"))), logos[0] if logos else "")
 
-    return {
+    out = {
         "url": url,
         "status": r["status"] or r["error"],
-        "score": score,
-        "grade": grade(score, res),
+        "score": score,  # technical score: share of the 23 checks passed
+        "grade": "",
         "checks": res,
         "failed": [c for c in CHECK_IDS if res[c] is False],
         "detail": {
@@ -927,6 +997,7 @@ def check_page(url: str, r: dict, elapsed: float, groups: list[Group], cfg: dict
             "accessibility_link": any("accessib" in (h + " " + t).lower() for h, t in p.anchors),
         },
     }
+    return regrade(out, key_page)
 
 
 def clean_profile(u: str) -> str:
@@ -1107,6 +1178,7 @@ class Crawl:
             dflt = MESSAGES.get("priority_pages", [])
             priority_pages = [u for u in dflt if urlsplit(u).netloc.lower() == self.host.lower()]
         self.priority_pages = [norm(u if "://" in u else urljoin(self.origin + "/", u.strip())) for u in priority_pages if u.strip()]
+        self.priority_set = set(self.priority_pages)
         self.results: list[dict] = []
         self.pdfs: dict[str, dict] = {}
         self.schema_types: Counter = Counter()
@@ -1254,6 +1326,9 @@ class Crawl:
             page["_copy"] = True  # filtered or paged copy: follow its links, do not grade it
         if final != url:
             page["redirected_from"] = url
+        if (url in self.priority_set or final in self.priority_set or url == self.start) and not page["detail"]["key_page"]:  # the homepage always counts
+            page["detail"]["priority"] = True
+            regrade(page, True)
         if url == self.start:
             page["_is_home"] = True
         return page
@@ -1363,7 +1438,7 @@ class Crawl:
             home = self.home
         n = len(pages)
         fails = {c: sum(1 for p in pages if p["checks"].get(c) is False) for c in CHECK_IDS}
-        grades = {g: sum(1 for p in pages if p["grade"] == g) for g in ("Ready", "Needs work", "Not ready")}
+        grades = {g: sum(1 for p in pages if p["grade"] == g) for g in GRADES}
         ay = self.cfg["ay_start"]
         return {
             "start": self.start,
@@ -1378,6 +1453,7 @@ class Crawl:
             "elapsed_s": round((self.finished or time.time()) - self.started),
             "avg_score": round(sum(p["score"] for p in pages) / n) if n else 0,
             "grades": grades,
+            "answer": answer_summary(pages),
             "academic_year": f"{ay}-{str(ay + 1)[-2:]}",
             "settings": {k: v for k, v in self.cfg.items() if k != "ay_start"},
             "check_failures": [{"id": c[0], "label": c[1], "rule": c[2], "critical": c[3],
@@ -1405,14 +1481,14 @@ class Crawl:
     def to_csv(self) -> str:
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow(["url", "status", "score", "grade", "failed_checks", "title", "words", "ms",
+        w.writerow(["url", "status", "answer_quality", "access", "technical_score", "grade", "failed_checks", "title", "words", "ms",
                     "blocked_ai_search_bots", "blocked_training_bots", "directives",
                     "schema_types", "former_names_found", "past_terms", "in_sitemap", "linked_from"] + CHECK_IDS)
         with self._lock:
             pages = list(self.results)
-        for p in sorted(pages, key=lambda p: p["score"]):
+        for p in sorted(pages, key=lambda p: (p.get("answer_score") if p.get("answer_score") is not None else 1000, p["score"])):
             d = p["detail"]
-            w.writerow([p["url"], p["status"], p["score"], p["grade"], " ".join(p["failed"]), d["title"], d["words"], d["ms"],
+            w.writerow([p["url"], p["status"], "" if p.get("answer_score") is None else p["answer_score"], "yes" if p.get("access") else "no", p["score"], p["grade"], " ".join(p["failed"]), d["title"], d["words"], d["ms"],
                         " ".join(d["blocked_ai_search_bots"]), " ".join(d["blocked_training_bots"]), " ".join(d["directives"]),
                         " ".join(d["schema_types"]), "; ".join(d["former_names_found"]), "; ".join(d["past_terms"]),
                         "yes" if p["url"] in self.sitemap_urls else "no", " ".join(self.referrers.get(p["url"], []))]

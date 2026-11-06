@@ -16,7 +16,7 @@ from html import escape as e
 from urllib.parse import urlsplit
 
 from ai_bot_check import deny_robots_snippet, fully_blocked
-from readiness import NOT_KEY_PATH, MESSAGES, CHECKS, CATEGORY, Crawl
+from readiness import NOT_KEY_PATH, MESSAGES, CHECKS, CATEGORY, Crawl, regrade, answer_summary, CITABLE_AT, GRADES
 
 LABEL = {c[0]: c[1] for c in CHECKS}
 CRITICAL = {c[0] for c in CHECKS if c[3]}
@@ -59,14 +59,21 @@ def _pct(a: int, b: int) -> int:
 
 
 def _grade_pill(g: str) -> str:
-    cls = {"Ready": "ok", "Needs work": "warn", "Not ready": "bad"}.get(g, "")
+    cls = {"Ready": "ok", "Readable, not citable": "warn", "Needs work": "warn", "Not ready": "bad"}.get(g, "")
     return f'<span class="pill {cls}">{e(g)}</span>'
 
 
 def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | None, answers: dict | None = None) -> str:
     s = summary
     n = s["pages"]
-    g = s["grades"]
+    prio_set = {r["url"] for r in (s.get("priority_pages") or {}).get("rows", [])}
+    for p in pages:  # pages saved by versions before the two-part grade are regraded here, so old bundles report the same way
+        if "access" not in p:
+            if p["url"] in prio_set and not p["detail"].get("key_page"):
+                p["detail"]["priority"] = True
+            regrade(p, bool(p["detail"].get("key_page") or p["detail"].get("priority")))
+    g = {k: sum(1 for p in pages if p["grade"] == k) for k in GRADES}
+    ans = answer_summary(pages)
     host = urlsplit(s["start"]).netloc
     d = dt.date.today()
     today = f"{d:%B} {d.day}, {d.year}"
@@ -92,21 +99,22 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     training_blocked = [b for b in training if blocked(b)]
     search_partial = [b for b in search if not blocked(b) and partial(b)]
 
-    # ---- priority pages
-    # by address; news, events and filtered (?query) copies are not key pages
-    key_all = [p for p in pages if p["url"].rstrip("/") == s["start"].rstrip("/")
-               or (PRIORITY_RE.search(urlsplit(p["url"]).path) and not NOT_KEY_PATH.search(urlsplit(p["url"]).path) and not urlsplit(p["url"]).query)]
+    # ---- key student pages: the crawl's key pages (admissions, cost, aid, visit, program home pages) + EAB priority pages
+    key_all = [p for p in pages if p["detail"].get("key_page") or p["detail"].get("priority")]
     prio = [p for p in key_all if p["status"] == 200]  # a broken address is a broken link (Site-level findings), not a page to grade
     key_broken = len(key_all) - len(prio)
-    prio.sort(key=lambda p: (p["score"], p["url"]))
+    prio.sort(key=lambda p: (p.get("answer_score") if p.get("answer_score") is not None else -1, p["url"]))
     prio_ready = sum(1 for p in prio if p["grade"] == "Ready")
+    prio_readable = sum(1 for p in prio if p["grade"] == "Readable, not citable")
 
     # ---- verdict (fixed rules, stated in the report)
     pct_ready = _pct(g["Ready"], n)
-    if pct_ready >= 80 and not search_blocked and org_ok:
+    pct_access = _pct(ans["access_pass"], n)
+    pct_citable = _pct(ans["citable"], ans["key_pages"]) if ans["key_pages"] else 0
+    if pct_citable >= 80 and not search_blocked and org_ok:
         verdict, vcls = "Ready", "ok"
-    elif pct_ready >= 50 and not search_blocked:
-        verdict, vcls = "Partially ready", "warn"
+    elif pct_access >= 80 and not search_blocked:
+        verdict, vcls = "Readable, not citable", "warn"
     else:
         verdict, vcls = "Not ready", "bad"
 
@@ -129,7 +137,9 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
                 other.append(f"Policy: all {len(denied)} denied bots are fully blocked.")
     else:
         findings.append("Bot access was not checked.")
-    findings.append(f"<b>{pct_ready}% of {n} pages are Ready</b> for AI search. {g['Needs work']} need work and {g['Not ready']} are not ready.")
+    findings.append(f"<b>{ans['citable']} of {ans['key_pages']} key student pages are citable</b>: they score {CITABLE_AT} or more of 100 on answer quality "
+                    f"(direct answer, proof, structure, connections, authority, accurate facts; average {ans['average'] if ans['average'] is not None else '-'}). "
+                    f"{prio_readable} more can be read by AI but are not citable. {pct_access}% of all {n} pages pass Access (AI can reach and read them).")
     # Deliberate exclusions are not defects: a host that is entirely blocked or noindexed (an internal system), and a
     # section where every page is noindexed (reported once, under "Confirm noindex sections are intended").
     live = [p for p in pages if p["status"] == 200]
@@ -171,8 +181,6 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     elif sd_state == "missing":
         findings.append("<b>The site has no structured data.</b> Search engines and AI get no machine-readable statement of the "
                         "school's official name, address, logo or accounts. Low-to-moderate impact; about one hour to fix.")
-    if prio:
-        findings.append(f"<b>{prio_ready} of {len(prio)} key student pages</b> (admissions, tuition, aid, programs, contact) are Ready.")
     other.append(f"Homepage organization schema: <b>{org['passed']} of {org['total']}</b> checks pass." if org["total"] else "Homepage organization schema was not checked.")
     pc = s["pdf_counts"]
     if pc["total"]:
@@ -400,8 +408,8 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
         txt = "%d failed" % len(p["failed"]) if p["failed"] else "none"
         if crit:
             txt += ' · <span class="crit">critical: %s</span>' % e(", ".join(crit))
-        return "<tr><td>%d</td><td>%s</td><td class='url'>%s</td><td>%s</td></tr>" % (
-            p["score"], _grade_pill(p["grade"]), e(urlsplit(p["url"]).path or "/"), txt)
+        return "<tr><td>%s</td><td>%s</td><td class='url'>%s</td><td>%s</td></tr>" % (
+            "-" if p.get("answer_score") is None else p["answer_score"], _grade_pill(p["grade"]), e(urlsplit(p["url"]).path or "/"), txt)
 
     def check_row(c):
         crit_tag = ' <span class="crit">(critical)</span>' if c["critical"] else ""
@@ -588,10 +596,11 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
     unchecked_txt = ("; %d page(s) could not be checked (rate-limited or timed out) and are not graded" % len(si.get("unchecked", []))) if si.get("unchecked") else ""
     search_tile = ("%d/%d" % (len(search) - len(search_blocked), len(search))) if access else "-"
     prio_tile = ("%d/%d" % (prio_ready, len(prio))) if prio else "-"
+    answer_rows = "".join(f"<tr><td>{e(x['label'])}</td><td>{x['weight']}</td><td>{'-' if x['earned_pct'] is None else str(x['earned_pct']) + '%'}</td><td class='sm'>{e(x['rule'])}</td></tr>" for x in ans["parts"])
     verdict_txt = {
-        "Ready": "The site is ready to be found and cited by AI search.",
-        "Partially ready": "The site can be found by AI search, but many pages need fixes before they are reliably cited.",
-        "Not ready": "AI search cannot reliably find or cite the site. Fix the critical items below first.",
+        "Ready": "AI search can read the site, and most key student pages answer questions well enough to be cited.",
+        "Readable, not citable": "AI search can reach and read the site, but most key student pages don’t answer questions clearly enough to be quoted.",
+        "Not ready": "AI search cannot reliably reach or read the site. Fix the critical items below first.",
     }[verdict]
     if access:
         order = {"search": 0, "user": 1}
@@ -673,10 +682,10 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 <div>{verdict_txt}</div></div>
 
 <div class="tiles">
-  <div class="tile"><b>{pct_ready}%</b><span>pages Ready</span></div>
-  <div class="tile"><b>{s['avg_score']}</b><span>average page score (of 100)</span></div>
+  <div class="tile"><b>{prio_tile}</b><span>key student pages citable (answer quality {CITABLE_AT}+)</span></div>
+  <div class="tile"><b>{ans['average'] if ans['average'] is not None else '-'}</b><span>average answer quality, key pages (of 100)</span></div>
+  <div class="tile"><b>{pct_access}%</b><span>of all pages pass Access</span></div>
   <div class="tile"><b>{search_tile}</b><span>AI search bots allowed</span></div>
-  <div class="tile"><b>{prio_tile}</b><span>key student pages Ready</span></div>
 </div>
 
 {areas_html}
@@ -694,9 +703,10 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 {more_actions_html}
 {sd_html}
 {site_html}
-<h2>Key student pages</h2>
-<p class="note">Picked automatically by web address: the homepage plus live pages whose address contains admissions, apply, tuition, cost, financial aid, scholarships, academics, programs, majors, degrees, deadlines, calendar, visit, contact, about, graduate or undergraduate (news, events and filtered copies excluded). Not the same as the 20 EAB priority pages in Appendix F. Worst 10 shown; the Pages CSV has the full list and every failed check.{key_broken_note}</p>
-<table><thead><tr><th>Score</th><th>Grade</th><th style="width:38%">Page</th><th>Failed checks</th></tr></thead><tbody>
+<h2>Key student pages: answer quality</h2>
+<p class="note">Key student pages are the admissions, cost, aid, visit and program home pages the crawl finds by address, plus the EAB priority pages (Appendix F). Each gets an answer-quality score: how well it answers a question so AI will quote it. Ready = {CITABLE_AT} or more. Lowest 10 shown; the Pages CSV has every page.{key_broken_note}</p>
+<table><thead><tr><th>Part</th><th>Points</th><th>Earned on key pages</th><th>What earns it</th></tr></thead><tbody>{answer_rows}</tbody></table>
+<table style="margin-top:10px"><thead><tr><th>Answer quality</th><th>Grade</th><th style="width:38%">Page</th><th>Failed checks</th></tr></thead><tbody>
 {prio_html}
 </tbody></table>
 
@@ -707,8 +717,8 @@ def build(summary: dict, pages: list[dict], pdfs: list[dict], access: dict | Non
 <h2>Method</h2>
 <p class="note">
 <b>Bot policy.</b> Bots in bot_policy.json are excluded from AI search counts and scoring; a denied bot counts as blocked only when robots.txt blocks it on the homepage and on every sampled sitemap page, or the server refuses it.<br>
-<b>Verdict rules.</b> Ready: at least 80% of pages Ready, no AI search bot blocked, and every homepage organization schema check passes. Partially ready: at least 50% of pages Ready and no AI search bot blocked. Not ready: anything else.<br>
-<b>Page grades.</b> Score = checks passed ÷ {len(CHECKS)} × 100. Ready: score 80 or higher and no critical fail. Needs work: score 50-79 and no critical fail. Not ready: score below 50 or any critical fail.<br>
+<b>Verdict rules.</b> Ready: at least 80% of key student pages citable, no AI search bot blocked, and every homepage organization schema check passes. Readable, not citable: at least 80% of all pages pass Access and no AI search bot blocked. Not ready: anything else.<br>
+<b>Page grades.</b> Two parts. Access (every page): the page loads, AI search bots are allowed, there is no noindex/noai, and its text is in the HTML; fail any and the page is Not ready. Answer quality (key student pages only, 0-100): direct answer 25, proof 25, structure 20, connections 10, authority 10, accurate and current facts 10. Key pages: Ready at {CITABLE_AT}+, otherwise Readable, not citable. Other pages (news, directory, events): Ready when they pass Access. The technical score (share of the {len(CHECKS)} checks passed) is in the Pages CSV and Appendix A.<br>
 <b>Scope.</b> Started at {e(s['start'])}; {n} pages checked (limit {s['max_pages']}); {stopped_txt}skipped: {e(skipped_txt)}{e(unchecked_txt)}. Not graded: {s.get('copies', 0)} filtered or paged copies (an address with "?" whose canonical tag points to another page; their links were still followed) and app, login or donation pages (counted under skipped). Error pages (not HTTP 200) are scored only on HTTP 200. Former-name mentions are a review list and are not scored.
 "Past" means before the current academic year ({e(s['academic_year'])}), which starts July 1. PDFs are judged by file name and link text only.
 </p>

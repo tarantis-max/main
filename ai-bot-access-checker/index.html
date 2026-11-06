@@ -255,14 +255,17 @@ function renderScan(s) {
   <div class="card"><h2 style="margin:0">${esc(s.final_url)}</h2>
     <div class="note">${s.redirected ? "Redirected from " + esc(s.url) + " · " : ""}Checked ${esc(s.checked.replace("T", " "))}</div>
     <div class="summary" style="margin-top:10px">
-      <div><b>Score</b><span class="big">${s.score}</span></div>
-      <div><b>Grade</b><span class="big" style="color:var(--${s.grade === "Ready" ? "ok" : "bad"})">${esc(s.grade)}</span></div>
+      <div><b>Grade</b><span class="big" style="color:var(--${s.grade === "Ready" ? "ok" : s.grade === "Not ready" ? "bad" : "warn"})">${esc(s.grade)}</span></div>
+      <div><b>Answer quality</b><span class="big">${s.answer.score}</span> <span class="muted">of 100, citable at ${s.answer.citable_at}${s.key_page ? "" : " · not a key page"}</span></div>
+      <div><b>Access</b><span class="big">${s.access ? "Pass" : "Fail"}</span></div>
       <div><b>EAB elements</b><span class="big">${s.eab.score} of 5</span></div>
       <div><b>Reading grade</b><span class="big">${b.reading_grade ?? "-"}</span></div>
-      <div><b>Words</b><span class="big">${b.words}</span></div>
     </div></div>
   <div class="card"><h2>What we found</h2>
     ${s.findings.map(f => `<div style="display:flex;gap:8px;align-items:flex-start;margin:6px 0"><span class="pill ${lvl[f.level][0]}" style="flex:none">${lvl[f.level][1]}</span><span>${esc(f.text)}</span></div>`).join("")}</div>
+  <div class="card"><h2>Answer quality: ${s.answer.score} of 100</h2><div class="tablewrap"><table><tbody>
+    ${s.answer.parts.map(p => `<tr><td class="nw"><b>${esc(p.label)}</b></td><td class="nw">${p.earned} of ${p.weight}</td><td class="muted">${esc(p.rule)}</td></tr>`).join("")}
+  </tbody></table></div>${s.key_page ? "" : '<div class="note">Not a key student page by address, so the site grade uses Access only for it.</div>'}</div>
   <div class="card"><h2>The basics</h2><div class="tablewrap"><table><tbody>
     <tr><td>Title</td><td>${esc(b.title) || "-"}</td></tr>
     <tr><td>Description</td><td>${esc(b.description) || '<span class="muted">none</span>'}</td></tr>
@@ -410,7 +413,7 @@ function pill(text) {
   const t = String(text);
   const cls = t.startsWith("allowed") || t === "Ready" ? "ok"
             : t.startsWith("blocked") || t === "challenged" || t === "Not ready" ? "bad"
-            : t.startsWith("error") || t === "Needs work" ? "warn" : "muted";
+            : t.startsWith("error") || t === "Needs work" || t === "Readable, not citable" ? "warn" : "muted";
   return `<span class="pill ${cls}">${esc(t)}</span>`;
 }
 
@@ -500,8 +503,10 @@ fetch("/api/defaults").then(r => r.json()).then(d => {
 fetch("/api/checks").then(r => r.json()).then(c => {
   CHECKS = c;
   $("#rules").innerHTML = `<b>Scoring rules</b><br>
-    Each page gets a pass or fail on every check. <b>Score</b> = checks passed ÷ ${c.length} × 100.<br>
-    <b>Ready</b>: score 80 or higher and no critical fails. <b>Needs work</b>: score 50-79 and no critical fails. <b>Not ready</b>: score below 50, or any critical fail.<br>
+    Each page gets a pass or fail on every check. <b>Technical score</b> = checks passed ÷ ${c.length} × 100.<br>
+    <b>Grades have two parts.</b> <b>Access</b> (every page): the page loads, AI search bots are allowed, no noindex/noai, and its text is in the HTML. Fail any of these and the page is <b>Not ready</b>.
+    <b>Answer quality</b> (key student pages: admissions, cost, aid, visit, program home pages and the EAB priority pages), 0-100: direct answer 25, proof 25, structure 20, connections 10, authority 10, accurate and current facts 10.
+    Key pages are <b>Ready</b> at 70 or more, otherwise <b>Readable, not citable</b>. Other pages (news, directory, events) are Ready when they pass Access.<br>
     "AI search bots" means every bot with purpose search or user on the Bot Access tab. Training-bot blocks are reported but not scored, because blocking training is a policy choice.<br>
     "Past" means before the current academic year, which starts July 1.<br><br>
     <table><thead><tr><th>Check</th><th>Pass when</th><th>Critical</th></tr></thead><tbody>
@@ -514,7 +519,9 @@ function renderReady() {
   const { summary: s, pages } = rdata;
   const label = Object.fromEntries(CHECKS.map(c => [c.id, c.label]));
   let list = pages.filter(p => (rfilter === "all" || p.grade === rfilter) && (!rcheck || p.failed.includes(rcheck)));
-  list.sort((a, b) => a.score - b.score);
+  const rank = { "Not ready": 0, "Readable, not citable": 1, "Ready": 2 };
+  const aq = p => p.answer_score == null ? 1000 + p.score : p.answer_score;  // worst first: grade, then answer quality, then technical score
+  list.sort((a, b) => (rank[a.grade] ?? 3) - (rank[b.grade] ?? 3) || aq(a) - aq(b));
   const shown = list.slice(0, 500);
   const pct = s.state === "running" ? Math.min(100, Math.round(100 * s.pages / Math.max(1, Math.min(s.max_pages, s.pages + s.queued)))) : 100;
   $("#rout").innerHTML = `
@@ -522,9 +529,9 @@ function renderReady() {
       <div class="summary">
         <div><b>Status</b>${esc(s.state)}${s.error ? ` <span class="err">${esc(s.error)}</span>` : ""}</div>
         <div><b>Pages checked</b><span class="big">${s.pages}</span> <span class="muted">${s.queued} queued, ${s.elapsed_s}s</span></div>
-        <div><b>Average score</b><span class="big">${s.avg_score}</span></div>
+        <div><b>Key pages citable</b><span class="big">${s.answer ? s.answer.citable + " of " + s.answer.key_pages : "-"}</span> <span class="muted">answer quality 70+, average ${s.answer && s.answer.average != null ? s.answer.average : "-"}</span></div>
         <div><b>Ready</b><span class="big" style="color:var(--ok)">${s.grades["Ready"]}</span></div>
-        <div><b>Needs work</b><span class="big" style="color:var(--warn)">${s.grades["Needs work"]}</span></div>
+        <div><b>Readable, not citable</b><span class="big" style="color:var(--warn)">${s.grades["Readable, not citable"] ?? 0}</span></div>
         <div><b>Not ready</b><span class="big" style="color:var(--bad)">${s.grades["Not ready"]}</span></div>
       </div>
       ${s.state === "running" ? `<div class="progress"><i style="width:${pct}%"></i></div>` : ""}
@@ -552,19 +559,20 @@ function renderReady() {
     ${pdfCard(s, rdata.pdfs)}
     <div class="card">
       <div class="filters">
-        ${["all","Not ready","Needs work","Ready"].map(g => `<button data-g="${g}" class="${g===rfilter?"on":""}">${g}</button>`).join("")}
+        ${["all","Not ready","Readable, not citable","Ready"].map(g => `<button data-g="${g}" class="${g===rfilter?"on":""}">${g}</button>`).join("")}
         ${rcheck ? `<button data-clear="1">Clear check filter: ${esc(label[rcheck])} ✕</button>` : ""}
         <span class="muted">${list.length} page(s)${list.length > 500 ? ", showing worst 500. Download CSV for all." : ""}</span>
       </div>
       <div class="tablewrap"><table>
-        <thead><tr><th>Score</th><th>Grade</th><th>URL</th><th>Failed checks</th></tr></thead>
+        <thead><tr><th>Answer quality</th><th>Technical score</th><th>Grade</th><th>URL</th><th>Failed checks</th></tr></thead>
         <tbody>${shown.map(p => `
           <tr class="click" data-url="${esc(p.url)}">
-            <td class="nw"><b>${p.score}</b></td>
+            <td class="nw"><b>${p.answer_score == null ? '<span class="muted">-</span>' : p.answer_score}</b></td>
+            <td class="nw">${p.score}</td>
             <td class="nw">${pill(p.grade)}</td>
             <td class="url">${esc(p.url)}</td>
             <td>${p.failed.map(f => `<span class="pill ${CHECKS.find(c => c.id === f)?.critical ? "bad" : "warn"}">${esc(label[f])}</span>`).join("") || '<span class="muted">none</span>'}</td>
-          </tr>${ropen.has(p.url) ? `<tr class="detail"><td colspan="4">
+          </tr>${ropen.has(p.url) ? `<tr class="detail"><td colspan="5">
             <b>Status</b> ${esc(p.status)} · <b>Title</b> ${esc(p.detail.title) || "<i>none</i>"} · <b>Words</b> ${p.detail.words} · <b>H1s</b> ${p.detail.h1}
             · <b>Images</b> ${p.detail.images_with_alt}/${p.detail.images} with alt · <b>Time</b> ${p.detail.ms} ms
             ${p.redirected_from ? `<br><b>Redirected from</b> ${esc(p.redirected_from)}` : ""}

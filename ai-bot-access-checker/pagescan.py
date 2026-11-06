@@ -17,7 +17,7 @@ import sys
 from urllib.parse import urlsplit
 
 from ai_bot_check import run as bot_access
-from readiness import CHECKS, MESSAGES, PP_ELEMENTS, OUTDATED, Crawl, org_report, pp_elements
+from readiness import CHECKS, MESSAGES, PP_ELEMENTS, OUTDATED, ANSWER_PARTS, CITABLE_AT, Crawl, org_report, pp_elements, answer_parts, answer_score, access_ok
 
 
 def _label(items: list[dict], key: str = "id") -> dict:
@@ -38,8 +38,9 @@ def scan(url: str) -> dict:
     page.pop("_links", None)
     c._absorb(page)  # same step the crawl uses: prepares the homepage's organization data
     d = page["detail"]
+    key = bool(page["detail"].get("key_page") or page["detail"].get("priority"))
     out.update({"final_url": page["url"], "redirected": page["url"] != c.start, "status": page["status"],
-                "score": page["score"], "grade": page["grade"]})
+                "score": page["score"], "grade": page["grade"], "key_page": key, "access": access_ok(page)})
     if page["status"] != 200:
         out["error"] = f"The page returned HTTP {page['status']}, so only that was checked."
         return out
@@ -48,6 +49,11 @@ def scan(url: str) -> dict:
     out["checks"] = [{"id": i, "label": lbl, "rule": rule, "critical": crit,
                       "result": {True: "pass", False: "fail"}.get(page["checks"].get(i), "not applicable")}
                      for i, lbl, rule, crit in CHECKS]
+
+    # answer quality: always shown on a page check (the site grade uses it for key pages only)
+    parts = answer_parts(page)
+    out["answer"] = {"score": answer_score(page), "citable_at": CITABLE_AT,
+                     "parts": [{"id": i, "label": lbl, "weight": w, "rule": r, "earned": round(w * parts[i], 1)} for i, lbl, w, r in ANSWER_PARTS]}
 
     # 2. the basics a person would look at
     out["basics"] = {"title": d.get("title", ""), "description": d.get("desc", ""), "words": d.get("words"),
@@ -150,6 +156,13 @@ def findings(s: dict) -> list[dict]:
         if not x["critical"] and x["result"] == "fail":
             why, fix, owner = ISSUES.get(x["id"], ("", "", ""))
             add("check", f"{x['label']}: {why or x['rule']}", fix or x["rule"], owner)
+    ans = s.get("answer")
+    if ans and ans["score"] < ans["citable_at"]:
+        lost = sorted((p for p in ans["parts"] if p["earned"] < p["weight"]), key=lambda p: p["earned"] - p["weight"])
+        add("problem" if s.get("key_page") else "check",
+            f"Answer quality {ans['score']} of 100 (citable at {ans['citable_at']}): AI can read this page but is unlikely to quote it. "
+            "Points lost on: " + ", ".join(f"{p['label']} ({p['weight'] - p['earned']:g})" for p in lost) + ".",
+            " ".join(f"{p['label']}: {p['rule']}" for p in lost[:3]), "Content owner")
     eab = s.get("eab", {})
     miss = [e for e in eab.get("elements", []) if not e["pass"]]
     if miss:
@@ -190,13 +203,15 @@ th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #dcdce2;vertical-a
     f = s["findings"]
     probs, checks, goods = ([x for x in f if x["level"] == lv] for lv in ("problem", "check", "good"))
     b, bots = s["basics"], s.get("bots", {})
-    lead = (f"<p><b>{len(probs)} problem(s) to fix and {len(checks)} item(s) to check.</b> "
-            f"The page scores {s['score']} of 100 ({e(s['grade'])}) on the readiness checks and meets {s['eab']['score']} of EAB’s 5 priority-page elements.</p>")
+    a = s["answer"]
+    lead = (f"<p><b>{e(s['grade'])}.</b> {'AI can reach and read this page' if s['access'] else 'AI cannot reliably reach or read this page'}; "
+            f"its answer quality is {a['score']} of 100 ({'citable' if a['score'] >= a['citable_at'] else 'below the ' + str(a['citable_at']) + ' needed to be quoted'}). "
+            f"{len(probs)} problem(s) to fix and {len(checks)} item(s) to check.</p>")
     tiles = ("<div class='tiles'>"
-             f"<div class='tile'><b>{s['score']}</b><span>readiness score of 100 · {e(s['grade'])}</span></div>"
+             f"<div class='tile'><b>{a['score']}</b><span>answer quality of 100 (citable at {a['citable_at']})</span></div>"
+             f"<div class='tile'><b>{'Pass' if s['access'] else 'Fail'}</b><span>Access: AI can reach and read it</span></div>"
              f"<div class='tile'><b>{len(probs)}</b><span>problems to fix</span></div>"
-             f"<div class='tile'><b>{s['eab']['score']} of 5</b><span>EAB priority-page elements</span></div>"
-             f"<div class='tile'><b>{b.get('reading_grade') if b.get('reading_grade') is not None else '-'}</b><span>reading grade (12 or below is the goal)</span></div></div>")
+             f"<div class='tile'><b>{s['eab']['score']} of 5</b><span>EAB priority-page elements</span></div></div>")
 
     def rows(items):
         return "".join(f"<tr><td>{i}</td><td>{e(x['text'])}</td><td>{e(x['fix'])}</td><td class='nw'>{e(x['owner'])}</td></tr>" for i, x in enumerate(items, 1))
@@ -209,11 +224,15 @@ th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #dcdce2;vertical-a
     if goods:
         body += "<h2>What’s working</h2><ul>" + "".join(f"<li>{e(x['text'])}</li>" for x in goods) + "</ul>"
     pill = lambda v: "<span class='pill ok'>pass</span>" if v else "<span class='pill bad'>fail</span>"
+    body += ("<h2>Answer quality: " + str(a["score"]) + " of 100</h2><table><thead><tr><th>Part</th><th>Earned</th><th>What earns it</th></tr></thead><tbody>"
+             + "".join(f"<tr><td class='nw'><b>{e(p['label'])}</b></td><td class='nw'>{p['earned']:g} of {p['weight']}</td><td class='note'>{e(p['rule'])}</td></tr>" for p in a["parts"])
+             + "</tbody></table>"
+             + ("" if s.get("key_page") else "<p class='note'>Not a key student page by address, so the site grade uses Access only for it. The score shows how well it would answer a question if it were one.</p>"))
     body += ("<h2>Page basics</h2><table><tbody>"
              f"<tr><td>Title</td><td>{e(b['title']) or '-'}</td></tr>"
              f"<tr><td>Description</td><td>{e(b['description']) or 'none'}</td></tr>"
              f"<tr><td>Headings</td><td>{b['h1']} H1 · {b['h2']} H2 · {b['question_headings']} phrased as questions</td></tr>"
-             f"<tr><td>Words</td><td>{b['words']}</td></tr>"
+             f"<tr><td>Words</td><td>{b['words']} · reading grade {b.get('reading_grade') if b.get('reading_grade') is not None else '-'} (12 or below is the goal)</td></tr>"
              f"<tr><td>Structured data</td><td>{e(', '.join(b['schema_types'])) or 'none valid'}"
              + (f" · {b['invalid_structured_data_blocks']} block(s) with errors" if b['invalid_structured_data_blocks'] else "") + "</td></tr>"
              f"<tr><td>noindex / noai</td><td>{e(', '.join(b['noindex_or_noai'])) or 'none'}</td></tr>"
@@ -251,7 +270,8 @@ def as_text(s: dict) -> str:
         lines.append(f"Redirects to {s['final_url']}")
     if s.get("error"):
         return "\n".join(lines + ["", s["error"]])
-    lines.append(f"Score {s['score']} of 100 · {s['grade']}")
+    lines.append(f"Grade: {s['grade']} · Access: {'pass' if s['access'] else 'fail'} · Answer quality: {s['answer']['score']} of 100"
+                 + (" (key page)" if s.get("key_page") else " (not a key page: the site grade uses Access only)") + f" · technical score {s['score']}")
     b = s["basics"]
     lines += ["", f"Title: {b['title']}", f"Description: {b['description'] or '(none)'}",
               f"Words: {b['words']} · H1: {b['h1']} · H2: {b['h2']} · question headings: {b['question_headings']} · reading grade: {b['reading_grade']}",

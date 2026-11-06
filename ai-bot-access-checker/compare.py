@@ -24,6 +24,8 @@ from readiness import Crawl
 # id, label, better ("high" | "low" | None for info only), formatter
 METRICS = [
     ("pages", "Pages checked", None, "{}"),
+    ("pct_citable", "Key pages citable (%)", "high", "{}%"),
+    ("answer_avg", "Answer quality, key pages (avg of 100)", "high", "{}"),
     ("pct_ready", "Pages Ready (%)", "high", "{}%"),
     ("avg_score", "Average page score", "high", "{}"),
     ("area_AI access", "AI access", "high", "{}"),
@@ -55,7 +57,9 @@ def site_metrics(c: Crawl, access: dict | None) -> dict:
     cf = {x["id"]: x for x in s["check_failures"]}
     pages = list(c.results)
     m = {"site": urlsplit(c.start).netloc, "start": c.start, "pages": n,
-         "pct_ready": _pct(s["grades"]["Ready"], n), "avg_score": s["avg_score"]}
+         "pct_ready": _pct(s["grades"]["Ready"], n), "avg_score": s["avg_score"],
+         "pct_citable": _pct(s["answer"]["citable"], s["answer"]["key_pages"]) if s.get("answer", {}).get("key_pages") else None,
+         "answer_avg": (s.get("answer") or {}).get("average")}
     for a in s.get("areas", []):
         m["area_" + a["area"]] = a["score"]
     if access:

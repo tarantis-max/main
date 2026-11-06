@@ -37,6 +37,25 @@ Skip steps with `--skip`, e.g. `python3 runall.py --skip compare,answers`. Exit 
 - Set keys as environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`), not in `keys.json`.
 - Run `python3 app.py --no-browser` as a service (systemd on Linux, NSSM on Windows). Schedule `python3 runall.py` monthly.
 
+## How pages are graded
+
+Two parts:
+
+- **Access** (every page): the page loads, AI search bots are allowed, there is no noindex/noai, and its text is in the HTML. Fail any and the page is **Not ready**.
+- **Answer quality** (key student pages: the homepage, admissions, cost, aid, visit and program home pages, and the EAB priority pages), 0-100: direct answer 25, proof 25, structure 20, connections 10 (2 of School of Medicine, Admissions, Scholarships and aid, Outcomes and careers), authority 10 (named owner or author, and a date a reader can see), accurate and current facts 10.
+
+Key pages are **Ready** at 70 or more and **Readable, not citable** below that. Other pages (news, directory, events) are Ready when they pass Access. The technical score (share of the 23 checks passed) is still in the Pages CSV and Appendix A. Broken structured data is reported site-wide, not as an Access failure, because AI still reads the page text.
+
+**Site verdict:** Ready when 80% of key pages are citable, no AI search bot is blocked and the homepage organization schema passes; Readable, not citable when 80% of all pages pass Access; otherwise Not ready.
+
+**Rescoring old runs** so trends compare:
+
+```bash
+python3 rescore.py old-bundle.zip --report-dir rescored
+```
+
+Runs from before version .24 had no outdated-wording check, so their accuracy points are over-credited.
+
 ## Page Check tab
 
 Checks one page for everything the site crawl looks for and lists what it found, problems first: the 23 page checks, AI bot access in robots.txt for that page, structured data (and, on the homepage, the 8 organization schema checks), EAB's five priority-page elements, approved proof points and numbers, and outdated or off-brand wording. Takes a few seconds; no crawl.
