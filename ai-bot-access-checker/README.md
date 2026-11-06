@@ -80,7 +80,7 @@ Starts on one page (default: the School of Medicine page) and follows links up t
 | No figure | A page about it was reached, but no page states the fact. |
 | Not found | Nothing about it within the click limit. |
 
-Rules: menus, headers, footers and sidebars don't count as stating a fact. Pages inside the start page's section are followed; pages outside it are read but not followed. Topics and their word patterns are in `messages.json` under `findability`; add a topic set for another section the same way. Open report gives a printable version.
+Rules: menus, headers, footers, sidebars and text inside video frames don't count as stating a fact. A page outside the section counts only when the medical school is named near the fact (so a history page's "$50,000 annually" or an undergraduate GPA rule is not counted). Pages inside the start page's section are followed; pages outside it are read but not followed. Topics and their word patterns are in `messages.json` under `findability`; add a topic set for another section the same way. Open report gives a printable version.
 
 Command line: `python3 findability.py https://www.methodist.edu/academics/medicine/ --report findability.html`
 

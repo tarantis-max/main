@@ -241,7 +241,7 @@ def past_terms(text: str, ay: int) -> list[str]:
 # ---------------------------------------------------------------- HTML parsing
 
 class PageParser(HTMLParser):
-    SKIP = {"script", "style", "noscript", "template", "svg", "head"}
+    SKIP = {"script", "style", "noscript", "template", "svg", "head", "iframe"}  # iframe inner text is never shown by browsers
     MAX_TEXT = 300_000
 
     def __init__(self):

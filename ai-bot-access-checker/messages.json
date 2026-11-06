@@ -298,8 +298,8 @@
           {
             "id": "cost",
             "label": "Tuition and cost of attendance",
-            "page": "tuition|cost of attendance|\\bcost\\b|\\bfees\\b",
-            "fact": "(tuition|cost of attendance|fees)[^.\\n]{0,120}\\$\\s?\\d{1,3}(,\\d{3})+|\\$\\s?\\d{1,3}(,\\d{3})+[^.\\n]{0,120}(tuition|cost of attendance|per year|annually)"
+            "page": "tuition|cost of attendance|\\bcost\\b",
+            "fact": "(tuition|cost of attendance)[^.\\n]{0,120}\\$\\s?\\d{1,3}(,\\d{3})+|\\$\\s?\\d{1,3}(,\\d{3})+[^.\\n]{0,60}(tuition|cost of attendance)"
           },
           {
             "id": "aid",
@@ -322,7 +322,7 @@
           {
             "id": "monarch_momentum",
             "label": "Early pathway for MU undergraduates (Monarch Momentum)",
-            "page": "Monarch Momentum|early assurance|pathway",
+            "page": "Monarch Momentum|early assurance",
             "fact": "Monarch Momentum"
           },
           {
@@ -340,10 +340,11 @@
           {
             "id": "outcomes",
             "label": "Outcomes: residency match and placement",
-            "page": "outcomes?|residenc|match",
-            "fact": "match (rate|list|results)|residenc(y|ies)[^.\\n]{0,100}(\\d+%|match(ed)?|placement)|\\d+%[^.\\n]{0,60}(match|residenc)"
+            "page": "outcomes?|residenc(y|ies)\\b|\\bmatch\\b",
+            "fact": "match (rate|list|results)|residenc(y|ies)\\b[^.\\n]{0,100}(\\d+%|match(ed)?|placement)|\\d+%[^.\\n]{0,60}(match|residenc(y|ies)\\b)"
           }
-        ]
+        ],
+        "context": "School of Medicine|medical school|medical education|\\bM\\.?D\\.?\\b|LCME|AMCAS|MCAT|medical students?"
       }
     }
   }

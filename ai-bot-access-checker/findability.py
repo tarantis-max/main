@@ -125,6 +125,9 @@ class Find:
         return {"status": 200, "final": final, "title": " ".join(p.title.split()), "links": links,
                 "text": " ".join(" ".join(p.body_text).split()), "heads": " | ".join(p.subheads)}
 
+    def _inside(self, u: str) -> bool:
+        return (urlsplit(u).path or "/").startswith(self.section)
+
     def _in_site(self, u: str) -> bool:
         return urlsplit(u).scheme in ("http", "https") and self._crawl.in_scope(u)
 
@@ -159,16 +162,19 @@ class Find:
                     n["status"] = g.get("status")
                     self._skip(g["skip"])
                     continue
-                if g["final"] in seen_final and g["final"] != u:
+                if g["final"] in seen_final:
                     n["dup_of"] = g["final"]
                     continue
                 seen_final.add(g["final"])
                 n.update(status=200, final=g["final"], title=g["title"], text=g["text"], heads=g["heads"])
-                expand = clicks < self.max_clicks and (urlsplit(g["final"]).path or "/").startswith(self.section)
+                inside = self._inside(g["final"])
+                expand = clicks < self.max_clicks and inside
                 for v, text, in_body in g["links"]:
                     cand = {"clicks": clicks + 1, "menu": n["menu"] + (0 if in_body else 1),
                             "path": n["path"] + [{"text": text or urlsplit(v).path, "via": "text" if in_body else "menu", "url": v}]}
                     if urlsplit(v).path.lower().endswith(".pdf"):
+                        if not inside:
+                            continue
                         old = self.pdfs.get(v)
                         if clicks + 1 <= self.max_clicks and (not old or (cand["clicks"], cand["menu"]) < (old["clicks"], old["menu"])):
                             self.pdfs[v] = {**cand, "text": text}
@@ -193,12 +199,19 @@ class Find:
 
     def _report(self) -> dict:
         read = {u: n for u, n in self.nodes.items() if n.get("status") == 200 and "text" in n}
+        ctx = re.compile(self.tset.get("context") or ".", re.I)
+
+        def relevant(n, m) -> bool:
+            """Section pages always count; a page outside the section counts only when the topic's subject is named near the fact."""
+            if self._inside(n["final"]):
+                return True
+            return bool(ctx.search(n["text"][max(0, m.start() - 300): m.end() + 300]))
         topics = []
         for t in self.tset.get("topics", []):
             fact, about = re.compile(t["fact"], re.I), re.compile(t["page"], re.I)
             stated = []
             for u, n in read.items():
-                m = fact.search(n["text"])
+                m = next((m for m in fact.finditer(n["text"]) if relevant(n, m)), None)
                 if m:
                     stated.append((n["clicks"], n["menu"] > 0, u, n, m))
             stated.sort(key=lambda x: (x[0], x[1], x[2]))
@@ -215,7 +228,8 @@ class Find:
                                if about.search(p.get("text", "") + " " + urlsplit(u).path.rsplit("/", 1)[-1].replace("-", " "))),
                               key=lambda x: (x[0], x[1], x[2]))
                 def about_pages(field):
-                    return sorted(((n["clicks"], n["menu"] > 0, u, n) for u, n in read.items() if about.search(field(u, n))), key=lambda x: (x[0], x[1], x[2]))
+                    return sorted(((n["clicks"], n["menu"] > 0, u, n) for u, n in read.items() if about.search(field(u, n))
+                                   and (self._inside(n["final"]) or ctx.search(n.get("title", "")))), key=lambda x: (x[0], x[1], x[2]))
                 pages = (about_pages(lambda u, n: n.get("title", "") + " " + urlsplit(n.get("final", u)).path.replace("-", " "))
                          or about_pages(lambda u, n: n.get("heads", "")))  # headings only when no title or address matches
                 if pdfs:
