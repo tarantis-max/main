@@ -198,7 +198,8 @@ class Find:
         return w
 
     def _report(self) -> dict:
-        read = {u: n for u, n in self.nodes.items() if n.get("status") == 200 and "text" in n}
+        skip = re.compile(self.tset.get("skip_pages") or r"(?!x)x", re.I)  # people and news pages: not where students look
+        read = {u: n for u, n in self.nodes.items() if n.get("status") == 200 and "text" in n and not skip.search(urlsplit(n["final"]).path)}
         ctx = re.compile(self.tset.get("context") or ".", re.I)
 
         def relevant(n, m) -> bool:
@@ -209,9 +210,11 @@ class Find:
         topics = []
         for t in self.tset.get("topics", []):
             fact, about = re.compile(t["fact"], re.I), re.compile(t["page"], re.I)
+            notnear = re.compile(t["not_near"], re.I) if t.get("not_near") else None
             stated = []
             for u, n in read.items():
-                m = next((m for m in fact.finditer(n["text"]) if relevant(n, m)), None)
+                m = next((m for m in fact.finditer(n["text"]) if relevant(n, m)
+                          and not (notnear and notnear.search(n["text"][max(0, m.start() - 80): m.end() + 80]))), None)
                 if m:
                     stated.append((n["clicks"], n["menu"] > 0, u, n, m))
             stated.sort(key=lambda x: (x[0], x[1], x[2]))
@@ -321,7 +324,7 @@ code{font-size:11px;overflow-wrap:anywhere}@media (max-width:640px){.tiles{grid-
     method = (f"<h2>Method and limits</h2><ul><li>Starts at the page above and follows links up to {s['max_clicks']} clicks. Pages under <code>{e(s['section'])}</code> are followed; pages outside it are read but not followed.</li>"
               "<li>A fact counts only when it is in the page's own text. Menus, headers, footers and sidebars don't count. A menu link still counts as a click, but the path is marked “menu”.</li>"
               "<li>Matching uses word patterns, so unusual wording can be missed. The patterns searched are listed below and can be edited in messages.json (findability).</li>"
-              "<li>PDF contents are not read.</li></ul>"
+              "<li>PDF contents are not read. People and news pages are not counted.</li></ul>"
               "<table><thead><tr><th>Topic</th><th>Page about it</th><th>Fact stated</th></tr></thead><tbody>"
               + "".join(f"<tr><td>{e(r['label'])}</td><td><code>{e(r['terms']['page'])}</code></td><td><code>{e(r['terms']['fact'])}</code></td></tr>" for r in s["topics"])
               + "</tbody></table>")

@@ -299,7 +299,8 @@
             "id": "cost",
             "label": "Tuition and cost of attendance",
             "page": "tuition|cost of attendance|\\bcost\\b",
-            "fact": "(tuition|cost of attendance)[^.\\n]{0,120}\\$\\s?\\d{1,3}(,\\d{3})+|\\$\\s?\\d{1,3}(,\\d{3})+[^.\\n]{0,60}(tuition|cost of attendance)"
+            "fact": "(tuition|cost of attendance)[^.\\n]{0,120}\\$\\s?\\d{1,3}(,\\d{3})+|\\$\\s?\\d{1,3}(,\\d{3})+[^.\\n]{0,60}(tuition|cost of attendance)",
+            "not_near": "remission|scholarship|award|grant"
           },
           {
             "id": "aid",
@@ -344,7 +345,8 @@
             "fact": "match (rate|list|results)|residenc(y|ies)\\b[^.\\n]{0,100}(\\d+%|match(ed)?|placement)|\\d+%[^.\\n]{0,60}(match|residenc(y|ies)\\b)"
           }
         ],
-        "context": "School of Medicine|medical school|medical education|\\bM\\.?D\\.?\\b|LCME|AMCAS|MCAT|medical students?"
+        "context": "School of Medicine|medical school|medical education|\\bM\\.?D\\.?\\b|LCME|AMCAS|MCAT|medical students?",
+        "skip_pages": "/(directory|news|events?)/"
       }
     }
   }
