@@ -3,7 +3,8 @@
 
     python3 agent.py                         run everything + findability, review, send
     python3 agent.py --skip answers          skip steps (access, crawl, compare, answers, findability)
-    python3 agent.py --review results/20261106-1306     review a finished run again (no new checks)
+    python3 agent.py --review                review the newest results bundle again (no new checks)
+    python3 agent.py --review bundle.zip     review that results bundle (a .zip, or a folder that holds one)
     python3 agent.py --dry-run               do everything except send email / Teams
 
 Schedule it on the VM (see README, "Agent"). Settings: agent.json (created on first run, not in git).
@@ -114,7 +115,7 @@ def run_findability(folder: Path, starts: list[dict]) -> None:
 def _bundle_files(folder: Path) -> dict:
     """The run's JSON files, from its results bundle (.zip) or from an unpacked bundle folder."""
     want = ("summary.json", "pages.json", "bot-access.json", "answers.json", "manifest.json")
-    zips = sorted(folder.glob("*.zip"))
+    zips = sorted(z for z in folder.glob("*.zip") if BUNDLE_NAME.search(z.name)) or sorted(folder.glob("*.zip"))
     out = {}
     if zips:
         with zipfile.ZipFile(zips[-1]) as z:
@@ -187,6 +188,66 @@ def digest(folder: Path) -> dict:
     if finds:
         d["findability"] = finds
     return d
+
+
+BUNDLE_NAME = re.compile(r"ai-readiness-results.*\.zip$", re.I)
+
+
+def _is_run(d: Path) -> bool:
+    return any(BUNDLE_NAME.search(z.name) for z in d.glob("*.zip")) or ((d / "summary.json").exists() and (d / "pages.json").exists())
+
+
+def _newest(places: list[Path]) -> Path | None:
+    found = []
+    for pl in places:
+        if pl.is_dir():
+            found += [z for z in pl.rglob("*.zip") if BUNDLE_NAME.search(z.name)]
+            found += [d / "summary.json" for d in pl.rglob("*") if d.is_dir() and (d / "summary.json").exists() and (d / "pages.json").exists()]
+    return max(found, key=lambda f: f.stat().st_mtime) if found else None
+
+
+def find_run(arg: str) -> Path:
+    """Turn what --review was given into a run folder: a run folder, a folder holding one at any depth,
+    a results bundle .zip anywhere, or "latest" (the newest bundle in results, this folder, or Downloads)."""
+    results = HERE / "results"
+    if arg == "latest":
+        downloads = [Path.home() / "Downloads"] + sorted(Path.home().glob("OneDrive*/Downloads"))  # OneDrive can move Downloads
+        newest = _newest([results]) or _newest(downloads) or next((z for z in sorted(HERE.glob("*.zip"), key=lambda z: z.stat().st_mtime, reverse=True)
+                                                             if BUNDLE_NAME.search(z.name)), None)
+        if not newest:
+            raise SystemExit("No results bundle found in the results folder, this folder or Downloads. Download one from the app "
+                             "(Site Readiness, Download results bundle) or use Run everything, then try again.")
+        print(f"  using the newest results: {newest}", file=sys.stderr)
+        arg = str(newest)
+    p = Path(arg.strip().strip('"')).expanduser()
+    if not p.is_absolute():
+        p = (Path.cwd() / p) if (Path.cwd() / p).exists() else (HERE / p)
+    if not p.exists():
+        raise SystemExit(f"{p} does not exist. Give a results bundle .zip or a folder, or use --review with nothing after it for the newest bundle.")
+    if p.is_file():
+        if p.name == "summary.json":
+            return p.parent
+        if p.suffix.lower() != ".zip":
+            raise SystemExit(f"{p.name} is not a results bundle (.zip).")
+        if results in p.resolve().parents:
+            return p.parent  # already inside a results folder
+        stamp = re.search(r"(\d{8}-\d{4})", p.name)
+        folder = results / (stamp.group(1) if stamp else p.stem)  # the review's files need a folder of their own
+        folder.mkdir(parents=True, exist_ok=True)
+        dest = folder / p.name
+        if not dest.exists():
+            import shutil
+            shutil.copy2(p, dest)
+            print(f"  copied {p.name} to {folder}", file=sys.stderr)
+        return folder
+    if _is_run(p):
+        return p
+    newest = _newest([p])
+    if newest:
+        return find_run(str(newest))
+    listing = ", ".join(sorted(x.name for x in p.iterdir())[:15]) or "nothing"
+    raise SystemExit(f"No results bundle in {p} (it contains: {listing}). Put the ai-readiness-results-....zip file there, "
+                     "or run  python3 agent.py --review  with nothing after it to use the newest bundle.")
 
 
 def previous_digest(folder: Path) -> dict | None:
@@ -426,7 +487,8 @@ def send_teams(text: str) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Run the checks, have Claude verify the findings, and send a summary.")
     ap.add_argument("--skip", default="", help="comma-separated steps to skip: access, crawl, compare, answers, findability")
-    ap.add_argument("--review", help="review this finished results folder instead of running new checks")
+    ap.add_argument("--review", nargs="?", const="latest",
+                    help="review finished results instead of running new checks: a results bundle .zip, a folder, or nothing for the newest bundle")
     ap.add_argument("--dry-run", action="store_true", help="do not send email or Teams")
     a = ap.parse_args()
     cfg = load_config()
@@ -436,7 +498,7 @@ def main() -> int:
         return 2
     started = dt.datetime.now()
     if a.review:
-        folder = Path(a.review).resolve()
+        folder = find_run(a.review)
     else:
         print("1. Running the checks", file=sys.stderr)
         folder = run_checks(skip)

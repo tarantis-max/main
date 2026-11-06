@@ -50,7 +50,8 @@ It never changes the website and never sends the email to the web team; you revi
 
 ```
 python3 agent.py                                  full run (several hours: the crawl and AI answer test are the long parts)
-python3 agent.py --review results/20261106-1306   review a finished run again, no new checks
+python3 agent.py --review --dry-run                review the newest results bundle (results folder, app folder or Downloads), send nothing
+python3 agent.py --review path\to\bundle.zip       review that results bundle
 python3 agent.py --skip answers --dry-run         skip a step; don't send anything
 ```
 
