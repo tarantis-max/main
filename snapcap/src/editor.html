@@ -1,0 +1,121 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'">
+<title>SnapCap Editor</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="editor.css">
+</head>
+<body>
+<header id="top">
+  <div class="group">
+    <button data-cmd="undo" title="Undo (Ctrl+Z)">↶</button>
+    <button data-cmd="redo" title="Redo (Ctrl+Y)">↷</button>
+  </div>
+  <div class="group" id="imageOps">
+    <button data-cmd="rotateL" title="Rotate left">⟲</button>
+    <button data-cmd="rotateR" title="Rotate right">⟳</button>
+    <button data-cmd="flipH" title="Flip horizontal">⇋</button>
+    <button data-cmd="flipV" title="Flip vertical">⇵</button>
+    <button data-cmd="resize" title="Resize image">Resize</button>
+    <button data-cmd="border" title="Add border">Border</button>
+    <button data-cmd="shadow" title="Add drop shadow">Shadow</button>
+  </div>
+  <div class="spacer"></div>
+  <div class="group zoom">
+    <button data-cmd="zoomOut" title="Zoom out (Ctrl+-)">−</button>
+    <span id="zoomLabel">100%</span>
+    <button data-cmd="zoomIn" title="Zoom in (Ctrl+=)">+</button>
+    <button data-cmd="zoomFit" title="Fit (Ctrl+0)">Fit</button>
+  </div>
+  <div class="group">
+    <button data-cmd="copy" title="Copy image (Ctrl+C)">Copy</button>
+    <button data-cmd="saveAs" title="Export (Ctrl+Shift+S)">Export…</button>
+    <button data-cmd="save" class="primary" title="Save to library (Ctrl+S)">Save</button>
+  </div>
+</header>
+
+<div id="main">
+  <nav id="tools">
+    <button data-tool="select" title="Select / move (V)">⬚<span>Select</span></button>
+    <button data-tool="arrow" title="Arrow (A)">➚<span>Arrow</span></button>
+    <button data-tool="line" title="Line (L)">╱<span>Line</span></button>
+    <button data-tool="rect" title="Rectangle (R)">▭<span>Shape</span></button>
+    <button data-tool="ellipse" title="Ellipse (E)">◯<span>Ellipse</span></button>
+    <button data-tool="text" title="Text / callout (T)">T<span>Text</span></button>
+    <button data-tool="step" title="Step number (N)">❶<span>Step</span></button>
+    <button data-tool="highlight" title="Highlighter (H)">▮<span>Highlight</span></button>
+    <button data-tool="pen" title="Pen (P)">✎<span>Pen</span></button>
+    <button data-tool="blur" title="Blur / pixelate (B)">▦<span>Blur</span></button>
+    <button data-tool="spotlight" title="Spotlight (S)">◐<span>Spotlight</span></button>
+    <button data-tool="magnify" title="Magnify (M)">⊕<span>Magnify</span></button>
+    <button data-tool="crop" title="Crop (C)">⌗<span>Crop</span></button>
+  </nav>
+
+  <section id="stage">
+    <div id="scroller">
+      <div id="sizer">
+        <canvas id="canvas"></canvas>
+        <textarea id="textEditor" spellcheck="false"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <aside id="props">
+    <h3 id="propsTitle">Properties</h3>
+    <div class="prop" data-for="color">
+      <label>Color</label>
+      <div class="swatches" id="colorSwatches"></div>
+    </div>
+    <div class="prop" data-for="fill">
+      <label>Fill</label>
+      <div class="swatches" id="fillSwatches"></div>
+    </div>
+    <div class="prop" data-for="width">
+      <label>Thickness <output id="widthOut"></output></label>
+      <input type="range" id="width" min="1" max="40" step="1">
+    </div>
+    <div class="prop" data-for="fontSize">
+      <label>Font size <output id="fontOut"></output></label>
+      <input type="range" id="fontSize" min="10" max="120" step="1">
+    </div>
+    <div class="prop" data-for="amount">
+      <label>Strength <output id="amountOut"></output></label>
+      <input type="range" id="amount" min="2" max="60" step="1">
+    </div>
+    <div class="prop" data-for="zoom">
+      <label>Zoom <output id="zoomOut"></output></label>
+      <input type="range" id="magZoom" min="1.5" max="6" step="0.5">
+    </div>
+    <div class="prop" data-for="shadow">
+      <label class="check"><input type="checkbox" id="shadow"> Drop shadow</label>
+    </div>
+    <div class="prop" data-for="crop">
+      <p class="muted">Drag over the image to choose the area to keep.</p>
+      <div class="row"><button id="cropApply" class="primary">Apply crop <kbd>Enter</kbd></button><button id="cropCancel">Cancel</button></div>
+    </div>
+    <div class="prop" data-for="object">
+      <div class="row">
+        <button data-cmd="duplicate" title="Ctrl+D">Duplicate</button>
+        <button data-cmd="front" title="Bring to front">Front</button>
+        <button data-cmd="back" title="Send to back">Back</button>
+        <button data-cmd="delete" class="danger" title="Delete">Delete</button>
+      </div>
+    </div>
+    <div class="info" id="info"></div>
+  </aside>
+</div>
+
+<div id="modal" hidden>
+  <form id="modalForm">
+    <h3 id="modalTitle"></h3>
+    <div id="modalBody"></div>
+    <div class="row end"><button type="button" id="modalCancel">Cancel</button><button type="submit" class="primary">OK</button></div>
+  </form>
+</div>
+<div id="toast"></div>
+
+<script src="editor.js"></script>
+</body>
+</html>

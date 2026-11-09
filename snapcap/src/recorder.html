@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'">
+<title>SnapCap Recorder</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  html, body { background: transparent; overflow: hidden; }
+  #bar {
+    margin: 4px; height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px;
+    background: rgba(24,26,32,.96); border: 1px solid var(--border); border-radius: 22px;
+    -webkit-app-region: drag;
+  }
+  #bar button { -webkit-app-region: no-drag; padding: 4px 10px; border-radius: 14px; }
+  #dot { width: 12px; height: 12px; border-radius: 50%; background: var(--danger); flex: none; }
+  #bar.recording #dot { animation: pulse 1.2s infinite; }
+  #bar.paused #dot { background: var(--muted); animation: none; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  #time { font: 600 14px ui-monospace, monospace; min-width: 64px; }
+  #status { color: var(--muted); flex: 1; font-size: 12px; white-space: nowrap; overflow: hidden; }
+  #stop { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <span id="dot"></span>
+  <span id="time">00:00</span>
+  <span id="status">Starting…</span>
+  <button id="pause" title="Pause / resume">Pause</button>
+  <button id="stop" title="Stop and save">Stop</button>
+  <button id="cancel" title="Discard recording">✕</button>
+</div>
+<video id="v" muted playsinline style="display:none"></video>
+<script src="recorder.js"></script>
+</body>
+</html>

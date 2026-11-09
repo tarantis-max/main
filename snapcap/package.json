@@ -1,0 +1,28 @@
+{
+  "name": "snapcap",
+  "productName": "SnapCap",
+  "version": "1.0.0",
+  "description": "Screen capture, screen recording and image annotation tool.",
+  "main": "src/main.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^38.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "edu.methodist.snapcap",
+    "productName": "SnapCap",
+    "files": ["src/**/*", "assets/**/*", "package.json"],
+    "win": { "target": ["nsis"], "icon": "assets/icon.png" },
+    "mac": { "target": ["dmg"], "icon": "assets/icon.png", "category": "public.app-category.productivity",
+      "extendInfo": { "NSMicrophoneUsageDescription": "SnapCap records your microphone during screen recordings." } },
+    "linux": { "target": ["AppImage"], "icon": "assets/icon.png" }
+  }
+}

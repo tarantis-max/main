@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+<title>SnapCap Overlay</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; cursor: crosshair; user-select: none; }
+  canvas { position: absolute; inset: 0; display: block; }
+  #hint {
+    position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+    background: rgba(20,22,28,.88); color: #fff; font: 13px system-ui, sans-serif;
+    padding: 8px 14px; border-radius: 8px; pointer-events: none; white-space: nowrap;
+  }
+  #hint b { color: #ffb020; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hint"></div>
+<script src="overlay.js"></script>
+</body>
+</html>
