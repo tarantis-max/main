@@ -1,0 +1,13 @@
+{
+  "name": "mu-softdocs-dataconnect-relay",
+  "version": "1.0.0",
+  "description": "Azure Function relay between Softdocs Etrieve and an Ellucian DataConnect pipeline — rewrites the Content-Type header in flight and handles Ethos token exchange.",
+  "main": "src/functions/*.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "func start"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.5.1"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+
+    "TARGET_URL": "https://integrate.elluciancloud.com/api/your-pipeline-api-name",
+    "OVERRIDE_CONTENT_TYPE": "application/json",
+
+    "ETHOS_API_KEY": "<DataConnect application API key from Ethos Integration>",
+    "ETHOS_AUTH_URL": "https://integrate.elluciancloud.com/auth",
+
+    "EXTRA_HEADERS": "",
+    "FORWARD_HEADERS": ""
+  }
+}

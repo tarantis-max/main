@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MU VPMO — Program Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c232c;
+    --border: #2b333d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #2f81f7;
+    --green: #2ea043;
+    --yellow: #d29922;
+    --red: #f85149;
+    --green-dim: rgba(46,160,67,.15);
+    --yellow-dim: rgba(210,153,34,.15);
+    --red-dim: rgba(248,81,73,.15);
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.25);
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+
+  /* ---------- Header ---------- */
+  header {
+    position: sticky; top: 0; z-index: 40;
+    background: rgba(13,17,23,.85);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+  }
+  .header-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .brand { display: flex; flex-direction: column; gap: 2px; margin-right: auto; }
+  .brand h1 { font-size: 18px; margin: 0; font-weight: 650; letter-spacing: -.2px; }
+  .brand .sub { font-size: 12px; color: var(--muted); }
+  .as-of { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .as-of b { color: var(--text); font-weight: 600; }
+  .btn {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 550;
+    display: inline-flex; align-items: center; gap: 7px; transition: .15s;
+  }
+  .btn:hover { background: #242c36; border-color: #3d4651; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: #4a93f8; }
+
+  main { padding: 20px 24px 60px; max-width: 1480px; margin: 0 auto; }
+
+  /* ---------- KPI cards ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 22px; }
+  .kpi {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 18px; box-shadow: var(--shadow); position: relative; overflow: hidden;
+  }
+  .kpi .label { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+  .kpi .value { font-size: 30px; font-weight: 700; margin-top: 6px; letter-spacing: -.5px; }
+  .kpi .foot { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+  .kpi.accent::after, .kpi.red::after, .kpi.yellow::after, .kpi.green::after {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  }
+  .kpi.accent::after { background: var(--accent); }
+  .kpi.red::after { background: var(--red); }
+  .kpi.yellow::after { background: var(--yellow); }
+  .kpi.green::after { background: var(--green); }
+
+  /* ---------- Charts row ---------- */
+  .charts { display: grid; grid-template-columns: 1.1fr 1.1fr 1fr; gap: 14px; margin-bottom: 22px; }
+  @media (max-width: 1000px){ .charts { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 18px; box-shadow: var(--shadow);
+  }
+  .card h3 { margin: 0 0 14px; font-size: 13px; font-weight: 600; color: var(--text); }
+  .card h3 .hint { color: var(--muted); font-weight: 400; font-size: 11px; }
+
+  /* horizontal bar chart */
+  .bar-row { display: grid; grid-template-columns: 120px 1fr 36px; align-items: center; gap: 10px; margin-bottom: 9px; cursor: pointer; }
+  .bar-row:hover .bar-label { color: var(--text); }
+  .bar-label { font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-track { background: var(--panel-2); border-radius: 5px; height: 18px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 5px; background: var(--accent); transition: width .5s ease; min-width: 2px; }
+  .bar-val { font-size: 12px; font-weight: 600; text-align: right; }
+
+  /* donut */
+  .donut-wrap { display: flex; align-items: center; gap: 18px; }
+  .donut-legend { display: flex; flex-direction: column; gap: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer; }
+  .legend-item .dot { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+  .legend-item .lv { color: var(--muted); margin-left: auto; font-weight: 600; }
+
+  /* ---------- Toolbar ---------- */
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+  .search { flex: 1 1 240px; min-width: 200px; position: relative; }
+  .search input {
+    width: 100%; background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 9px 12px 9px 34px; font-size: 13px; outline: none;
+  }
+  .search input:focus { border-color: var(--accent); }
+  .search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+  select.filter {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 9px 10px; font-size: 13px; outline: none; cursor: pointer; max-width: 200px;
+  }
+  select.filter:focus { border-color: var(--accent); }
+  .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { background: transparent; border: none; color: var(--muted); padding: 9px 14px; cursor: pointer; font-size: 13px; font-weight: 550; }
+  .seg button.active { background: var(--accent); color: #fff; }
+  .clear-link { font-size: 12px; color: var(--muted); cursor: pointer; background: none; border: none; }
+  .clear-link:hover { color: var(--text); }
+  .result-count { font-size: 12px; color: var(--muted); margin-left: auto; }
+
+  /* ---------- Board ---------- */
+  .board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; align-items: start; }
+  @media (max-width: 1100px){ .board { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 620px){ .board { grid-template-columns: 1fr; } }
+  .col { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+  .col-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 0 2px; }
+  .col-head .name { font-size: 13px; font-weight: 650; }
+  .col-head .count { font-size: 11px; color: var(--muted); background: var(--panel-2); border-radius: 20px; padding: 1px 9px; font-weight: 600; }
+  .col-head .phase-dot { width: 9px; height: 9px; border-radius: 50%; }
+  .pcard {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; padding: 11px 12px;
+    margin-bottom: 9px; cursor: pointer; transition: .12s; border-left: 3px solid var(--green);
+  }
+  .pcard:hover { transform: translateY(-1px); border-color: #3d4651; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+  .pcard.risk-Green { border-left-color: var(--green); }
+  .pcard.risk-Yellow { border-left-color: var(--yellow); }
+  .pcard.risk-Red { border-left-color: var(--red); }
+  .pcard .pc-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .pcard .pc-id { font-size: 11px; color: var(--muted); font-weight: 600; font-family: ui-monospace, monospace; }
+  .pcard .pc-name { font-size: 12.5px; font-weight: 600; line-height: 1.3; margin-bottom: 8px; }
+  .pcard .pc-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+  .mini-prog { height: 4px; background: var(--bg); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+  .mini-prog > div { height: 100%; background: var(--accent); border-radius: 3px; }
+
+  /* chips */
+  .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 650; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
+  .chip.Green { background: var(--green-dim); color: #5fd97a; }
+  .chip.Yellow { background: var(--yellow-dim); color: #e3b341; }
+  .chip.Red { background: var(--red-dim); color: #ff7b72; }
+  .chip .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .chip.Green .dot { background: var(--green); }
+  .chip.Yellow .dot { background: var(--yellow); }
+  .chip.Red .dot { background: var(--red); }
+  .tag { font-size: 10.5px; padding: 2px 8px; border-radius: 6px; background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); white-space: nowrap; }
+  .badge-overdue { font-size: 10px; font-weight: 700; color: #ff7b72; background: var(--red-dim); padding: 1px 7px; border-radius: 5px; }
+  .badge-soon { font-size: 10px; font-weight: 700; color: #e3b341; background: var(--yellow-dim); padding: 1px 7px; border-radius: 5px; }
+
+  /* ---------- Table ---------- */
+  .table-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    text-align: left; padding: 11px 14px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px;
+    color: var(--muted); border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; white-space: nowrap;
+    position: sticky; top: 0; background: var(--panel); z-index: 2;
+  }
+  thead th:hover { color: var(--text); }
+  thead th .arrow { opacity: .4; font-size: 10px; }
+  thead th.sorted .arrow { opacity: 1; color: var(--accent); }
+  tbody td { padding: 11px 14px; border-bottom: 1px solid rgba(43,51,61,.5); vertical-align: middle; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--panel-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  .td-id { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+  .td-name { font-weight: 600; max-width: 320px; }
+  .td-name .nm { display: block; }
+  .td-name .deps { font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+  .prog-cell { display: flex; align-items: center; gap: 8px; min-width: 110px; }
+  .prog-bar { flex: 1; height: 6px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
+  .prog-bar > div { height: 100%; background: var(--accent); border-radius: 4px; }
+  .prog-num { font-size: 11px; color: var(--muted); font-weight: 600; width: 30px; text-align: right; }
+
+  /* ---------- Modal ---------- */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.6); backdrop-filter: blur(3px);
+    display: none; align-items: center; justify-content: center; z-index: 100; padding: 24px;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow);
+    width: 100%; max-width: 640px; max-height: 88vh; overflow: auto;
+  }
+  .modal-head { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--panel); }
+  .modal-head .mh-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .modal-head .m-id { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+  .modal-head h2 { margin: 6px 0 0; font-size: 19px; line-height: 1.3; }
+  .modal-close { background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 16px; flex: none; }
+  .modal-close:hover { color: var(--text); }
+  .modal-body { padding: 20px 24px 24px; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px; margin-bottom: 20px; }
+  .detail-grid .field .k { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+  .detail-grid .field .v { font-size: 13.5px; }
+  .detail-grid .field.full { grid-column: 1 / -1; }
+  .big-prog { height: 9px; background: var(--panel-2); border-radius: 6px; overflow: hidden; margin-top: 6px; }
+  .big-prog > div { height: 100%; background: var(--accent); border-radius: 6px; }
+  .notes-box { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-size: 13px; line-height: 1.55; }
+
+  .empty { text-align: center; color: var(--muted); padding: 60px 20px; }
+  .hidden { display: none !important; }
+  input[type=file] { display: none; }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text); padding: 11px 18px;
+    border-radius: 10px; box-shadow: var(--shadow); font-size: 13px; opacity: 0; transition: .25s; z-index: 200; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.err { border-color: var(--red); }
+  .toast.ok { border-color: var(--green); }
+
+  /* ---------- Change Management tab ---------- */
+  .cr-toolbar { display:flex; gap:10px; align-items:center; margin-bottom:16px; flex-wrap:wrap; }
+  .cr-table-wrap { overflow-x:auto; }
+  .cr-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .cr-table th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.4px;
+    color:var(--muted); font-weight:600; padding:8px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .cr-table td { padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .cr-table tbody tr { cursor:pointer; }
+  .cr-table tbody tr:hover { background:var(--panel-2); }
+  .cr-status { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600;
+    padding:3px 9px; border-radius:20px; white-space:nowrap; }
+  .cr-status.pending  { background:rgba(210,153,34,.15); color:var(--yellow); }
+  .cr-status.approved { background:rgba(46,160,67,.15);  color:var(--green);  }
+  .cr-status.rejected { background:rgba(248,81,73,.15);  color:var(--red);    }
+  .cr-status.implemented { background:rgba(47,129,247,.15); color:var(--accent); }
+  .cr-status.closed   { background:var(--panel-2); color:var(--muted); }
+  .cr-status.draft    { background:var(--panel-2); color:var(--muted); }
+  .cr-type { font-size:11px; font-weight:600; padding:2px 7px; border-radius:4px;
+    border:1px solid var(--border); color:var(--muted); }
+  .cr-type.Emergency { border-color:var(--red); color:var(--red); }
+  .cr-type.Normal    { border-color:var(--accent); color:var(--accent); }
+  .cr-type.Standard  { border-color:var(--muted); }
+  .cr-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:14px; margin-bottom:20px; }
+  /* Approval history in modal */
+  .approval-list { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+  .approval-item { display:flex; align-items:flex-start; gap:10px; font-size:13px;
+    background:var(--panel-2); border-radius:8px; padding:10px 12px; }
+  .approval-icon { font-size:16px; flex:none; }
+  .approval-meta { font-size:11.5px; color:var(--muted); }
+  .cr-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+  .btn-approve { background:#2ea043; border:1px solid #2ea043; color:#fff;
+    padding:9px 16px; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; }
+  .btn-approve:hover { background:#3cba56; }
+  .btn-reject  { background:transparent; border:1px solid var(--red); color:var(--red);
+    padding:9px 16px; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; }
+  .btn-reject:hover  { background:rgba(248,81,73,.1); }
+  .btn-implement { background:var(--accent); border:1px solid var(--accent); color:#fff;
+    padding:9px 16px; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; }
+  .btn-implement:hover { background:#4a93f8; }
+
+  /* ---------- Edit mode ---------- */
+  .edit-field { display: flex; flex-direction: column; gap: 5px; }
+  .edit-field label { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); font-weight: 600; }
+  .edit-field input, .edit-field select, .edit-field textarea {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 9px 11px; font-size: 13px; font-family: inherit; outline: none; width: 100%;
+  }
+  .edit-field input:focus, .edit-field select:focus, .edit-field textarea:focus { border-color: var(--accent); }
+  .edit-field textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
+  .edit-field .read-val { font-size: 13.5px; color: var(--muted); padding: 2px 0; }
+  .edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px; margin-bottom: 20px; }
+  .edit-grid .full { grid-column: 1 / -1; }
+  .edit-actions { display: flex; gap: 10px; align-items: center; padding-top: 4px; }
+  .btn-save {
+    background: var(--green); border: 1px solid var(--green); color: #fff;
+    padding: 9px 18px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 7px; transition: .15s;
+  }
+  .btn-save:hover { background: #3cba56; }
+  .btn-save:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-cancel-edit {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    padding: 9px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 550;
+  }
+  .btn-cancel-edit:hover { color: var(--text); border-color: #3d4651; }
+  .btn-edit {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+    padding: 6px 13px; border-radius: 7px; cursor: pointer; font-size: 12px; font-weight: 600;
+    margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-edit:hover { color: var(--text); border-color: #3d4651; }
+  .unsaved-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); display: none; }
+  .unsaved-dot.show { display: inline-block; }
+  .saving-spin { animation: spin .7s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Comments ---------- */
+  .comments-section { margin-top: 22px; border-top: 1px solid var(--border); padding-top: 16px; }
+  .comments-section .k { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); font-weight: 600; margin-bottom: 10px; }
+  .comments-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; max-height: 240px; overflow: auto; }
+  .comment { background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; }
+  .comment-meta { font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+  .comment-meta b { color: var(--text); font-weight: 600; }
+  .comment-text { font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+  .comment-add { display: flex; flex-direction: column; gap: 8px; }
+  .comment-add textarea {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 9px 11px; font-size: 13px; font-family: inherit; resize: vertical; min-height: 60px; outline: none;
+  }
+  .comment-add textarea:focus { border-color: var(--accent); }
+  .comment-add .btn-save { align-self: flex-start; }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-row">
+    <div class="brand">
+      <h1>Methodist University — VPMO Program Dashboard</h1>
+      <span class="sub">Office of the CIO &nbsp;·&nbsp; Confidential</span>
+    </div>
+    <div class="as-of">Data as of <b id="asOf">—</b></div>
+    <button class="btn" id="exportBtn" title="Download current view as CSV">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.75.75 0 0 1 .75.75v6.69l1.72-1.72a.75.75 0 1 1 1.06 1.06l-3 3a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 0 1 1.06-1.06l1.72 1.72V1.75A.75.75 0 0 1 8 1Z"/><path d="M2.75 12a.75.75 0 0 1 .75.75v1.5h9v-1.5a.75.75 0 0 1 1.5 0V14a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1v-1.25a.75.75 0 0 1 .75-.75Z"/></svg>
+      Export CSV
+    </button>
+    <select class="filter" id="jiraProject" title="Choose a Jira project to load" style="display:none"></select>
+    <button class="btn" id="jiraBtn" title="Pull live data from Jira (requires the proxy server running)">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm11.53-1.97a.75.75 0 0 1 0 1.06l-3.5 3.5a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 1 1 1.06-1.06l1.47 1.47 2.97-2.97a.75.75 0 0 1 1.06 0Z"/></svg>
+      Load from Jira
+    </button>
+    <button class="btn" id="newCRBtn" title="Submit a change request" style="display:none">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a.75.75 0 0 1 .75.75v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5A.75.75 0 0 1 8 2Z"/></svg>
+      New CR
+    </button>
+    <button class="btn" id="newItemBtn" title="Create a new work item in the selected Jira project" style="display:none">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a.75.75 0 0 1 .75.75v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5A.75.75 0 0 1 8 2Z"/></svg>
+      New work item
+    </button>
+    <button class="btn primary" id="uploadBtn" title="Refresh dashboard from an updated spreadsheet">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 15a.75.75 0 0 1-.75-.75V7.56L5.53 9.28a.75.75 0 0 1-1.06-1.06l3-3a.75.75 0 0 1 1.06 0l3 3a.75.75 0 1 1-1.06 1.06L8.75 7.56v6.69A.75.75 0 0 1 8 15Z"/><path d="M2.75 4a.75.75 0 0 0 .75-.75v-1.5h9v1.5a.75.75 0 0 0 1.5 0V1.75a1 1 0 0 0-1-1h-10a1 1 0 0 0-1 1v1.5A.75.75 0 0 0 2.75 4Z"/></svg>
+      Update from spreadsheet
+    </button>
+    <input type="file" id="fileInput" accept=".xlsx,.csv" />
+  </div>
+</header>
+
+<main>
+  <section class="kpis" id="kpis"></section>
+  <section class="charts">
+    <div class="card"><h3>Projects by Phase</h3><div id="chartPhase"></div></div>
+    <div class="card"><h3>Active Projects by Portfolio <span class="hint">(excludes Closed)</span></h3><div id="chartPortfolio"></div></div>
+    <div class="card"><h3>Risk Status <span class="hint">(active)</span></h3><div id="chartRag"></div></div>
+  </section>
+
+  <div class="toolbar">
+    <div class="search">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M11.74 10.68a6 6 0 1 0-1.06 1.06l3.04 3.04a.75.75 0 1 0 1.06-1.06l-3.04-3.04ZM7 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9Z"/></svg>
+      <input type="text" id="search" placeholder="Search projects, owners, notes…" />
+    </div>
+    <select class="filter" id="fPortfolio"><option value="">All portfolios</option></select>
+    <select class="filter" id="fPhase"><option value="">All phases</option></select>
+    <select class="filter" id="fRag"><option value="">All Risk</option></select>
+    <select class="filter" id="fOwner"><option value="">All IT owners</option></select>
+    <button class="clear-link" id="clearBtn">Clear filters</button>
+    <div class="seg" id="viewSeg">
+      <button data-view="board" class="active">Board</button>
+      <button data-view="table">Table</button>
+      <button data-view="changes">Changes</button>
+    </div>
+    <span class="result-count" id="resultCount"></span>
+  </div>
+
+  <section id="boardView"></section>
+  <section id="tableView" class="hidden"></section>
+  <section id="changesView" class="hidden"></section>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="modal" id="modal"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   Jira is the system of record. The dashboard starts empty and
+   loads live from a Jira project (picker in the header). A
+   spreadsheet upload is still supported for a one-time import.
+   ============================================================ */
+const META = { asOf: "—" };
+const PHASES = ["Planning", "In-Flight", "Stabilization", "Closed"];
+const PHASE_COLOR = { "Planning":"#8b949e", "In-Flight":"#2f81f7", "Stabilization":"#a371f7", "Closed":"#3fb950" };
+const RAG_COLOR = { "Green":"#2ea043", "Yellow":"#d29922", "Red":"#f85149" };
+
+let PROJECTS = [];
+let JIRA_PROJECTS = [];   // [{key,name,issueTypes:[...]}] from the proxy
+let JIRA_READY = false;   // true once the proxy answers (enables edit/create)
+
+/* ---------------- State ---------------- */
+const state = { view: "board", search: "", portfolio: "", phase: "", risk: "", owner: "", sortKey: "id", sortDir: 1 };
+const SOON_DAYS = 90;
+const today = new Date();
+
+/* ---------------- Helpers ---------------- */
+const $ = s => document.querySelector(s);
+const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function parseDate(s){ if(!s) return null; const d=new Date(s+"T00:00:00"); return isNaN(d)?null:d; }
+function fmtDate(s){ const d=parseDate(s); if(!d) return "—"; return d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); }
+function fmtDateTime(s){ const d=new Date(s); if(isNaN(d)) return ""; return d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})+" "+d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}); }
+function daysUntil(s){ const d=parseDate(s); if(!d) return null; return Math.round((d-today)/86400000); }
+function isOverdue(p){ const du=daysUntil(p.end); return du!=null && du<0 && p.phase!=="Closed"; }
+function isSoon(p){ const du=daysUntil(p.end); return du!=null && du>=0 && du<=SOON_DAYS && p.phase!=="Closed"; }
+function showToast(msg, isErr, isOk){ const t=$("#toast"); t.textContent=msg; t.className="toast show"+(isErr?" err":isOk?" ok":""); setTimeout(()=>t.className="toast"+(isErr?" err":isOk?" ok":""),3200); }
+
+/* ---------------- Filtering ---------------- */
+function filtered(){
+  const q = state.search.trim().toLowerCase();
+  let list = PROJECTS.filter(p => {
+    if (state.portfolio && p.portfolio !== state.portfolio) return false;
+    if (state.phase && p.phase !== state.phase) return false;
+    if (state.risk && p.risk !== state.risk) return false;
+    if (state.owner && p.itOwner !== state.owner) return false;
+    if (q) {
+      const hay = [p.id,p.name,p.portfolio,p.sponsor,p.itOwner,p.notes,p.dependencies,p.compliance].join(" ").toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  return list;
+}
+
+/* ---------------- KPIs ---------------- */
+function renderKpis(){
+  const all = PROJECTS;
+  const active = all.filter(p => p.phase !== "Closed");
+  const avgActive = active.length ? Math.round(active.reduce((s,p)=>s+(p.pct||0),0)/active.length) : 0;
+  const reds = active.filter(p => p.risk==="Red").length;
+  const yellows = active.filter(p => p.risk==="Yellow").length;
+  const overdue = all.filter(isOverdue).length;
+  const soon = all.filter(isSoon).length;
+  const cards = [
+    {label:"Total Projects", value:all.length, foot:`${active.length} active · ${all.length-active.length} closed`, cls:"accent"},
+    {label:"Avg % Complete", value:avgActive+"%", foot:"across active projects", cls:"accent"},
+    {label:"Red (At Risk)", value:reds, foot:"off track — escalation", cls:"red"},
+    {label:"Yellow", value:yellows, foot:"recovery plan needed", cls:"yellow"},
+    {label:"Due ≤ 90 days", value:soon, foot:"active, target end soon", cls:"yellow"},
+    {label:"Overdue", value:overdue, foot:"past target, not closed", cls: overdue?"red":"green"},
+  ];
+  $("#kpis").innerHTML = cards.map(c=>`
+    <div class="kpi ${c.cls}">
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value}</div>
+      <div class="foot">${c.foot}</div>
+    </div>`).join("");
+}
+
+/* ---------------- Charts ---------------- */
+function barChart(el, rows, colorFn, filterKey){
+  const max = Math.max(1, ...rows.map(r=>r.value));
+  el.innerHTML = rows.map(r=>`
+    <div class="bar-row" data-key="${filterKey}" data-val="${esc(r.label)}">
+      <div class="bar-label" title="${esc(r.label)}">${esc(r.label)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(r.value/max)*100}%;background:${colorFn(r.label)}"></div></div>
+      <div class="bar-val">${r.value}</div>
+    </div>`).join("");
+  el.querySelectorAll(".bar-row").forEach(row=>row.addEventListener("click",()=>{
+    const k=row.dataset.key, v=row.dataset.val;
+    if (k==="phase"){ state.phase = state.phase===v?"":v; $("#fPhase").value=state.phase; }
+    if (k==="portfolio"){ state.portfolio = state.portfolio===v?"":v; $("#fPortfolio").value=state.portfolio; }
+    render();
+  }));
+}
+function countBy(list, key){
+  const m = {};
+  list.forEach(p => { const k=p[key]||"—"; m[k]=(m[k]||0)+1; });
+  return m;
+}
+function renderCharts(){
+  // Phase (all)
+  const pm = countBy(PROJECTS, "phase");
+  barChart($("#chartPhase"), PHASES.filter(p=>pm[p]).map(p=>({label:p,value:pm[p]})), l=>PHASE_COLOR[l]||"#2f81f7", "phase");
+  // Portfolio (active)
+  const active = PROJECTS.filter(p=>p.phase!=="Closed");
+  const portm = countBy(active, "portfolio");
+  const portRows = Object.entries(portm).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value);
+  barChart($("#chartPortfolio"), portRows, ()=>"#2f81f7", "portfolio");
+  // Risk donut (active)
+  renderDonut(active);
+}
+function renderDonut(active){
+  const rm = {Green:0,Yellow:0,Red:0};
+  active.forEach(p=>{ if(rm[p.risk]!=null) rm[p.risk]++; });
+  const total = rm.Green+rm.Yellow+rm.Red || 1;
+  const segs = ["Green","Yellow","Red"].filter(k=>rm[k]>0);
+  const R=52, C=2*Math.PI*R; let offset=0;
+  const circles = segs.map(k=>{
+    const frac = rm[k]/total, len = frac*C;
+    const c = `<circle r="${R}" cx="70" cy="70" fill="none" stroke="${RAG_COLOR[k]}" stroke-width="18"
+      stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-offset}" transform="rotate(-90 70 70)"/>`;
+    offset += len; return c;
+  }).join("");
+  const legend = ["Green","Yellow","Red"].map(k=>`
+    <div class="legend-item" data-risk="${k}">
+      <span class="dot" style="background:${RAG_COLOR[k]}"></span>${k}
+      <span class="lv">${rm[k]} · ${Math.round(rm[k]/total*100)}%</span>
+    </div>`).join("");
+  $("#chartRag").innerHTML = `
+    <div class="donut-wrap">
+      <svg width="140" height="140" viewBox="0 0 140 140">
+        ${circles}
+        <text x="70" y="64" text-anchor="middle" font-size="26" font-weight="700" fill="#e6edf3">${active.length}</text>
+        <text x="70" y="84" text-anchor="middle" font-size="11" fill="#8b949e">active</text>
+      </svg>
+      <div class="donut-legend">${legend}</div>
+    </div>`;
+  $("#chartRag").querySelectorAll(".legend-item").forEach(li=>li.addEventListener("click",()=>{
+    const v=li.dataset.risk; state.risk = state.risk===v?"":v; $("#fRag").value=state.risk; render();
+  }));
+}
+
+/* ---------------- Board view ---------------- */
+function pcardHTML(p){
+  const overdue = isOverdue(p), soon = isSoon(p);
+  const badge = overdue ? `<span class="badge-overdue">OVERDUE</span>` : (soon ? `<span class="badge-soon">DUE SOON</span>` : "");
+  return `
+    <div class="pcard risk-${esc(p.risk)}" data-id="${esc(p.id)}">
+      <div class="pc-top">
+        <span class="pc-id">${esc(p.id)}</span>
+        <span class="chip ${esc(p.risk)}"><span class="dot"></span>${esc(p.risk)}</span>
+      </div>
+      <div class="pc-name">${esc(p.name)}</div>
+      <div class="pc-meta">
+        <span class="tag">${esc(p.portfolio)}</span>
+        ${p.itOwner?`<span>· ${esc(p.itOwner)}</span>`:""}
+        ${badge}
+      </div>
+      <div class="pc-meta" style="margin-top:6px">
+        <span>Target: ${fmtDate(p.end)}</span>
+        <span style="margin-left:auto;font-weight:600;color:var(--text)">${p.pct==null?"—":p.pct+"%"}</span>
+      </div>
+      <div class="mini-prog"><div style="width:${p.pct||0}%"></div></div>
+    </div>`;
+}
+function renderBoard(list){
+  const cols = PHASES.map(ph=>{
+    const items = list.filter(p=>p.phase===ph);
+    return `
+      <div class="col">
+        <div class="col-head">
+          <span class="phase-dot" style="background:${PHASE_COLOR[ph]}"></span>
+          <span class="name">${ph}</span>
+          <span class="count">${items.length}</span>
+        </div>
+        ${items.length ? items.map(pcardHTML).join("") : `<div style="color:var(--muted);font-size:12px;padding:8px 2px">No projects</div>`}
+      </div>`;
+  }).join("");
+  $("#boardView").innerHTML = `<div class="board">${cols}</div>`;
+  $("#boardView").querySelectorAll(".pcard").forEach(c=>c.addEventListener("click",()=>openModal(c.dataset.id)));
+}
+
+/* ---------------- Table view ---------------- */
+const COLUMNS = [
+  {key:"id", label:"ID"},
+  {key:"name", label:"Project"},
+  {key:"phase", label:"Phase"},
+  {key:"portfolio", label:"Portfolio"},
+  {key:"itOwner", label:"IT Owner"},
+  {key:"pct", label:"% Comp"},
+  {key:"risk", label:"Risk"},
+  {key:"end", label:"Target End"},
+];
+function renderTable(list){
+  const sorted = [...list].sort((a,b)=>{
+    let x=a[state.sortKey], y=b[state.sortKey];
+    if (state.sortKey==="pct"){ x=x||0; y=y||0; }
+    else { x=(x==null?"":String(x)).toLowerCase(); y=(y==null?"":String(y)).toLowerCase(); }
+    if (x<y) return -1*state.sortDir; if (x>y) return 1*state.sortDir; return 0;
+  });
+  const head = COLUMNS.map(c=>{
+    const isSorted = state.sortKey===c.key;
+    const arrow = isSorted ? (state.sortDir===1?"▲":"▼") : "↕";
+    return `<th data-key="${c.key}" class="${isSorted?"sorted":""}">${c.label} <span class="arrow">${arrow}</span></th>`;
+  }).join("");
+  const rows = sorted.map(p=>{
+    const overdue=isOverdue(p), soon=isSoon(p);
+    const endBadge = overdue?` <span class="badge-overdue">!</span>`:(soon?` <span class="badge-soon">soon</span>`:"");
+    return `
+      <tr data-id="${esc(p.id)}">
+        <td class="td-id">${esc(p.id)}</td>
+        <td class="td-name"><span class="nm">${esc(p.name)}</span>${p.dependencies?`<span class="deps">↳ ${esc(p.dependencies)}</span>`:""}</td>
+        <td><span class="tag" style="border-color:${PHASE_COLOR[p.phase]||"var(--border)"};color:${PHASE_COLOR[p.phase]||"var(--muted)"}">${esc(p.phase)}</span></td>
+        <td style="color:var(--muted)">${esc(p.portfolio)}</td>
+        <td style="color:var(--muted)">${esc(p.itOwner||"—")}</td>
+        <td><div class="prog-cell"><div class="prog-bar"><div style="width:${p.pct||0}%"></div></div><span class="prog-num">${p.pct==null?"—":p.pct+"%"}</span></div></td>
+        <td><span class="chip ${esc(p.risk)}"><span class="dot"></span>${esc(p.risk)}</span></td>
+        <td style="white-space:nowrap">${fmtDate(p.end)}${endBadge}</td>
+      </tr>`;
+  }).join("");
+  $("#tableView").innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr>${head}</tr></thead>
+        <tbody>${rows || `<tr><td colspan="8" class="empty">No projects match your filters.</td></tr>`}</tbody>
+      </table>
+    </div>`;
+  $("#tableView").querySelectorAll("th").forEach(th=>th.addEventListener("click",()=>{
+    const k=th.dataset.key;
+    if (state.sortKey===k) state.sortDir*=-1; else { state.sortKey=k; state.sortDir=1; }
+    render();
+  }));
+  $("#tableView").querySelectorAll("tbody tr[data-id]").forEach(tr=>tr.addEventListener("click",()=>openModal(tr.dataset.id)));
+}
+
+/* ---------------- Modal ---------------- */
+function openModal(id){
+  const p = PROJECTS.find(x=>x.id===id); if(!p) return;
+  const du = daysUntil(p.end);
+  let timing = "";
+  if (du!=null && p.phase!=="Closed") timing = du<0 ? ` · <span style="color:#ff7b72;font-weight:600">${Math.abs(du)} days overdue</span>` : ` · ${du} days remaining`;
+  $("#modal").innerHTML = `
+    <div class="modal-head">
+      <div class="mh-top">
+        <div>
+          <span class="m-id">${esc(p.id)}</span>${p.url?` · <a href="${esc(p.url)}" target="_blank" rel="noopener">open in Jira ↗</a>`:""}
+          <h2>${esc(p.name)}</h2>
+        </div>
+        <button class="modal-close" id="mClose">✕</button>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <span class="chip ${esc(p.risk)}"><span class="dot"></span>${esc(p.risk)}</span>
+        <span class="tag" style="border-color:${PHASE_COLOR[p.phase]||"var(--border)"};color:${PHASE_COLOR[p.phase]||"var(--muted)"}">${esc(p.phase)}</span>
+        <span class="tag">${esc(p.portfolio)}</span>
+        ${p.url?`<button class="btn-edit" id="mEdit"><svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.929-.928l.929-3.251c.081-.286.235-.547.445-.756l8.612-8.61Z"/></svg>Edit</button>`:""}
+      </div>
+    </div>
+    <div class="modal-body" id="mBody"></div>`;
+  $("#overlay").classList.add("open");
+  $("#mClose").addEventListener("click", closeModal);
+  renderModalView(p);
+}
+
+function modalViewBody(p, timing){
+  return `
+    <div class="detail-grid">
+      <div class="field full">
+        <div class="k">Progress</div>
+        <div class="v">${p.pct==null?"Not tracked":p.pct+"% complete"}</div>
+        <div class="big-prog"><div style="width:${p.pct||0}%"></div></div>
+      </div>
+      ${p.projectId?`<div class="field"><div class="k">Project ID</div><div class="v">${esc(p.projectId)}</div></div>`:""}
+      <div class="field"><div class="k">Business Sponsor</div><div class="v">${esc(p.sponsor||"—")}</div></div>
+      <div class="field"><div class="k">IT Owner</div><div class="v">${esc(p.itOwner||"—")}</div></div>
+      <div class="field"><div class="k">Target End</div><div class="v">${fmtDate(p.end)}${timing}</div></div>
+      <div class="field"><div class="k">Compliance Driver</div><div class="v">${esc(p.compliance||"—")}</div></div>
+      <div class="field"><div class="k">Dependencies</div><div class="v">${esc(p.dependencies||"—")}</div></div>
+    </div>
+    <div class="k" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;margin-bottom:8px">Notes / Next Milestone</div>
+    <div class="notes-box">${esc(p.notes||"—")}</div>
+    ${p.url?`
+    <div class="comments-section">
+      <div class="k">Comments</div>
+      <div id="cList" class="comments-list"><div class="read-val">Loading…</div></div>
+      <div class="comment-add">
+        <textarea id="cInput" placeholder="Add a comment to ${esc(p.id)}…"></textarea>
+        <button class="btn-save" id="cPost"><span id="cIcon">↑</span> Comment</button>
+      </div>
+    </div>`:""}`;
+}
+
+function renderModalView(p){
+  const du=daysUntil(p.end); let timing="";
+  if(du!=null && p.phase!=="Closed") timing=du<0?` · <span style="color:#ff7b72;font-weight:600">${Math.abs(du)} days overdue</span>`:` · ${du} days remaining`;
+  $("#mBody").innerHTML = modalViewBody(p, timing);
+  const editBtn = document.querySelector("#modal .btn-edit");
+  if (editBtn) editBtn.onclick = ()=>openEditMode(p.id);
+  if (p.url) loadComments(p.id);
+}
+
+async function loadComments(id){
+  const list = $("#cList"); if(!list) return;
+  try{
+    const res = await fetch(`/api/projects/${encodeURIComponent(id)}/comments`);
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error||("HTTP "+res.status));
+    const cs = data.comments||[];
+    list.innerHTML = cs.length ? cs.map(c=>`
+      <div class="comment">
+        <div class="comment-meta"><b>${esc(c.author)}</b> · ${esc(fmtDateTime(c.created))}</div>
+        <div class="comment-text">${esc(c.text)}</div>
+      </div>`).join("") : `<div class="read-val">No comments yet.</div>`;
+  }catch(e){
+    const hint=/Failed to fetch|NetworkError/i.test(String(e))?"start the server with start.bat":e.message;
+    list.innerHTML=`<div class="read-val">Couldn't load comments (${esc(hint)}).</div>`;
+  }
+  const post = $("#cPost");
+  if(post) post.onclick = ()=>submitComment(id);
+}
+
+async function submitComment(id){
+  const input=$("#cInput"); if(!input) return;
+  const text=input.value.trim();
+  if(!text){ showToast("Comment is empty."); return; }
+  const btn=$("#cPost"), icon=$("#cIcon");
+  btn.disabled=true; icon.className="saving-spin"; icon.textContent="↻";
+  try{
+    const res=await fetch(`/api/projects/${encodeURIComponent(id)}/comments`,{
+      method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({body:text}),
+    });
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.error||("HTTP "+res.status));
+    input.value="";
+    await loadComments(id);
+    showToast("Comment added to Jira", false, true);
+  }catch(e){
+    const hint=/Failed to fetch|NetworkError/i.test(String(e))?"Server not running — start it with start.bat first.":e.message;
+    showToast("Comment failed: "+hint, true);
+    const b=$("#cPost"), ic=$("#cIcon"); if(b){b.disabled=false;} if(ic){ic.className="";ic.textContent="↑";}
+  }
+}
+
+function openEditMode(id){
+  const p = PROJECTS.find(x=>x.id===id); if(!p) return;
+  const phaseOpts = ["Planning","In-Flight","Stabilization","Closed"].map(ph=>`<option value="${ph}" ${p.phase===ph?"selected":""}>${ph}</option>`).join("");
+  const ragOpts   = ["Green","Yellow","Red"].map(r=>`<option value="${r}" ${p.risk===r?"selected":""}>${r}</option>`).join("");
+  $("#mBody").innerHTML = `
+    <div class="edit-grid">
+      <div class="edit-field">
+        <label>Phase</label>
+        <select id="ePhase">${phaseOpts}</select>
+      </div>
+      <div class="edit-field">
+        <label>Risk Status</label>
+        <select id="eRag">${ragOpts}</select>
+      </div>
+      <div class="edit-field">
+        <label>Target End</label>
+        <input type="date" id="eEnd" value="${esc(p.end||"")}" />
+      </div>
+      <div class="edit-field">
+        <label>Portfolio</label>
+        <input type="text" id="ePortfolio" value="${esc(p.portfolio||"")}" />
+      </div>
+      <div class="edit-field">
+        <label>Compliance Driver</label>
+        <input type="text" id="eCompliance" value="${esc(p.compliance==="N/A"?"":p.compliance||"")}" placeholder="e.g. FERPA; GLBA" />
+      </div>
+      <div class="edit-field">
+        <label>IT Owner &amp; Sponsor</label>
+        <div class="read-val">${esc(p.itOwner||"—")} / ${esc(p.sponsor||"—")} <span style="font-size:11px;color:var(--muted)">(edit in Jira)</span></div>
+      </div>
+      <div class="edit-field full">
+        <label>Notes / Next Milestone</label>
+        <textarea id="eNotes">${esc(p.notes||"")}</textarea>
+      </div>
+    </div>
+    <div class="edit-actions">
+      <button class="btn-save" id="eSave">
+        <span id="eSaveIcon">↑</span> Save to Jira
+        <span class="unsaved-dot show" id="eDot"></span>
+      </button>
+      <button class="btn-cancel-edit" id="eCancel">Cancel</button>
+      <span id="eSaveStatus" style="font-size:12px;color:var(--muted);margin-left:4px"></span>
+    </div>`;
+  $("#eCancel").addEventListener("click", ()=>renderModalView(p));
+  $("#eSave").addEventListener("click", ()=>saveToJira(id));
+}
+
+async function saveToJira(id){
+  const p = PROJECTS.find(x=>x.id===id); if(!p) return;
+  const changes = {
+    phase:      $("#ePhase").value,
+    risk:        $("#eRag").value,
+    end:        $("#eEnd").value,
+    portfolio:  $("#ePortfolio").value.trim(),
+    compliance: $("#eCompliance").value.trim() || "N/A",
+    notes:      $("#eNotes").value.trim(),
+  };
+  // Skip fields that haven't changed (avoid unnecessary Jira writes)
+  if (changes.phase      === p.phase)      delete changes.phase;
+  if (changes.risk        === p.risk)        delete changes.risk;
+  if (changes.end        === (p.end||""))  delete changes.end;
+  if (changes.portfolio  === p.portfolio)  delete changes.portfolio;
+  if (changes.compliance === (p.compliance||"N/A")) delete changes.compliance;
+  if (changes.notes      === (p.notes||""))delete changes.notes;
+
+  if (!Object.keys(changes).length){ showToast("No changes to save."); return; }
+
+  const btn = $("#eSave"), status = $("#eSaveStatus"), icon = $("#eSaveIcon");
+  btn.disabled = true;
+  icon.className = "saving-spin"; icon.textContent = "↻";
+  status.textContent = "Saving…";
+
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(changes),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || ("HTTP "+res.status));
+
+    // Update local project data immediately (don't wait for Jira re-fetch)
+    Object.assign(p, changes);
+    if (!p.risk || changes.risk) p.risk = changes.risk || p.risk;
+    renderModalView(p);
+    render();
+    showToast("Saved to Jira" + (data.transitionApplied?` — status → ${data.transitionApplied}`:""), false, true);
+  } catch(e){
+    console.error(e);
+    const hint = /Failed to fetch|NetworkError/i.test(String(e)) ?
+      "Server not running — start it with start.bat first." : e.message;
+    status.textContent = "";
+    icon.className=""; icon.textContent="↑";
+    btn.disabled = false;
+    showToast("Save failed: "+hint, true);
+  }
+}
+
+function closeModal(){ $("#overlay").classList.remove("open"); }
+
+/* ---------------- Filters UI ---------------- */
+function populateFilters(){
+  const fill = (sel, vals) => {
+    const cur = sel.value;
+    sel.innerHTML = sel.querySelector("option").outerHTML + vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+    sel.value = cur;
+  };
+  fill($("#fPortfolio"), [...new Set(PROJECTS.map(p=>p.portfolio).filter(Boolean))].sort());
+  fill($("#fPhase"), PHASES.filter(ph=>PROJECTS.some(p=>p.phase===ph)));
+  fill($("#fRag"), ["Green","Yellow","Red"]);
+  fill($("#fOwner"), [...new Set(PROJECTS.map(p=>p.itOwner).filter(Boolean))].sort());
+}
+
+/* ---------------- Main render ---------------- */
+function render(){
+  if (state.view==="changes") {
+    $("#boardView").classList.add("hidden");
+    $("#tableView").classList.add("hidden");
+    $("#changesView").classList.remove("hidden");
+    loadChanges();
+    return;
+  }
+  $("#changesView").classList.add("hidden");
+  if (!PROJECTS.length){ renderEmpty(); return; }
+  const list = filtered();
+  renderKpis();
+  renderCharts();
+  if (state.view==="board") { $("#boardView").classList.remove("hidden"); $("#tableView").classList.add("hidden"); renderBoard(list); }
+  else { $("#tableView").classList.remove("hidden"); $("#boardView").classList.add("hidden"); renderTable(list); }
+  $("#resultCount").textContent = `${list.length} of ${PROJECTS.length} projects`;
+  $("#asOf").textContent = META.asOf || "—";
+}
+
+function renderEmpty(){
+  $("#kpis").innerHTML = "";
+  ["#chartPhase","#chartPortfolio","#chartRag"].forEach(s=>{ const el=$(s); if(el) el.innerHTML=""; });
+  $("#tableView").classList.add("hidden");
+  $("#changesView").classList.add("hidden");
+  $("#boardView").classList.remove("hidden");
+  const msg = JIRA_READY
+    ? `Pick a project above and click <b>Load from Jira</b>, create a <b>New work item</b>, or import a spreadsheet.`
+    : `Start the proxy (<code>start.bat</code> / <code>node server.js</code>) to load live from Jira, or click <b>Update from spreadsheet</b> to import a one-time <code>.xlsx</code>/<code>.csv</code>.`;
+  $("#boardView").innerHTML =
+    `<div style="text-align:center;color:var(--muted);padding:64px 20px;border:1px dashed var(--border);border-radius:var(--radius);background:var(--panel)">
+       <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">No projects loaded</div>
+       <div style="font-size:13px;max-width:520px;margin:0 auto;line-height:1.6">${msg}</div>
+     </div>`;
+  $("#resultCount").textContent = "0 projects";
+  $("#asOf").textContent = META.asOf || "—";
+}
+
+/* ---------------- Export ---------------- */
+function exportCSV(){
+  const cols = ["id","name","phase","portfolio","sponsor","itOwner","end","pct","risk","dependencies","compliance","notes"];
+  const headers = ["Project ID","Project Name","Phase","Portfolio","Business Sponsor","IT Owner","Target End","% Complete","Risk","Dependencies","Compliance Driver","Notes / Next Milestone"];
+  const q = v => { v=(v==null?"":String(v)); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const rows = filtered().map(p=>cols.map(c=> c==="pct" ? (p.pct==null?"":p.pct/100) : q(p[c])).join(","));
+  const csv = headers.map(q).join(",")+"\n"+rows.join("\n");
+  const blob = new Blob([csv],{type:"text/csv"}); const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="MU_VPMO_Program_Plan_export.csv"; a.click(); URL.revokeObjectURL(url);
+  showToast("Exported "+filtered().length+" projects to CSV");
+}
+
+/* ============================================================
+   Spreadsheet ingestion — parses an uploaded .xlsx (zip) fully
+   in-browser using DecompressionStream, or a .csv file.
+   ============================================================ */
+const HEADER_MAP = {
+  "project id":"id","id":"id",
+  "project name":"name","name":"name","project":"name",
+  "phase":"phase",
+  "portfolio":"portfolio",
+  "business sponsor":"sponsor","sponsor":"sponsor",
+  "it owner":"itOwner","owner":"itOwner",
+  "start date":"start","start":"start",
+  "target end":"end","end date":"end","end":"end",
+  "% complete":"pct","percent complete":"pct","complete":"pct",
+  "risk":"risk","risk status":"risk","status":"risk",
+  "dependencies":"dependencies",
+  "compliance driver":"compliance","compliance":"compliance",
+  "notes / next milestone":"notes","notes":"notes","next milestone":"notes",
+};
+function excelSerialToISO(n){
+  const base = Date.UTC(1899,11,30);
+  const d = new Date(base + Math.round(n)*86400000);
+  return d.toISOString().slice(0,10);
+}
+function normalizeRecord(raw){
+  const r = {};
+  for (const k in HEADER_MAP){} // noop to keep map referenced
+  for (const key of ["id","name","phase","portfolio","sponsor","itOwner","start","end","pct","risk","dependencies","compliance","notes"]) r[key]=raw[key]??"";
+  // pct normalization: accept 0-1 fraction or 0-100
+  if (r.pct==="" || r.pct==null) r.pct = null;
+  else { let n=parseFloat(String(r.pct).replace("%","")); if(isNaN(n)) r.pct=null; else r.pct = n<=1 ? Math.round(n*100) : Math.round(n); }
+  // date normalization: numeric serial -> ISO
+  for (const d of ["start","end"]){
+    const v=r[d];
+    if (v==="" || v==null){ r[d]=""; continue; }
+    if (typeof v==="number" || /^\d+(\.\d+)?$/.test(String(v).trim())) r[d]=excelSerialToISO(parseFloat(v));
+    else { const dt=new Date(v); r[d]=isNaN(dt)?String(v):dt.toISOString().slice(0,10); }
+  }
+  // normalize Risk capitalization
+  if (r.risk) { const x=String(r.risk).trim().toLowerCase(); r.risk = x.charAt(0).toUpperCase()+x.slice(1); }
+  return r;
+}
+function rowsToProjects(rows){
+  if (!rows.length) throw new Error("Spreadsheet is empty.");
+  // find header row (first row that maps at least 4 known headers)
+  let hi = -1, headerKeys = null;
+  for (let i=0;i<Math.min(rows.length,10);i++){
+    const keys = rows[i].map(c => HEADER_MAP[String(c).trim().toLowerCase()] || null);
+    if (keys.filter(Boolean).length >= 4){ hi=i; headerKeys=keys; break; }
+  }
+  if (hi<0) throw new Error("Could not find a recognizable header row (need columns like Project ID, Name, Phase, Risk…).");
+  const out = [];
+  for (let i=hi+1;i<rows.length;i++){
+    const cells = rows[i];
+    if (!cells.some(c => String(c).trim()!=="")) continue;
+    const raw = {};
+    headerKeys.forEach((k,ci)=>{ if(k) raw[k]=cells[ci]; });
+    if (!raw.id && !raw.name) continue;
+    out.push(normalizeRecord(raw));
+  }
+  if (!out.length) throw new Error("No data rows found under the header.");
+  return out;
+}
+
+/* ---- minimal ZIP reader (store + deflate via DecompressionStream) ---- */
+async function unzip(buf){
+  const dv = new DataView(buf), u8 = new Uint8Array(buf);
+  // locate End Of Central Directory
+  let eocd=-1;
+  for (let i=u8.length-22; i>=0; i--){ if (dv.getUint32(i,true)===0x06054b50){ eocd=i; break; } }
+  if (eocd<0) throw new Error("Not a valid .xlsx/zip file.");
+  const count = dv.getUint16(eocd+10,true);
+  let off = dv.getUint32(eocd+16,true);
+  const files = {};
+  const td = new TextDecoder();
+  for (let n=0;n<count;n++){
+    if (dv.getUint32(off,true)!==0x02014b50) break;
+    const method = dv.getUint16(off+10,true);
+    const compSize = dv.getUint32(off+20,true);
+    const nameLen = dv.getUint16(off+28,true);
+    const extraLen = dv.getUint16(off+30,true);
+    const commentLen = dv.getUint16(off+32,true);
+    const lho = dv.getUint32(off+42,true);
+    const name = td.decode(u8.subarray(off+46, off+46+nameLen));
+    // local header to find data start
+    const lNameLen = dv.getUint16(lho+26,true);
+    const lExtraLen = dv.getUint16(lho+28,true);
+    const dataStart = lho+30+lNameLen+lExtraLen;
+    const comp = u8.subarray(dataStart, dataStart+compSize);
+    files[name] = { method, comp };
+    off += 46 + nameLen + extraLen + commentLen;
+  }
+  async function read(name){
+    const f = files[name]; if(!f) return null;
+    if (f.method===0) return td.decode(f.comp);
+    const ds = new DecompressionStream("deflate-raw");
+    const stream = new Response(f.comp).body.pipeThrough(ds);
+    const ab = await new Response(stream).arrayBuffer();
+    return td.decode(ab);
+  }
+  return { names: Object.keys(files), read };
+}
+function xmlDoc(str){ return new DOMParser().parseFromString(str, "application/xml"); }
+function colToIndex(ref){ const m=ref.match(/^([A-Z]+)/); let n=0; for(const c of m[1]) n=n*26+(c.charCodeAt(0)-64); return n-1; }
+
+async function parseXlsx(buf){
+  const zip = await unzip(buf);
+  // shared strings
+  let shared = [];
+  const ssStr = await zip.read("xl/sharedStrings.xml");
+  if (ssStr){ xmlDoc(ssStr).querySelectorAll("si").forEach(si=>{
+    let t=""; si.querySelectorAll("t").forEach(n=>t+=n.textContent); shared.push(t);
+  }); }
+  // pick worksheet: prefer one mapped to sheet named "Program Plan"
+  const wbStr = await zip.read("xl/workbook.xml");
+  const relStr = await zip.read("xl/_rels/workbook.xml.rels");
+  let target = null;
+  if (wbStr && relStr){
+    const wb = xmlDoc(wbStr), rels = xmlDoc(relStr);
+    const relMap = {};
+    rels.querySelectorAll("Relationship").forEach(r=>relMap[r.getAttribute("Id")]=r.getAttribute("Target"));
+    let pick=null, first=null;
+    wb.querySelectorAll("sheet").forEach(s=>{
+      const rid = s.getAttribute("r:id") || s.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships","id");
+      const tgt = relMap[rid];
+      if (tgt){ if(!first) first=tgt; if(/program plan/i.test(s.getAttribute("name")||"")) pick=tgt; }
+    });
+    target = pick || first;
+  }
+  if (target && !target.startsWith("xl/")) target = "xl/" + target.replace(/^\//,"");
+  // fallback to sheet that exists
+  let sheetStr = target ? await zip.read(target) : null;
+  if (!sheetStr){ for (const nm of zip.names){ if (/xl\/worksheets\/sheet\d+\.xml$/.test(nm)){ sheetStr=await zip.read(nm); break; } } }
+  if (!sheetStr) throw new Error("No worksheet found in the file.");
+  const doc = xmlDoc(sheetStr);
+  const rows = [];
+  doc.querySelectorAll("sheetData > row").forEach(row=>{
+    const arr = [];
+    row.querySelectorAll("c").forEach(c=>{
+      const ref=c.getAttribute("r")||""; const ci=ref?colToIndex(ref):arr.length;
+      const t=c.getAttribute("t");
+      let val="";
+      if (t==="s"){ const v=c.querySelector("v"); val = v?shared[parseInt(v.textContent)]:""; }
+      else if (t==="inlineStr"){ val = c.querySelector("is>t")?.textContent || ""; }
+      else { const v=c.querySelector("v"); val = v?v.textContent:""; }
+      arr[ci]=val;
+    });
+    for (let i=0;i<arr.length;i++) if(arr[i]===undefined) arr[i]="";
+    rows.push(arr);
+  });
+  return rowsToProjects(rows);
+}
+function parseCSV(text){
+  const rows=[]; let row=[], cell="", q=false;
+  for (let i=0;i<text.length;i++){
+    const ch=text[i];
+    if (q){ if(ch==='"'){ if(text[i+1]==='"'){cell+='"';i++;} else q=false; } else cell+=ch; }
+    else { if(ch==='"') q=true; else if(ch===","){ row.push(cell); cell=""; }
+      else if(ch==="\n"){ row.push(cell); rows.push(row); row=[]; cell=""; }
+      else if(ch==="\r"){} else cell+=ch; }
+  }
+  if (cell!=="" || row.length){ row.push(cell); rows.push(row); }
+  return rowsToProjects(rows);
+}
+async function handleFile(file){
+  try{
+    let projects;
+    if (/\.csv$/i.test(file.name)) projects = parseCSV(await file.text());
+    else projects = await parseXlsx(await file.arrayBuffer());
+    PROJECTS = projects;
+    META.asOf = new Date().toISOString().slice(0,10) + " (uploaded)";
+    populateFilters();
+    render();
+    showToast(`Loaded ${projects.length} projects from ${file.name}`);
+  } catch(e){
+    console.error(e);
+    showToast("Could not read file: "+e.message, true);
+  }
+}
+
+/* ---------------- Discover Jira projects (via proxy) ---------------- */
+async function initJira(){
+  try{
+    const res = await fetch("/api/jira/projects", { headers:{ "Accept":"application/json" } });
+    if(!res.ok) return;                       // no auth / server error → stay on empty state
+    const data = await res.json();
+    JIRA_PROJECTS = data.projects || [];
+    if(!JIRA_PROJECTS.length) return;
+    JIRA_READY = true;
+    const sel = $("#jiraProject");
+    sel.innerHTML = JIRA_PROJECTS.map(p=>`<option value="${esc(p.key)}">${esc(p.key)} — ${esc(p.name)}</option>`).join("");
+    if (data.default && JIRA_PROJECTS.some(p=>p.key===data.default)) sel.value = data.default;
+    sel.style.display = "";
+    $("#newItemBtn").style.display = "";
+    $("#newCRBtn").style.display = "";
+    await loadFromJira();                      // auto-load the selected project
+  }catch(e){ /* offline or file:// — empty state already shown */ }
+}
+
+/* ---------------- Load live from Jira (via proxy) ---------------- */
+async function loadFromJira(){
+  const proj = $("#jiraProject").value || "";
+  showToast("Loading from Jira…");
+  try{
+    const url = "/api/projects" + (proj ? `?project=${encodeURIComponent(proj)}` : "");
+    const res = await fetch(url, { headers:{ "Accept":"application/json" } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || ("HTTP "+res.status));
+    PROJECTS = data.projects || [];
+    META.asOf = (data.asOf || new Date().toISOString().slice(0,10)) + ` (Jira: ${proj||"live"})`;
+    populateFilters(); render();
+    showToast(PROJECTS.length ? `Loaded ${PROJECTS.length} projects from ${proj||"Jira"}` : `${proj||"Jira"} has no top-level projects yet`, false, PROJECTS.length>0);
+  } catch(e){
+    console.error(e);
+    const hint = /Failed to fetch|NetworkError|JSON/i.test(String(e)) ?
+      "Start the proxy first: node dashboard/server.js (with JIRA_* env vars set)." : e.message;
+    showToast("Jira load failed: "+hint, true);
+  }
+}
+
+/* ---------------- Create a new work item ---------------- */
+function openCreate(){
+  if(!JIRA_READY){ showToast("Connect to Jira first (start the proxy).", true); return; }
+  const proj = JIRA_PROJECTS.find(p=>p.key===$("#jiraProject").value) || JIRA_PROJECTS[0];
+  const types = (proj && proj.issueTypes && proj.issueTypes.length) ? proj.issueTypes : ["Task"];
+  const typeOpts  = types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("");
+  const phaseOpts = ["Planning","In-Flight","Stabilization","Closed"].map(ph=>`<option value="${ph}">${ph}</option>`).join("");
+  const ragOpts   = ["Green","Yellow","Red"].map(r=>`<option value="${r}"${r==="Green"?" selected":""}>${r}</option>`).join("");
+  $("#modal").innerHTML = `
+    <div class="modal-head">
+      <div class="mh-top">
+        <div><span class="m-id">New work item</span><h2>in ${esc(proj?proj.key:"")}</h2></div>
+        <button class="modal-close" id="mClose">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="edit-grid">
+        <div class="edit-field full"><label>Name / Summary *</label><input id="nName" type="text" placeholder="Project or work item name" /></div>
+        <div class="edit-field"><label>Issue type</label><select id="nType">${typeOpts}</select></div>
+        <div class="edit-field"><label>Phase</label><select id="nPhase">${phaseOpts}</select></div>
+        <div class="edit-field"><label>Risk Status</label><select id="nRag">${ragOpts}</select></div>
+        <div class="edit-field"><label>Portfolio</label><input id="nPortfolio" type="text" placeholder="e.g. Infrastructure" /></div>
+        <div class="edit-field"><label>Business Sponsor</label><input id="nSponsor" type="text" placeholder="Sponsor name" /></div>
+        <div class="edit-field"><label>Compliance Driver</label><input id="nCompliance" type="text" placeholder="e.g. FERPA; GLBA" /></div>
+        <div class="edit-field"><label>Project ID</label><input id="nProjectId" type="text" placeholder="e.g. P-001" /></div>
+        <div class="edit-field"><label>Target End</label><input id="nEnd" type="date" /></div>
+        <div class="edit-field"><label>Start Date</label><input id="nStart" type="date" /></div>
+        <div class="edit-field full"><label>Notes / Next Milestone</label><textarea id="nNotes" placeholder="Notes"></textarea></div>
+      </div>
+      <div class="edit-actions">
+        <button class="btn-save" id="nSave"><span id="nSaveIcon">＋</span> Create in Jira</button>
+        <button class="btn" id="nCancel">Cancel</button>
+        <span id="nStatus" style="font-size:12px;color:var(--muted);margin-left:4px"></span>
+      </div>
+    </div>`;
+  $("#overlay").classList.add("open");
+  $("#mClose").addEventListener("click", closeModal);
+  $("#nCancel").addEventListener("click", closeModal);
+  $("#nSave").addEventListener("click", submitCreate);
+  $("#nName").focus();
+}
+
+async function submitCreate(){
+  const proj = $("#jiraProject").value || "";
+  const body = {
+    name:       $("#nName").value.trim(),
+    issueType:  $("#nType").value,
+    phase:      $("#nPhase").value,
+    risk:        $("#nRag").value,
+    portfolio:  $("#nPortfolio").value.trim(),
+    sponsor:    $("#nSponsor").value.trim(),
+    compliance: $("#nCompliance").value.trim(),
+    projectId:  $("#nProjectId").value.trim(),
+    end:        $("#nEnd").value,
+    start:      $("#nStart").value,
+    notes:      $("#nNotes").value.trim(),
+  };
+  if(!body.name){ showToast("Name is required.", true); $("#nName").focus(); return; }
+  const btn=$("#nSave"), icon=$("#nSaveIcon"), status=$("#nStatus");
+  btn.disabled=true; icon.className="saving-spin"; icon.textContent="↻"; status.textContent="Creating…";
+  try{
+    const res = await fetch("/api/projects"+(proj?`?project=${encodeURIComponent(proj)}`:""), {
+      method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body),
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || ("HTTP "+res.status));
+    closeModal();
+    showToast(`Created ${data.key}`+(data.degradedToLabels?" (metadata stored as labels)":""), false, true);
+    await loadFromJira();   // refresh so the new item appears
+  }catch(e){
+    console.error(e);
+    icon.className=""; icon.textContent="＋"; btn.disabled=false; status.textContent="";
+    const hint=/Failed to fetch|NetworkError/i.test(String(e))?"Start the proxy first.":e.message;
+    showToast("Create failed: "+hint, true);
+  }
+}
+
+/* ================================================================
+   Change Management
+   ================================================================ */
+let CHANGES = [];
+
+function crStatusClass(s) {
+  return { "Pending Review":"pending", "Approved":"approved", "Rejected":"rejected",
+           "Implemented":"implemented", "Closed":"closed", "Draft":"draft" }[s] || "draft";
+}
+
+async function loadChanges() {
+  const proj = $("#jiraProject").value || "";
+  const url = "/api/changes" + (proj ? `?project=${encodeURIComponent(proj)}` : "");
+  try {
+    const res = await fetch(url, { headers:{ Accept:"application/json" } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || ("HTTP "+res.status));
+    CHANGES = data.changes || [];
+    renderChanges();
+  } catch(e) {
+    const hint = /Failed to fetch|NetworkError/i.test(String(e)) ? "Start the proxy first." : e.message;
+    $("#changesView").innerHTML = `<div style="color:var(--muted);padding:40px;text-align:center">Could not load change requests: ${esc(hint)}</div>`;
+  }
+}
+
+function renderChanges() {
+  const total     = CHANGES.length;
+  const pending   = CHANGES.filter(c=>c.crStatus==="Pending Review").length;
+  const approved  = CHANGES.filter(c=>c.crStatus==="Approved").length;
+  const emergency = CHANGES.filter(c=>c.type==="Emergency").length;
+
+  const rows = CHANGES.map(c => `
+    <tr data-id="${esc(c.id)}">
+      <td><a href="${esc(c.url)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--muted)">${esc(c.id)}</a></td>
+      <td style="font-weight:550;max-width:280px">${esc(c.title)}</td>
+      <td><span class="cr-type ${esc(c.type)}">${esc(c.type)}</span></td>
+      <td>${esc(c.impact)}</td>
+      <td style="max-width:160px;color:var(--muted);font-size:12px">${esc(c.affectedSystems||"—")}</td>
+      <td style="color:var(--muted);font-size:12px">${esc(c.requestor||"—")}</td>
+      <td style="color:var(--muted);font-size:12px;white-space:nowrap">${esc(c.plannedEnd||"—")}</td>
+      <td><span class="cr-status ${crStatusClass(c.crStatus)}">${esc(c.crStatus)}</span></td>
+    </tr>`).join("") || `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:32px">No change requests yet. Click <b>New CR</b> to submit one.</td></tr>`;
+
+  $("#changesView").innerHTML = `
+    <div class="cr-kpis">
+      <div class="kpi accent"><div class="label">Total CRs</div><div class="value">${total}</div></div>
+      <div class="kpi yellow"><div class="label">Pending Review</div><div class="value">${pending}</div></div>
+      <div class="kpi green"><div class="label">Approved</div><div class="value">${approved}</div></div>
+      <div class="kpi red"><div class="label">Emergency</div><div class="value">${emergency}</div></div>
+    </div>
+    <div class="cr-table-wrap">
+      <table class="cr-table">
+        <thead><tr>
+          <th>CR #</th><th>Title</th><th>Type</th><th>Impact</th>
+          <th>Affected Systems</th><th>Requestor</th><th>Planned End</th><th>Status</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  $("#changesView").querySelectorAll("tbody tr[data-id]").forEach(tr =>
+    tr.addEventListener("click", () => openCR(tr.dataset.id)));
+}
+
+/* ---- CR detail modal ---- */
+async function openCR(id) {
+  const c = CHANGES.find(x => x.id === id); if (!c) return;
+  const proj = $("#jiraProject").value || "";
+
+  // Load comments to parse approval history
+  let comments = [];
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(id)}/comments`);
+    const d   = await res.json();
+    comments  = d.comments || [];
+  } catch(_) {}
+
+  const approvals = comments.filter(cm =>
+    /^\s*[✅❌✔️🔒]\s*\[/.test(cm.text) || /^\[APPROVED\]|^\[REJECTED\]/.test(cm.text));
+  const approvalHtml = approvals.length
+    ? approvals.map(cm => {
+        const icon = cm.text.startsWith("✅") ? "✅" : cm.text.startsWith("❌") ? "❌" : cm.text.startsWith("✔️") ? "✔️" : "🔒";
+        return `<div class="approval-item">
+          <span class="approval-icon">${icon}</span>
+          <div>
+            <div>${esc(cm.text.replace(/^[✅❌✔️🔒]\s*/,"").split("\n")[0])}</div>
+            <div class="approval-meta">${esc(cm.author)} · ${esc(cm.created ? cm.created.slice(0,10) : "")}</div>
+          </div>
+        </div>`;
+      }).join("")
+    : `<div style="color:var(--muted);font-size:13px">No approval actions yet.</div>`;
+
+  const otherComments = comments.filter(cm => !approvals.includes(cm));
+  const commentsHtml = otherComments.map(cm => `
+    <div class="comment">
+      <div class="comment-meta"><b>${esc(cm.author)}</b> · ${esc(fmtDateTime(cm.created))}</div>
+      <div class="comment-text">${esc(cm.text)}</div>
+    </div>`).join("") || `<div class="read-val">No comments yet.</div>`;
+
+  const canApprove   = JIRA_READY && (c.crStatus === "Pending Review" || c.crStatus === "Draft");
+  const canImplement = JIRA_READY && c.crStatus === "Approved";
+  const canClose     = JIRA_READY && (c.crStatus === "Implemented" || c.crStatus === "Rejected");
+
+  const actionBtns = JIRA_READY ? `
+    <div class="cr-actions">
+      ${canApprove   ? `<button class="btn-approve"  id="crApprove">✅ Approve</button><button class="btn-reject" id="crReject">❌ Reject</button>` : ""}
+      ${canImplement ? `<button class="btn-implement" id="crImplement">✔️ Mark Implemented</button>` : ""}
+      ${canClose     ? `<button class="btn" id="crClose">🔒 Close CR</button>` : ""}
+    </div>` : "";
+
+  $("#modal").innerHTML = `
+    <div class="modal-head">
+      <div class="mh-top">
+        <div>
+          <span class="m-id">${esc(c.id)}</span> · <a href="${esc(c.url)}" target="_blank" rel="noopener">open in Jira ↗</a>
+          <h2>${esc(c.title)}</h2>
+        </div>
+        <button class="modal-close" id="mClose">✕</button>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <span class="cr-status ${crStatusClass(c.crStatus)}">${esc(c.crStatus)}</span>
+        <span class="cr-type ${esc(c.type)}">${esc(c.type)}</span>
+        <span class="tag">Impact: ${esc(c.impact)}</span>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="detail-grid">
+        <div class="field"><div class="k">Requestor</div><div class="v">${esc(c.requestor||"—")}</div></div>
+        <div class="field"><div class="k">Planned End</div><div class="v">${esc(c.plannedEnd||"—")}</div></div>
+        <div class="field full"><div class="k">Affected Systems</div><div class="v">${esc(c.affectedSystems||"—")}</div></div>
+      </div>
+      <div class="k" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;margin-bottom:8px">Description / Justification</div>
+      <div class="notes-box">${esc(c.description||"—")}</div>
+      ${c.rollbackPlan ? `
+      <div class="k" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;margin:14px 0 8px">Rollback Plan</div>
+      <div class="notes-box">${esc(c.rollbackPlan)}</div>` : ""}
+      <div class="k" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;margin:18px 0 8px">CAB Approval History</div>
+      <div class="approval-list">${approvalHtml}</div>
+      ${actionBtns}
+      <div class="comments-section" style="margin-top:20px">
+        <div class="k">Comments</div>
+        <div id="cList" class="comments-list">${commentsHtml}</div>
+        <div class="comment-add">
+          <textarea id="cInput" placeholder="Add a comment…"></textarea>
+          <button class="btn-save" id="cPost"><span id="cIcon">↑</span> Comment</button>
+        </div>
+      </div>
+    </div>`;
+
+  $("#overlay").classList.add("open");
+  $("#mClose").addEventListener("click", closeModal);
+  if ($("#crApprove"))    $("#crApprove").addEventListener("click", () => crAction(id, "approve"));
+  if ($("#crReject"))     $("#crReject").addEventListener("click",  () => crAction(id, "reject"));
+  if ($("#crImplement"))  $("#crImplement").addEventListener("click",() => crAction(id, "implement"));
+  if ($("#crClose"))      $("#crClose").addEventListener("click",   () => crAction(id, "close"));
+  if ($("#cPost"))        $("#cPost").addEventListener("click", () => submitComment(id));
+}
+
+async function crAction(id, action) {
+  const proj = $("#jiraProject").value || "";
+  const btn = { approve: $("#crApprove"), reject: $("#crReject"),
+                implement: $("#crImplement"), close: $("#crClose") }[action];
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(`/api/changes/${encodeURIComponent(id)}/action`+
+      (proj ? `?project=${encodeURIComponent(proj)}` : ""), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || ("HTTP "+res.status));
+    closeModal();
+    showToast(`CR ${id} ${action}d`, false, true);
+    await loadChanges();
+  } catch(e) {
+    if (btn) btn.disabled = false;
+    showToast(`Action failed: ${e.message}`, true);
+  }
+}
+
+/* ---- Submit new CR form ---- */
+function openNewCR() {
+  if (!JIRA_READY) { showToast("Connect to Jira first.", true); return; }
+  const proj = JIRA_PROJECTS.find(p => p.key === $("#jiraProject").value) || JIRA_PROJECTS[0];
+  const types = (proj && proj.issueTypes && proj.issueTypes.length) ? proj.issueTypes : ["Task"];
+  const typeOpts = types.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+
+  $("#modal").innerHTML = `
+    <div class="modal-head">
+      <div class="mh-top">
+        <div><span class="m-id">New Change Request</span><h2>in ${esc(proj ? proj.key : "")}</h2></div>
+        <button class="modal-close" id="mClose">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="edit-grid">
+        <div class="edit-field full"><label>Title / Summary *</label><input id="ncrTitle" type="text" placeholder="Brief description of the change" /></div>
+        <div class="edit-field"><label>Issue type</label><select id="ncrIssueType">${typeOpts}</select></div>
+        <div class="edit-field"><label>Change Type</label>
+          <select id="ncrType"><option>Standard</option><option selected>Normal</option><option>Emergency</option></select></div>
+        <div class="edit-field"><label>Impact</label>
+          <select id="ncrImpact"><option>Low</option><option selected>Medium</option><option>High</option></select></div>
+        <div class="edit-field"><label>Affected Systems</label><input id="ncrSystems" type="text" placeholder="e.g. Colleague, Banner, Network" /></div>
+        <div class="edit-field"><label>Planned End Date</label><input id="ncrEnd" type="date" /></div>
+        <div class="edit-field full"><label>Description / Justification *</label><textarea id="ncrDesc" placeholder="Why is this change needed? What will be done?"></textarea></div>
+        <div class="edit-field full"><label>Rollback Plan</label><textarea id="ncrRollback" placeholder="Steps to revert if something goes wrong"></textarea></div>
+      </div>
+      <div class="edit-actions">
+        <button class="btn-save" id="ncrSave"><span id="ncrIcon">＋</span> Submit CR</button>
+        <button class="btn" id="ncrCancel">Cancel</button>
+        <span id="ncrStatus" style="font-size:12px;color:var(--muted);margin-left:4px"></span>
+      </div>
+    </div>`;
+  $("#overlay").classList.add("open");
+  $("#mClose").addEventListener("click", closeModal);
+  $("#ncrCancel").addEventListener("click", closeModal);
+  $("#ncrSave").addEventListener("click", submitNewCR);
+  $("#ncrTitle").focus();
+}
+
+async function submitNewCR() {
+  const proj = $("#jiraProject").value || "";
+  const body = {
+    title:           $("#ncrTitle").value.trim(),
+    issueType:       $("#ncrIssueType").value,
+    type:            $("#ncrType").value,
+    impact:          $("#ncrImpact").value,
+    affectedSystems: $("#ncrSystems").value.trim(),
+    plannedEnd:      $("#ncrEnd").value,
+    description:     $("#ncrDesc").value.trim(),
+    rollbackPlan:    $("#ncrRollback").value.trim(),
+  };
+  if (!body.title)       { showToast("Title is required.", true); $("#ncrTitle").focus(); return; }
+  if (!body.description) { showToast("Description is required.", true); $("#ncrDesc").focus(); return; }
+  const btn = $("#ncrSave"), icon = $("#ncrIcon"), status = $("#ncrStatus");
+  btn.disabled = true; icon.className = "saving-spin"; icon.textContent = "↻"; status.textContent = "Submitting…";
+  try {
+    const res = await fetch("/api/changes" + (proj ? `?project=${encodeURIComponent(proj)}` : ""), {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || ("HTTP "+res.status));
+    closeModal();
+    showToast(`CR ${data.key} submitted`, false, true);
+    await loadChanges();
+  } catch(e) {
+    icon.className = ""; icon.textContent = "＋"; btn.disabled = false; status.textContent = "";
+    showToast("Submit failed: " + e.message, true);
+  }
+}
+
+/* ---------------- Wire up ---------------- */
+$("#search").addEventListener("input", e=>{ state.search=e.target.value; render(); });
+$("#fPortfolio").addEventListener("change", e=>{ state.portfolio=e.target.value; render(); });
+$("#fPhase").addEventListener("change", e=>{ state.phase=e.target.value; render(); });
+$("#fRag").addEventListener("change", e=>{ state.risk=e.target.value; render(); });
+$("#fOwner").addEventListener("change", e=>{ state.owner=e.target.value; render(); });
+$("#clearBtn").addEventListener("click", ()=>{
+  Object.assign(state,{search:"",portfolio:"",phase:"",risk:"",owner:""});
+  $("#search").value=""; ["#fPortfolio","#fPhase","#fRag","#fOwner"].forEach(s=>$(s).value=""); render();
+});
+$("#viewSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
+  state.view=b.dataset.view;
+  $("#viewSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("active",x===b));
+  render();
+}));
+$("#jiraBtn").addEventListener("click", loadFromJira);
+$("#jiraProject").addEventListener("change", ()=>{ state.view==="changes" ? loadChanges() : loadFromJira(); });
+$("#newItemBtn").addEventListener("click", openCreate);
+$("#newCRBtn").addEventListener("click", openNewCR);
+$("#uploadBtn").addEventListener("click", ()=>$("#fileInput").click());
+$("#fileInput").addEventListener("change", e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); e.target.value=""; });
+$("#exportBtn").addEventListener("click", exportCSV);
+$("#overlay").addEventListener("click", e=>{ if(e.target.id==="overlay") closeModal(); });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeModal(); });
+
+/* drag & drop anywhere */
+window.addEventListener("dragover", e=>e.preventDefault());
+window.addEventListener("drop", e=>{ e.preventDefault(); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+
+populateFilters();
+render();
+initJira();   // discover Jira projects, then auto-load the default one
+</script>
+</body>
+</html>
