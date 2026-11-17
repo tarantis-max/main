@@ -92,7 +92,7 @@ label { font-size: 12px; color: var(--muted); font-weight: 550; }
   background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
   box-shadow: var(--shadow); overflow: hidden;
 }
-.panel .panel-pad { padding: 16px 18px; }
+.panel-pad { padding: 16px 18px; }
 
 table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.data th {
