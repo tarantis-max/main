@@ -1,0 +1,4 @@
+# Holds the Jira credential for the ITS Change Advisor service account.
+# This file only creates the (empty) vault. The credential itself is added
+# separately and is never stored in this repository - see LAUNCH.md, step 3.
+display_name: ITS Jira (Change Advisor)
